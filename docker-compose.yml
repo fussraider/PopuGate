@@ -1,0 +1,40 @@
+services:
+  popugate-backend:
+    build: .
+    image: ghcr.io/fussraider/popugate:latest
+    container_name: popugate-backend
+    restart: unless-stopped
+    volumes:
+      - ./data:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - ADMIN_PASSWORD=admin123
+      - POPUGATE_DATA_DIR=/data
+      - TZ=Europe/Moscow
+      - HOSTNAME=popugate-backend
+    ports:
+      - "9090:9090" # Prometheus metrics
+
+  popugate-web:
+    build: ./web
+    image: ghcr.io/fussraider/popugate-web:latest
+    container_name: popugate-web
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "8443:8443"
+    environment:
+      - DOMAIN_NAME=${DOMAIN_NAME:-localhost}
+    volumes:
+      - ./certbot/conf:/etc/letsencrypt:ro
+      - ./certbot/www:/var/www/certbot:ro
+    depends_on:
+      - popugate-backend
+
+  certbot:
+    image: certbot/certbot
+    container_name: certbot
+    volumes:
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"

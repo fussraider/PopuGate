@@ -1,0 +1,23 @@
+# Docker ignore patterns
+.git
+.idea
+.vscode
+.DS_Store
+
+# Go
+bin/
+popugate
+*.db
+
+# Web
+web/node_modules/
+web/dist/
+web/tsconfig.app.tsbuildinfo
+web/tsconfig.node.tsbuildinfo
+
+# Other
+_legacy/
+*.log
+*.tmp
+*.tar
+*.gz

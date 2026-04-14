@@ -30,8 +30,10 @@ func NewBotHandler(settings *store.SettingsStore, deps *bot.Dependencies) *BotHa
 }
 
 type botSetupRequest struct {
-	BotToken string `json:"bot_token" binding:"required"`
+	BotToken string `json:"token" binding:"required"`
 	ChatID   string `json:"chat_id" binding:"required"`
+	Interval int    `json:"interval" binding:"required"`
+	Label    string `json:"label" binding:"required"`
 }
 
 // Setup handles POST /api/v1/bot/setup
@@ -50,9 +52,11 @@ func (h *BotHandler) Setup(c *gin.Context) {
 	h.mu.Unlock()
 
 	_ = h.settings.Save(c.Request.Context(), map[string]string{
-		"telegram_bot_token": req.BotToken,
-		"telegram_chat_id":   req.ChatID,
-		"telegram_enabled":   "true",
+		"telegram_bot_token":    req.BotToken,
+		"telegram_chat_id":      req.ChatID,
+		"telegram_enabled":      "true",
+		"telegram_interval":     fmt.Sprintf("%d", req.Interval),
+		"telegram_server_label": req.Label,
 	})
 
 	// Start the bot with new config
@@ -96,7 +100,7 @@ func (h *BotHandler) Status(c *gin.Context) {
 }
 
 type botToggleRequest struct {
-	Enabled *bool `json:"enabled" binding:"required"`
+	Enabled *bool `json:"enable" binding:"required"`
 }
 
 // Toggle handles PUT /api/v1/bot/toggle

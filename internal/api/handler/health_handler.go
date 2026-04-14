@@ -31,19 +31,23 @@ func (h *HealthHandler) SetHealthService(svc *service.HealthService) {
 func (h *HealthHandler) Check(c *gin.Context) {
 	if h.healthSvc == nil {
 		c.JSON(http.StatusOK, gin.H{
-			"status":  "ok",
-			"version": model.Version,
+			"status":      "ok",
+			"version":     model.Version,
+			"commit":      model.Commit,
+			"version_url": model.VersionURL(),
 		})
 		return
 	}
 
 	status := h.healthSvc.Check(c.Request.Context())
 	c.JSON(http.StatusOK, gin.H{
-		"status":    "ok",
-		"version":   model.Version,
-		"docker":    status.Docker,
-		"container": status.Container,
-		"port":      status.Port,
-		"metrics":   status.Metrics,
+		"status":      "ok",
+		"version":     model.Version,
+		"commit":      model.Commit,
+		"version_url": model.VersionURL(),
+		"docker":      status.Docker,
+		"container":   status.Container,
+		"port":        status.Port,
+		"metrics":     status.Metrics,
 	})
 }

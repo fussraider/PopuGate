@@ -27,6 +27,9 @@ import (
 // version is set at build time via -ldflags "-X main.version=..."
 var version string
 
+// commit is set at build time via -ldflags "-X main.commit=..."
+var commit string
+
 // serverCmd represents the server command.
 var serverCmd = &cobra.Command{
 	Use:   "server",
@@ -52,11 +55,6 @@ func init() {
 
 func runServer(cmd *cobra.Command, args []string) {
 	printBanner()
-	// Propagate build-time version to model package
-	if version != "" {
-		model.Version = version
-	}
-
 	// Resolve data directory
 	defaultDataDir := resolveDataDir()
 	dataDir, _ := cmd.Flags().GetString("data")
@@ -106,7 +104,7 @@ func runServer(cmd *cobra.Command, args []string) {
 	// Initialize services
 	secretSvc := service.NewSecretService(secretStore)
 	upstreamSvc := service.NewUpstreamService(upstreamStore)
-	trafficSvc := service.NewTrafficService(trafficStore, settingsStore, dockerClient)
+	trafficSvc := service.NewTrafficService(trafficStore, settingsStore, dockerClient, instanceStore)
 	trafficSvc.SetSecretStore(secretStore, quotaStore)
 	geoblockSvc := service.NewGeoblockService(settingsStore, instanceStore, geoblockCache)
 	updateSvc := service.NewUpdateService()
@@ -119,7 +117,7 @@ func runServer(cmd *cobra.Command, args []string) {
 		containerSvc = service.NewContainerService(
 			dockerClient, secretStore, upstreamStore, instanceStore, trafficStore, settingsStore, trafficSvc,
 		)
-		healthSvc = service.NewHealthService(dockerClient, settingsStore)
+		healthSvc = service.NewHealthService(dockerClient, settingsStore, instanceStore)
 		healthSvc.SetContainerSvc(containerSvc)
 		replSvc = service.NewReplicationService(settingsStore, slaveStore)
 	}
@@ -161,8 +159,18 @@ func runServer(cmd *cobra.Command, args []string) {
 
 	// Get settings from DB
 	ctx := context.Background()
-	s, _ := settingsStore.Load(ctx)
-	isDebug := s.Debug
+	settings, err := settingsStore.Load(ctx)
+	if err != nil {
+		log.Printf("Warning: Failed to load settings: %v", err)
+	}
+
+	// Seed default instance if table is empty (migration from single-port to multi-port)
+	if settings != nil {
+		if err := instanceStore.EnsureDefaultInstance(ctx, settings.ProxyPort, settings.ProxyMetricsPort); err != nil {
+			log.Printf("Warning: Failed to seed default instance: %v", err)
+		}
+	}
+	isDebug := settings.Debug
 
 	// Override from environment
 	if os.Getenv("DEBUG") == "true" || os.Getenv("GIN_MODE") == "debug" {
@@ -399,9 +407,7 @@ func printBanner() {
 `
 	fmt.Print(banner)
 	fmt.Printf(" PopuGate Server %s\n", model.Version)
-	if model.GitHubRepo != "" {
-		fmt.Printf(" GitHub: https://github.com/%s\n", model.GitHubRepo)
-	}
+	fmt.Printf(" %s\n", model.VersionURL())
 	fmt.Println(" -------------------------------------------")
 	fmt.Println()
 }

@@ -1,10 +1,15 @@
 /bin
 /web/dist
 /web/node_modules
+/web/.pnpm-debug.log
 /internal/web/dist
+/popugate*
 /_legacy
 /data
-/popugate
+/bin/popugate-*
+/popugate-linux-*
+/popugate-darwin-*
+/popugate-windows-*
 .claude
 .qwen
 .idea

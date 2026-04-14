@@ -5,7 +5,7 @@
 .DS_Store
 
 # Go
-bin/
+# bin/ - removed to allow copying binaries from build artifacts
 popugate
 *.db
 

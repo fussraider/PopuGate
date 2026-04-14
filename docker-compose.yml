@@ -1,6 +1,8 @@
 services:
   popugate-backend:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     image: ghcr.io/fussraider/popugate:latest
     container_name: popugate-backend
     restart: unless-stopped
@@ -12,11 +14,15 @@ services:
       - POPUGATE_DATA_DIR=/data
       - TZ=Europe/Moscow
       - HOSTNAME=popugate-backend
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "9090:9090" # Prometheus metrics
 
   popugate-web:
-    build: ./web
+    build:
+      context: ./web
+      dockerfile: Dockerfile
     image: ghcr.io/fussraider/popugate-web:latest
     container_name: popugate-web
     restart: unless-stopped

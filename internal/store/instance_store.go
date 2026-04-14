@@ -18,6 +18,13 @@ func NewInstanceStore(db *sql.DB) *InstanceStore {
 	return &InstanceStore{db: db}
 }
 
+// Count returns the total number of instances.
+func (s *InstanceStore) Count(ctx context.Context) (int, error) {
+	var count int
+	err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM instances").Scan(&count)
+	return count, err
+}
+
 // List returns all instances.
 func (s *InstanceStore) List(ctx context.Context) ([]model.Instance, error) {
 	rows, err := s.db.QueryContext(ctx, `
@@ -56,6 +63,26 @@ func (s *InstanceStore) GetByPort(ctx context.Context, port int) (*model.Instanc
 	}
 	inst.Enabled = enabled == 1
 	return &inst, nil
+}
+
+// EnsureDefaultInstance checks if instances table is empty and seeds it from settings.
+func (s *InstanceStore) EnsureDefaultInstance(ctx context.Context, proxyPort, metricsPort int) error {
+	var count int
+	err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM instances").Scan(&count)
+	if err != nil {
+		return fmt.Errorf("count instances: %w", err)
+	}
+
+	if count == 0 {
+		_, err = s.db.ExecContext(ctx, `
+			INSERT INTO instances (port, metrics_port, enabled, label)
+			VALUES (?, ?, 1, 'Default')
+		`, proxyPort, metricsPort)
+		if err != nil {
+			return fmt.Errorf("seed default instance: %w", err)
+		}
+	}
+	return nil
 }
 
 // Create inserts a new instance.

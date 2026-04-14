@@ -89,9 +89,10 @@ type UpstreamConfig struct {
 
 // ConfigParams holds the parameters needed to generate a telemt config.
 type ConfigParams struct {
-	Settings *model.Settings
-	Secrets  []SecretEntry
-	Upstreams []UpstreamEntry
+	Settings              *model.Settings
+	Secrets               []SecretEntry
+	Upstreams             []UpstreamEntry
+	ExtraMetricsWhitelist []string // Additional IPs to allow in metrics_whitelist (e.g. Docker bridge IPs)
 }
 
 // SecretEntry represents a secret for TOML generation.
@@ -119,6 +120,10 @@ type UpstreamEntry struct {
 // BuildConfig constructs the telemt TOML configuration.
 func BuildConfig(params *ConfigParams) *TelemtConfig {
 	s := params.Settings
+
+	metricsWhitelist := []string{"127.0.0.1", "::1"}
+	metricsWhitelist = append(metricsWhitelist, params.ExtraMetricsWhitelist...)
+
 	cfg := &TelemtConfig{
 		General: GeneralConfig{
 			PreferIPv6:     false,
@@ -140,7 +145,7 @@ func BuildConfig(params *ConfigParams) *TelemtConfig {
 			ListenAddrIPv6:   "::",
 			ProxyProtocol:    s.ProxyProtocol,
 			MetricsPort:      s.ProxyMetricsPort,
-			MetricsWhitelist: []string{"127.0.0.1", "::1"},
+			MetricsWhitelist: metricsWhitelist,
 		},
 		Timeouts: TimeoutsConfig{
 			ClientHandshake: 30,

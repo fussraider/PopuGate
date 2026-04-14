@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"time"
@@ -39,7 +40,12 @@ func (h *UpdateHandler) Check(c *gin.Context) {
 // Downloads and installs the update, then triggers a restart
 // in a goroutine after the response is sent.
 func (h *UpdateHandler) Apply(c *gin.Context) {
-	result, err := h.updateSvc.Apply(c.Request.Context())
+	// Use a background context with timeout for updates (10 minutes)
+	// to avoid being killed by request context timeout.
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+
+	result, err := h.updateSvc.Apply(ctx)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

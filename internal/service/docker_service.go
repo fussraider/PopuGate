@@ -109,7 +109,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends git && \
 RUN git clone "%s" /build
 WORKDIR /build
 RUN git checkout "${TELEMT_COMMIT}"
-ENV CARGO_PROFILE_RELEASE_LTO=true CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1 CARGO_PROFILE_RELEASE_DEBUG=false
+ENV CARGO_PROFILE_RELEASE_LTO=thin CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16 CARGO_PROFILE_RELEASE_DEBUG=false
 RUN cargo build --release && \
     strip target/release/telemt 2>/dev/null || true && \
     cp target/release/telemt /telemt
@@ -128,11 +128,13 @@ ENTRYPOINT ["telemt"]
 		return fmt.Errorf("write Dockerfile: %w", err)
 	}
 
-	cmd := exec.CommandContext(ctx, "docker", "build",
+	cmd := exec.CommandContext(ctx, "docker", "buildx", "build",
 		"--build-arg", "TELEMT_COMMIT="+model.TelemtCommit(),
 		"-t", taggedImage,
 		buildDir,
+		"--load",
 	)
+	cmd.Env = append(os.Environ(), "DOCKER_BUILDKIT=1")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 

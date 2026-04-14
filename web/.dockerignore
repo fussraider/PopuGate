@@ -1,4 +1,8 @@
 node_modules/
-dist/
+# dist/ - allowed for pre-built artifacts
 *.tsbuildinfo
 .DS_Store
+.idea/
+.vscode/
+.env*
+*.log

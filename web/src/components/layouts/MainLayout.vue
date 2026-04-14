@@ -27,7 +27,7 @@
         </router-link>
       </nav>
       <div class="sidebar-footer">
-        <div class="version">v{{ APP_VERSION }}</div>
+        <div class="version"><a :href="APP_VERSION_URL" target="_blank" rel="noopener">{{ APP_VERSION }}</a></div>
       </div>
     </aside>
 
@@ -57,8 +57,11 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import Toast from '@/components/common/Toast.vue'
 
-// Берём версию из package.json через import.meta.env (vite define)
+// Version info injected at build time by Vite
+declare const __APP_VERSION__: string
+declare const __APP_VERSION_URL__: string
 const APP_VERSION = __APP_VERSION__
+const APP_VERSION_URL = __APP_VERSION_URL__
 
 const route = useRoute()
 const router = useRouter()
@@ -205,6 +208,17 @@ async function handleLogout() {
   font-size: $font-size-xs;
   color: rgba(255, 255, 255, 0.4);
   text-align: center;
+
+  a {
+    color: rgba(255, 255, 255, 0.5);
+    text-decoration: none;
+    transition: color $transition-fast;
+
+    &:hover {
+      color: rgba(255, 255, 255, 0.8);
+      text-decoration: underline;
+    }
+  }
 }
 
 /* Main Content */

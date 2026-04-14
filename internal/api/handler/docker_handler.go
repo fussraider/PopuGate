@@ -1,8 +1,10 @@
 package handler
 
 import (
+	"context"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -119,7 +121,12 @@ func (h *DockerHandler) Build(c *gin.Context) {
 	}
 	_ = c.ShouldBindJSON(&req)
 
-	result, err := h.dockerSvc.BuildEngine(c.Request.Context(), req.Force)
+	// Use a long timeout for engine builds (30 minutes) as they can take time from source
+	// and may be interrupted by request context timeout (usually 30s in many setups).
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	defer cancel()
+
+	result, err := h.dockerSvc.BuildEngine(ctx, req.Force)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

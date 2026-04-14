@@ -1,31 +1,19 @@
 # Docker build for PopuGate
-FROM golang:1.26-alpine AS builder
-
-# Install build dependencies
-RUN apk add --no-cache make git gcc musl-dev
-
-WORKDIR /app
-
-# Cache dependencies
-COPY go.mod go.sum ./
-RUN go mod download
-
-# Copy source and build
-COPY . .
-RUN make build
-
-# Final image
 FROM alpine:latest
 
 # Install runtime dependencies
 # ca-certificates for HTTPS
 # docker-cli to interact with mounted docker.sock
-RUN apk add --no-cache ca-certificates docker-cli tzdata
+RUN apk add --no-cache ca-certificates docker-cli docker-cli-buildx tzdata
 
 WORKDIR /app
 
-# Copy binary from builder
-COPY --from=builder /app/bin/popugate /usr/local/bin/popugate
+# Argument to specify binary architecture based on platform
+ARG TARGETARCH
+
+# Copy binary from build context based on target architecture
+COPY bin/popugate-linux-${TARGETARCH} /usr/local/bin/popugate
+RUN chmod +x /usr/local/bin/popugate
 
 # Create data directory
 RUN mkdir -p /data

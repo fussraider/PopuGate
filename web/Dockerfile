@@ -1,19 +1,22 @@
 # Build stage
-FROM node:22-alpine AS builder
+FROM node:24-alpine AS builder
+
+# Build-time version injection
+ARG VERSION=dev
+ARG COMMIT=unknown
+ENV VITE_APP_VERSION=$VERSION
+ENV VITE_APP_COMMIT=$COMMIT
 
 WORKDIR /app
 
-# Copy package files
-COPY package.json pnpm-lock.yaml* ./
-
-# Install dependencies
-RUN npm install
-
-# Copy source code
+# If pre-built dist folder is provided, use it
+# Otherwise build from source (for backward compatibility / local build)
 COPY . .
 
-# Build project
-RUN npm run build
+RUN if [ ! -d "dist" ]; then \
+    npm install && \
+    npm run build; \
+    fi
 
 # Final stage
 FROM nginx:alpine

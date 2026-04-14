@@ -1,8 +1,10 @@
 package model
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -189,7 +191,22 @@ func TelemtRepo() string {
 }
 
 // Version is overridden at build time via -ldflags "-X main.version=..."
-var Version = "0.0.0-dev"
+var Version = "dev"
+
+// Commit is the full git SHA, overridden at build time via -ldflags "-X main.commit=..."
+var Commit = "unknown"
+
+// VersionURL returns a GitHub URL for the current version: release page for tags,
+// commit page for SHAs, or the repo root as fallback.
+func VersionURL() string {
+	if strings.HasPrefix(Version, "v") {
+		return fmt.Sprintf("https://github.com/%s/releases/tag/%s", GitHubRepo, Version)
+	}
+	if Commit != "unknown" && Commit != "" {
+		return fmt.Sprintf("https://github.com/%s/commit/%s", GitHubRepo, Commit)
+	}
+	return fmt.Sprintf("https://github.com/%s", GitHubRepo)
+}
 
 // InstallDir is the base data directory. Overridden at startup from
 // the POPUGATE_DATA_DIR env var or the binary's directory.

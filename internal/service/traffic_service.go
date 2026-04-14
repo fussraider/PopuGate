@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 
@@ -16,11 +17,12 @@ import (
 
 // TrafficService handles traffic monitoring and persistence.
 type TrafficService struct {
-	traffic  *store.TrafficStore
-	settings *store.SettingsStore
-	docker   *dockerutil.DockerClient
-	secrets  *store.SecretStore
-	quota    *store.QuotaAlertStore
+	traffic   *store.TrafficStore
+	settings  *store.SettingsStore
+	instances *store.InstanceStore
+	docker    *dockerutil.DockerClient
+	secrets   *store.SecretStore
+	quota     *store.QuotaAlertStore
 
 	mu       sync.Mutex
 	lastLive *model.LiveMetrics
@@ -28,11 +30,12 @@ type TrafficService struct {
 }
 
 // NewTrafficService creates a new TrafficService.
-func NewTrafficService(traffic *store.TrafficStore, settings *store.SettingsStore, docker *dockerutil.DockerClient) *TrafficService {
+func NewTrafficService(traffic *store.TrafficStore, settings *store.SettingsStore, docker *dockerutil.DockerClient, instances *store.InstanceStore) *TrafficService {
 	return &TrafficService{
-		traffic:  traffic,
-		settings: settings,
-		docker:   docker,
+		traffic:   traffic,
+		settings:  settings,
+		docker:    docker,
+		instances: instances,
 	}
 }
 
@@ -65,7 +68,7 @@ func (s *TrafficService) GetUserTraffic(ctx context.Context, label string) (*mod
 	return s.traffic.GetUserTraffic(ctx, label)
 }
 
-// GetLiveMetrics fetches and caches live Prometheus metrics.
+// GetLiveMetrics fetches and caches live Prometheus metrics from all instances.
 func (s *TrafficService) GetLiveMetrics(ctx context.Context) (*model.LiveMetrics, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -75,57 +78,80 @@ func (s *TrafficService) GetLiveMetrics(ctx context.Context) (*model.LiveMetrics
 		return s.lastLive, nil
 	}
 
-	settings, err := s.settings.Load(ctx)
+	instances, err := s.instances.List(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	url := fmt.Sprintf("http://127.0.0.1:%d/metrics", settings.ProxyMetricsPort)
+	addr := "127.0.0.1"
+	if _, err := os.Stat("/.dockerenv"); err == nil {
+		addr = "host.docker.internal"
+	}
+
+	combined := &model.LiveMetrics{
+		UserMetrics: make(map[string]*model.UserLiveMetrics),
+	}
+
 	client := &http.Client{Timeout: 2 * time.Second}
-	resp, err := client.Get(url)
-	if err != nil {
-		return nil, fmt.Errorf("fetch metrics: %w", err)
-	}
-	defer resp.Body.Close()
+	foundAny := false
 
-	live, err := promutil.FetchAndParse(resp.Body)
-	if err != nil {
-		return nil, err
-	}
+	for _, inst := range instances {
+		if !inst.Enabled {
+			continue
+		}
 
-	s.lastLive = live
-	s.lastTime = time.Now()
-	return live, nil
-}
+		url := fmt.Sprintf("http://%s:%d/metrics", addr, inst.MetricsPort)
+		resp, err := client.Get(url)
+		if err != nil {
+			log.Printf("[traffic] failed to fetch metrics from %s: %v", url, err)
+			continue
+		}
 
-// Flush computes deltas from the latest Prometheus snapshot and persists them.
-// Handles negative deltas (container restart resets counters) by treating
-// the current reading as absolute and adding it to the cumulative total.
-func (s *TrafficService) Flush(ctx context.Context) error {
-	// Skip flush if container is not running
-	if s.docker != nil {
-		running, _ := s.docker.IsRunning(ctx)
-		if !running {
-			return nil
+		live, err := promutil.FetchAndParse(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			log.Printf("[traffic] failed to parse metrics from %s: %v", url, err)
+			continue
+		}
+
+		foundAny = true
+		combined.UptimeSeconds = max(combined.UptimeSeconds, live.UptimeSeconds)
+		combined.ConnsCurrent += live.ConnsCurrent
+		combined.ConnsTotal += live.ConnsTotal
+		combined.ConnsBadTotal += live.ConnsBadTotal
+		combined.ConnsMECurrent += live.ConnsMECurrent
+		combined.ConnsDirectCurrent += live.ConnsDirectCurrent
+		combined.UpstreamAttemptTotal += live.UpstreamAttemptTotal
+		combined.UpstreamSuccessTotal += live.UpstreamSuccessTotal
+		combined.UpstreamFailTotal += live.UpstreamFailTotal
+		combined.MEWritersActive += live.MEWritersActive
+		combined.MEWritersWarm += live.MEWritersWarm
+
+		for user, metrics := range live.UserMetrics {
+			if _, ok := combined.UserMetrics[user]; !ok {
+				combined.UserMetrics[user] = &model.UserLiveMetrics{}
+			}
+			combined.UserMetrics[user].OctetsFromClient += metrics.OctetsFromClient
+			combined.UserMetrics[user].OctetsToClient += metrics.OctetsToClient
+			combined.UserMetrics[user].Connections += metrics.Connections
+			combined.UserMetrics[user].UniqueIPs += metrics.UniqueIPs
 		}
 	}
 
-	settings, err := s.settings.Load(ctx)
-	if err != nil {
-		return err
+	if !foundAny {
+		return nil, fmt.Errorf("no metrics collected from any active instance")
 	}
 
-	url := fmt.Sprintf("http://127.0.0.1:%d/metrics", settings.ProxyMetricsPort)
-	client := &http.Client{Timeout: 2 * time.Second}
-	resp, err := client.Get(url)
+	s.lastLive = combined
+	s.lastTime = time.Now()
+	return combined, nil
+}
+
+// Flush computes deltas from the latest Prometheus snapshot and persists them.
+func (s *TrafficService) Flush(ctx context.Context) error {
+	live, err := s.GetLiveMetrics(ctx)
 	if err != nil {
 		return fmt.Errorf("fetch metrics for flush: %w", err)
-	}
-	defer resp.Body.Close()
-
-	live, err := promutil.FetchAndParse(resp.Body)
-	if err != nil {
-		return err
 	}
 
 	// Get previous global snapshot
@@ -142,7 +168,7 @@ func (s *TrafficService) Flush(ctx context.Context) error {
 	globalDeltaIn := int64(totalFromClient) - globalSnap.SnapIn
 	globalDeltaOut := int64(totalToClient) - globalSnap.SnapOut
 
-	// Handle container restart: if counter reset, treat current reading as delta
+	// Handle counter reset: if counter reset, treat current reading as delta
 	if globalDeltaIn < 0 {
 		globalDeltaIn = int64(totalFromClient)
 	}

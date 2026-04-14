@@ -72,8 +72,11 @@ func (d *DockerClient) IsRunning(ctx context.Context) (bool, error) {
 }
 
 // ContainerInspect returns detailed container info.
-func (d *DockerClient) ContainerInspect(ctx context.Context) (types.ContainerJSON, error) {
-	return d.cli.ContainerInspect(ctx, ContainerName)
+func (d *DockerClient) ContainerInspect(ctx context.Context, name string) (types.ContainerJSON, error) {
+	if name == "" {
+		name = ContainerName
+	}
+	return d.cli.ContainerInspect(ctx, name)
 }
 
 // StopContainer stops the proxy container.

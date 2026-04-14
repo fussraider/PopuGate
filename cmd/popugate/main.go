@@ -3,7 +3,20 @@ package main
 import (
 	"fmt"
 	"os"
+
+	"github.com/fussraider/PopuGate/internal/model"
 )
+
+func init() {
+	// Propagate build-time values to model package as early as possible,
+	// so all subcommands (version, server, …) see the correct values.
+	if version != "" {
+		model.Version = version
+	}
+	if commit != "" {
+		model.Commit = commit
+	}
+}
 
 func main() {
 	if err := rootCmd.Execute(); err != nil {

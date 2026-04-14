@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"net"
 	"os"
 	"time"
 
@@ -46,7 +47,7 @@ func NewContainerService(
 	}
 }
 
-// Start starts the proxy container (and all enabled instances).
+// Start starts all enabled proxy instances.
 func (s *ContainerService) Start(ctx context.Context) error {
 	// Remove stop flag — allow auto-recovery again
 	os.Remove(stopFlagPath)
@@ -65,31 +66,6 @@ func (s *ContainerService) Start(ctx context.Context) error {
 		return fmt.Errorf("no enabled secrets; add at least one secret first")
 	}
 
-	// Generate config
-	if err := s.generateConfig(ctx, settings, model.ConfigDir()+"/config.toml"); err != nil {
-		return fmt.Errorf("generate config: %w", err)
-	}
-
-	// Run primary container
-	_, err = s.docker.RunContainer(ctx, dockerutil.RunOptions{
-		Image:      model.DockerImageBase + ":latest",
-		ConfigPath: model.ConfigDir() + "/config.toml",
-		CPUs:       settings.ProxyCPUs,
-		Memory:     settings.ProxyMemory,
-	})
-	if err != nil {
-		return fmt.Errorf("run container: %w", err)
-	}
-
-	// Wait for container to actually start to avoid "Stopped" status in UI due to race
-	for range 5 {
-		running, _ := s.docker.IsRunning(ctx)
-		if running {
-			break
-		}
-		time.Sleep(200 * time.Millisecond)
-	}
-
 	// Start instances
 	if err := s.startInstances(ctx, settings); err != nil {
 		return fmt.Errorf("start instances: %w", err)
@@ -98,30 +74,13 @@ func (s *ContainerService) Start(ctx context.Context) error {
 	return nil
 }
 
-// Stop stops the proxy container and all instances.
+// Stop stops all proxy instances.
 func (s *ContainerService) Stop(ctx context.Context) error {
 	// Flush traffic before stopping
 	_ = s.flushTraffic(ctx)
 
 	// Write stop flag to prevent auto-recovery from restarting
 	_ = os.WriteFile(stopFlagPath, []byte(fmt.Sprintf("%d", time.Now().Unix())), 0644)
-
-	// Prevent auto-restart
-	_ = s.docker.UpdateRestartPolicy(ctx, dockerutil.RestartPolicyNo())
-
-	// Stop primary container
-	if err := s.docker.StopContainer(ctx, 10); err != nil {
-		return fmt.Errorf("stop container: %w", err)
-	}
-
-	// Wait for container to actually stop
-	for range 5 {
-		running, _ := s.docker.IsRunning(ctx)
-		if !running {
-			break
-		}
-		time.Sleep(200 * time.Millisecond)
-	}
 
 	// Stop instances in parallel
 	insts, _ := s.instances.List(ctx)
@@ -190,19 +149,37 @@ func (s *ContainerService) Reload(ctx context.Context) error {
 	return nil
 }
 
-// Status returns the current proxy status.
+// Status returns the current status of all proxy instances.
 func (s *ContainerService) Status(ctx context.Context) (*model.ProxyStatus, error) {
-	running, err := s.docker.IsRunning(ctx)
-	if err != nil {
-		return nil, err
-	}
-
 	status := &model.ProxyStatus{
-		Running: running,
+		Running: false,
 	}
 
-	if running {
-		info, err := s.docker.ContainerInspect(ctx)
+	insts, _ := s.instances.List(ctx)
+	if len(insts) == 0 {
+		return status, nil
+	}
+
+	// Check if any instance is running to set global Running status
+	var firstRunningInst *model.Instance
+	for i, inst := range insts {
+		running, _ := s.docker.IsInstanceRunning(ctx, inst.ContainerName())
+		status.Instances = append(status.Instances, model.InstanceStatus{
+			Port:    inst.Port,
+			Running: running,
+			Label:   inst.Label,
+		})
+		if running {
+			status.Running = true
+			if firstRunningInst == nil {
+				firstRunningInst = &insts[i]
+			}
+		}
+	}
+
+	// If at least one instance is running, get more details from the first one
+	if firstRunningInst != nil {
+		info, err := s.docker.ContainerInspect(ctx, firstRunningInst.ContainerName())
 		if err == nil {
 			status.ContainerID = info.ID[:12]
 			if t, err := time.Parse(time.RFC3339Nano, info.State.StartedAt); err == nil {
@@ -211,18 +188,19 @@ func (s *ContainerService) Status(ctx context.Context) (*model.ProxyStatus, erro
 				status.Uptime = formatDuration(time.Since(t))
 			}
 		}
+
+		// Add metrics if available
+		metrics, err := s.trafficSvc.GetLiveMetrics(ctx)
+		if err == nil {
+			status.ConnsCurrent = int(metrics.ConnsCurrent)
+			status.ConnsTotal = int64(metrics.ConnsTotal)
+		}
 	}
 
-	// Add instance statuses
-	insts, _ := s.instances.List(ctx)
-	for _, inst := range insts {
-		instRunning, _ := s.docker.IsInstanceRunning(ctx, inst.ContainerName())
-		status.Instances = append(status.Instances, model.InstanceStatus{
-			Port:    inst.Port,
-			Running: instRunning,
-			Label:   inst.Label,
-		})
-	}
+	// Global traffic (all-time)
+	global, _ := s.traffic.GetGlobal(ctx)
+	status.TrafficIn = global.BytesIn
+	status.TrafficOut = global.BytesOut
 
 	return status, nil
 }
@@ -266,9 +244,10 @@ func (s *ContainerService) generateConfig(ctx context.Context, settings *model.S
 
 	// Build and write config
 	cfg := telemt.BuildConfig(&telemt.ConfigParams{
-		Settings:  settings,
-		Secrets:   secretEntries,
-		Upstreams: upstreamEntries,
+		Settings:              settings,
+		Secrets:               secretEntries,
+		Upstreams:             upstreamEntries,
+		ExtraMetricsWhitelist: dockerExtraMetricsIPs(),
 	})
 
 	return telemt.WriteConfigTOML(cfg, configPath)
@@ -330,4 +309,42 @@ func formatDuration(d time.Duration) string {
 		return fmt.Sprintf("%dh %dm", hours, minutes)
 	}
 	return fmt.Sprintf("%dm", minutes)
+}
+
+// dockerExtraMetricsIPs returns additional source IPs to whitelist for the
+// telemt metrics endpoint when the backend is running inside a Docker container.
+// Telemt runs with --network host, so it sees the container's bridge IP as the
+// connection source — which must be explicitly allowed in metrics_whitelist.
+func dockerExtraMetricsIPs() []string {
+	if _, err := os.Stat("/.dockerenv"); err != nil {
+		return nil
+	}
+
+	seen := make(map[string]bool)
+	var ips []string
+
+	// Resolve host.docker.internal (the host gateway IP the backend connects to)
+	if addrs, err := net.LookupHost("host.docker.internal"); err == nil {
+		for _, addr := range addrs {
+			if !seen[addr] {
+				seen[addr] = true
+				ips = append(ips, addr)
+			}
+		}
+	}
+
+	// Get container's own non-loopback IPs (the source IPs telemt will see)
+	if addrs, err := net.InterfaceAddrs(); err == nil {
+		for _, addr := range addrs {
+			if ipNet, ok := addr.(*net.IPNet); ok && !ipNet.IP.IsLoopback() {
+				ipStr := ipNet.IP.String()
+				if !seen[ipStr] {
+					seen[ipStr] = true
+					ips = append(ips, ipStr)
+				}
+			}
+		}
+	}
+
+	return ips
 }

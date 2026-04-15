@@ -56,9 +56,3 @@ async function handleApply() {
 
 onMounted(() => updateStore.check())
 </script>
-
-<style scoped lang="scss">
-@use '@/assets/scss/variables' as *;
-.status-row { display: flex; align-items: center; gap: $spacing-md; flex-wrap: wrap; }
-.text-sm { font-size: $font-size-xs; }
-</style>

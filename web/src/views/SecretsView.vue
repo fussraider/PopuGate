@@ -1,16 +1,13 @@
 <template>
   <div>
-    <div class="page-header flex justify-between items-center mb-lg">
-      <div />
+    <PageHeader>
       <button class="btn btn-primary" @click="openAddModal">+ Add Secret</button>
-    </div>
+    </PageHeader>
 
     <LoadingSpinner v-if="secretsStore.loading" message="Loading secrets..." />
 
-    <div v-else-if="!(secretsStore.secrets?.length)" class="card empty-state">
-      <div class="empty-icon">🔑</div>
-      <p>No secrets configured. Add your first secret to get started.</p>
-    </div>
+    <EmptyState v-else-if="!(secretsStore.secrets?.length)" icon="🔑"
+                message="No secrets configured. Add your first secret to get started." />
 
     <div v-else class="table-wrapper">
       <table class="table">
@@ -167,6 +164,8 @@ import Modal from '@/components/common/Modal.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
+import PageHeader from '@/components/common/PageHeader.vue'
+import EmptyState from '@/components/common/EmptyState.vue'
 
 const secretsStore = useSecretsStore()
 const toast = useToastStore()
@@ -299,10 +298,6 @@ onMounted(() => secretsStore.load())
 <style scoped lang="scss">
 @use '@/assets/scss/variables' as *;
 
-.page-header { display: flex; justify-content: space-between; align-items: center; }
-.actions-cell { display: flex; gap: 2px; flex-wrap: wrap; }
-.btn-danger-text { color: $color-danger; }
-
 .quota-bar {
   height: 4px;
   background: $color-gray-200;
@@ -314,8 +309,6 @@ onMounted(() => secretsStore.load())
 .quota-over { background: $color-danger; }
 
 .qr-image { max-width: 256px; border-radius: $border-radius; }
-.text-sm { font-size: $font-size-xs; }
-.text-xs { font-size: 0.75rem; }
 
 .links-section {
   margin-top: 1rem;

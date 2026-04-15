@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"sync"
@@ -12,7 +11,13 @@ import (
 	"github.com/fussraider/PopuGate/internal/model"
 	"github.com/fussraider/PopuGate/internal/store"
 	"github.com/fussraider/PopuGate/pkg/dockerutil"
+	"github.com/fussraider/PopuGate/pkg/logger"
 	"github.com/fussraider/PopuGate/pkg/promutil"
+)
+
+var (
+	trafficLog = logger.WithScope("traffic")
+	quotaLog   = logger.WithScope("quota")
 )
 
 // TrafficService handles traffic monitoring and persistence.
@@ -103,14 +108,14 @@ func (s *TrafficService) GetLiveMetrics(ctx context.Context) (*model.LiveMetrics
 		url := fmt.Sprintf("http://%s:%d/metrics", addr, inst.MetricsPort)
 		resp, err := client.Get(url)
 		if err != nil {
-			log.Printf("[traffic] failed to fetch metrics from %s: %v", url, err)
+			trafficLog.Warnf("failed to fetch metrics from %s: %v", url, err)
 			continue
 		}
 
 		live, err := promutil.FetchAndParse(resp.Body)
 		resp.Body.Close()
 		if err != nil {
-			log.Printf("[traffic] failed to parse metrics from %s: %v", url, err)
+			trafficLog.Warnf("failed to parse metrics from %s: %v", url, err)
 			continue
 		}
 
@@ -251,16 +256,16 @@ func (s *TrafficService) CheckQuotas(ctx context.Context) {
 				if enabled > 1 {
 					sec.Enabled = false
 					_ = s.secrets.Update(ctx, &sec)
-					log.Printf("[quota] auto-disabled secret %s (quota exceeded: %d%%)", sec.Label, pct)
+					quotaLog.Warnf("auto-disabled secret %s (quota exceeded: %d%%)", sec.Label, pct)
 				} else {
-					log.Printf("[quota] cannot auto-disable %s (last active secret), quota exceeded %d%%", sec.Label, pct)
+					quotaLog.Warnf("cannot auto-disable %s (last active secret), quota exceeded %d%%", sec.Label, pct)
 				}
 				_ = s.quota.MarkAlerted(ctx, sec.Label, 100)
 			}
 		} else if pct >= 80 {
 			alerted, _ := s.quota.WasAlerted(ctx, sec.Label, 80)
 			if !alerted {
-				log.Printf("[quota] warning: secret %s at %d%% of quota", sec.Label, pct)
+				quotaLog.Warnf("warning: secret %s at %d%% of quota", sec.Label, pct)
 				_ = s.quota.MarkAlerted(ctx, sec.Label, 80)
 			}
 		}
@@ -294,7 +299,7 @@ func (s *TrafficService) CheckExpirations(ctx context.Context) {
 			if enabled > 1 {
 				sec.Enabled = false
 				_ = s.secrets.Update(ctx, &sec)
-				log.Printf("[expiry] auto-disabled expired secret %s (expired %s)", sec.Label, sec.ExpiresAt)
+				quotaLog.Infof("auto-disabled expired secret %s (expired %s)", sec.Label, sec.ExpiresAt)
 			}
 		}
 	}

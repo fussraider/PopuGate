@@ -3,7 +3,6 @@ package bot
 import (
 	"context"
 	"fmt"
-	"log"
 	"strings"
 
 	"github.com/fussraider/PopuGate/internal/model"
@@ -114,7 +113,7 @@ func (b *Bot) cmdLink(ctx context.Context, text string) string {
 			if qrPNG, err := b.deps.GenerateQR(ctx, webLink); err == nil {
 				caption := fmt.Sprintf("🔗 %s — scan to connect", sec.Label)
 				if sendErr := b.SendPhoto(ctx, qrPNG, caption); sendErr != nil {
-					log.Printf("[bot] QR photo send error: %v", sendErr)
+					log.Errorf("QR photo send error: %v", sendErr)
 				}
 			}
 		}
@@ -139,7 +138,7 @@ func (b *Bot) cmdLink(ctx context.Context, text string) string {
 			if qrPNG, err := b.deps.GenerateQR(ctx, webLink); err == nil {
 				caption := fmt.Sprintf("🔗 %s — scan to connect", s.Label)
 				if sendErr := b.SendPhoto(ctx, qrPNG, caption); sendErr != nil {
-					log.Printf("[bot] QR photo send error for %s: %v", s.Label, sendErr)
+					log.Errorf("QR photo send error for %s: %v", s.Label, sendErr)
 				}
 			}
 		}

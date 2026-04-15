@@ -78,7 +78,7 @@
     <div v-if="testResult" class="card mb-lg">
       <h3 class="mb-md">Test Result</h3>
       <div class="alert" :class="testResult.ssh_ok ? 'alert-success' : 'alert-danger'">
-        SSH: {{ testResult.ssh_ok ? '✅ OK' : '❌ Failed' }}<br />
+        SSH: {{ testResult.ssh_ok ? 'OK' : 'Failed' }}<br />
         <span v-if="testResult.docker_status">Docker: {{ testResult.docker_status }}</span>
         <span v-if="testResult.error">{{ testResult.error }}</span>
       </div>
@@ -170,10 +170,5 @@ onMounted(() => {
 <style scoped lang="scss">
 @use '@/assets/scss/variables' as *;
 
-.status-row { display: flex; align-items: center; }
-.form-label { display: block; font-size: $font-size-sm; font-weight: $font-weight-medium; margin-bottom: $spacing-sm; color: $text-secondary; }
-.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: $spacing-md; }
-.actions-cell { display: flex; gap: 2px; }
 .ssh-key { display: block; word-break: break-all; font-size: $font-size-xs; background: $color-gray-100; padding: $spacing-sm; border-radius: $border-radius-sm; }
-.text-sm { font-size: $font-size-xs; }
 </style>

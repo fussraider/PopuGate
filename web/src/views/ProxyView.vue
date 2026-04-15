@@ -3,22 +3,22 @@
     <div class="card mb-lg">
       <h3 class="mb-md">Proxy Control</h3>
       <div class="status-bar mb-lg">
-        <div class="status-item">
-          <span class="status-label">Status</span>
+        <div class="info-item">
+          <span class="info-label">Status</span>
           <StatusBadge :variant="proxyStore.status?.running ? 'success' : 'danger'">
             {{ proxyStore.status?.running ? 'Running' : 'Stopped' }}
           </StatusBadge>
         </div>
-        <div class="status-item">
-          <span class="status-label">Uptime</span>
+        <div class="info-item">
+          <span class="info-label">Uptime</span>
           <span>{{ proxyStore.status?.uptime || '—' }}</span>
         </div>
-        <div class="status-item">
-          <span class="status-label">Connections</span>
+        <div class="info-item">
+          <span class="info-label">Connections</span>
           <span>{{ proxyStore.status?.conns_current ?? 0 }}</span>
         </div>
-        <div class="status-item">
-          <span class="status-label">Port</span>
+        <div class="info-item">
+          <span class="info-label">Port</span>
           <code>{{ proxyStore.status?.port }}</code>
         </div>
       </div>
@@ -43,11 +43,8 @@
             <span class="text-xs text-muted mr-xs">Lines:</span>
             <input type="number" v-model.number="proxyStore.maxLogs" class="input input-sm limit-input" min="10" max="5000">
           </div>
-          <label class="toggle-control">
-            <input type="checkbox" :checked="proxyStore.isFollowing" @change="handleFollowToggle">
-            <span class="toggle-label">Follow Logs (SSE)</span>
-          </label>
-          <button class="btn btn-secondary btn-sm" @click="proxyStore.loadLogs()" :disabled="proxyStore.isFollowing">
+          <ToggleSwitch v-model="isFollowing" label="Follow Logs (SSE)" />
+          <button class="btn btn-secondary btn-sm" @click="proxyStore.loadLogs()" :disabled="isFollowing">
             Refresh Logs
           </button>
         </div>
@@ -62,9 +59,20 @@ import { onMounted, onUnmounted, ref, watch, nextTick } from 'vue'
 import { useProxyStore } from '@/stores/proxy'
 import { ansiToHtml } from '@/utils/ansi'
 import StatusBadge from '@/components/common/StatusBadge.vue'
+import ToggleSwitch from '@/components/common/ToggleSwitch.vue'
 
 const proxyStore = useProxyStore()
 const logsRef = ref<HTMLElement | null>(null)
+
+const isFollowing = ref(false)
+
+watch(isFollowing, (following) => {
+  if (following) {
+    proxyStore.startLogsFollow()
+  } else {
+    proxyStore.stopLogsFollow()
+  }
+})
 
 onMounted(() => proxyStore.loadStatus())
 
@@ -72,18 +80,8 @@ onUnmounted(() => {
   proxyStore.stopLogsFollow()
 })
 
-const handleFollowToggle = (e: Event) => {
-  const checked = (e.target as HTMLInputElement).checked
-  if (checked) {
-    proxyStore.startLogsFollow()
-  } else {
-    proxyStore.stopLogsFollow()
-  }
-}
-
-// Auto-scroll to bottom when logs update in follow mode
 watch(() => proxyStore.logs, () => {
-  if (proxyStore.isFollowing && logsRef.value) {
+  if (isFollowing.value && logsRef.value) {
     nextTick(() => {
       logsRef.value!.scrollTop = logsRef.value!.scrollHeight
     })
@@ -98,18 +96,6 @@ watch(() => proxyStore.logs, () => {
   display: flex;
   flex-wrap: wrap;
   gap: $spacing-lg;
-}
-
-.status-item {
-  display: flex;
-  flex-direction: column;
-  gap: $spacing-xs;
-}
-
-.status-label {
-  font-size: $font-size-xs;
-  color: $text-muted;
-  text-transform: uppercase;
 }
 
 .actions-grid {
@@ -151,19 +137,6 @@ watch(() => proxyStore.logs, () => {
   margin-bottom: 0;
 }
 
-.toggle-control {
-  display: flex;
-  align-items: center;
-  gap: $spacing-xs;
-  cursor: pointer;
-  user-select: none;
-  font-size: $font-size-sm;
-
-  input {
-    cursor: pointer;
-  }
-}
-
 .log-limit {
   display: flex;
   align-items: center;
@@ -174,10 +147,6 @@ watch(() => proxyStore.logs, () => {
   width: 70px;
   padding: 4px 8px;
   height: 28px;
-}
-
-.text-xs {
-  font-size: $font-size-xs;
 }
 
 .mr-xs {

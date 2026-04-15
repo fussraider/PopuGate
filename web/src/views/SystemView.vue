@@ -3,19 +3,18 @@
     <!-- OS Information -->
     <div class="card mb-lg">
       <h3 class="mb-md">Operating System</h3>
-      <div v-if="systemStore.os" class="info-grid">
-        <div class="info-item">
-          <span class="info-label">OS Family</span>
-          <span class="info-value">{{ systemStore.os.family }}</span>
-        </div>
-        <div class="info-item">
-          <span class="info-label">Version</span>
-          <span class="info-value">{{ systemStore.os.version }}</span>
-        </div>
-        <div class="info-item">
-          <span class="info-label">Architecture</span>
-          <span class="info-value">{{ systemStore.os.arch }}</span>
-        </div>
+      <div v-if="systemStore.os">
+        <InfoGrid>
+          <InfoItem label="OS Family">
+            <span>{{ systemStore.os.family }}</span>
+          </InfoItem>
+          <InfoItem label="Version">
+            <span>{{ systemStore.os.version }}</span>
+          </InfoItem>
+          <InfoItem label="Architecture">
+            <span>{{ systemStore.os.arch }}</span>
+          </InfoItem>
+        </InfoGrid>
       </div>
       <div v-else class="text-muted">Loading OS information...</div>
     </div>
@@ -30,57 +29,53 @@
       </div>
 
       <div v-if="systemStore.service" class="service-details mb-lg">
-        <div class="info-grid">
-          <div class="info-item">
-            <span class="info-label">Status</span>
-            <span class="info-value">{{ systemStore.service.active }}</span>
-          </div>
-          <div class="info-item">
-            <span class="info-label">Enabled</span>
-            <span class="info-value">{{ systemStore.service.enabled ? 'Yes' : 'No' }}</span>
-          </div>
-          <div v-if="systemStore.service.pid" class="info-item">
-            <span class="info-label">Main PID</span>
-            <span class="info-value">{{ systemStore.service.pid }}</span>
-          </div>
-          <div v-if="systemStore.service.uptime" class="info-item">
-            <span class="info-label">Uptime</span>
-            <span class="info-value">{{ systemStore.service.uptime }}</span>
-          </div>
-        </div>
+        <InfoGrid>
+          <InfoItem label="Status">
+            <span>{{ systemStore.service.active }}</span>
+          </InfoItem>
+          <InfoItem label="Enabled">
+            <span>{{ systemStore.service.enabled ? 'Yes' : 'No' }}</span>
+          </InfoItem>
+          <InfoItem v-if="systemStore.service.pid" label="Main PID">
+            <span>{{ systemStore.service.pid }}</span>
+          </InfoItem>
+          <InfoItem v-if="systemStore.service.uptime" label="Uptime">
+            <span>{{ systemStore.service.uptime }}</span>
+          </InfoItem>
+        </InfoGrid>
       </div>
 
       <div v-if="systemStore.service?.supported" class="actions-grid">
         <template v-if="!systemStore.service?.installed">
-          <button 
-            class="btn btn-primary" 
-            :disabled="systemStore.loading" 
+          <button
+            class="btn btn-primary"
+            :disabled="systemStore.loading"
             @click="handleInstall"
           >
             {{ systemStore.loading ? 'Installing...' : 'Install Service' }}
           </button>
         </template>
-        
+
         <template v-else>
-          <button 
-            class="btn btn-warning" 
-            :disabled="systemStore.loading" 
+          <button
+            class="btn btn-warning"
+            :disabled="systemStore.loading"
             @click="handleRestart"
           >
             {{ systemStore.loading ? 'Restarting...' : 'Restart Service' }}
           </button>
-          
-          <button 
-            class="btn btn-ghost" 
-            :disabled="systemStore.loading" 
+
+          <button
+            class="btn btn-ghost"
+            :disabled="systemStore.loading"
             @click="handleReload"
           >
             {{ systemStore.loading ? 'Reloading...' : 'Reload Config' }}
           </button>
-          
-          <button 
-            class="btn btn-danger" 
-            :disabled="systemStore.loading" 
+
+          <button
+            class="btn btn-danger"
+            :disabled="systemStore.loading"
             @click="handleUninstall"
           >
             {{ systemStore.loading ? 'Uninstalling...' : 'Uninstall Service' }}
@@ -103,6 +98,8 @@ import { computed, onMounted } from 'vue'
 import { useSystemStore } from '@/stores/system'
 import { useToastStore } from '@/stores/toast'
 import StatusBadge from '@/components/common/StatusBadge.vue'
+import InfoGrid from '@/components/common/InfoGrid.vue'
+import InfoItem from '@/components/common/InfoItem.vue'
 
 const systemStore = useSystemStore()
 const toast = useToastStore()
@@ -138,7 +135,6 @@ async function handleRestart() {
   try {
     await systemStore.restartService()
     toast.success('Service restart signal sent')
-    // Status will update after a short delay
     setTimeout(() => systemStore.loadServiceStatus(), 2000)
   } catch (e: any) {
     toast.error(e.response?.data?.error || e.message)
@@ -164,28 +160,6 @@ onMounted(async () => {
 
 <style scoped lang="scss">
 @use '@/assets/scss/variables' as *;
-
-.info-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: $spacing-md;
-}
-
-.info-item {
-  display: flex;
-  flex-direction: column;
-  gap: $spacing-xs;
-}
-
-.info-label {
-  font-size: $font-size-xs;
-  color: $text-muted;
-  text-transform: uppercase;
-}
-
-.info-value {
-  font-weight: $font-weight-medium;
-}
 
 .actions-grid {
   display: flex;

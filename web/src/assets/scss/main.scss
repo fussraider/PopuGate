@@ -407,7 +407,89 @@ code {
   .empty-icon {
     font-size: 3rem;
     margin-bottom: $spacing-md;
+    animation: fadeIn 0.3s ease;
   }
+}
+
+// ─── Shared Layout Patterns ─────────────────────────────────────────
+
+.actions-cell {
+  display: flex;
+  gap: 2px;
+  flex-wrap: wrap;
+}
+
+.status-row {
+  display: flex;
+  align-items: center;
+  gap: $spacing-md;
+  flex-wrap: wrap;
+}
+
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: $spacing-md;
+}
+
+.info-item {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-xs;
+}
+
+.info-label {
+  font-size: $font-size-xs;
+  color: $text-muted;
+  text-transform: uppercase;
+}
+
+.info-value {
+  font-weight: $font-weight-medium;
+}
+
+.btn-danger-text {
+  color: $color-danger;
+}
+
+.toggle-control {
+  display: flex;
+  align-items: center;
+  gap: $spacing-xs;
+  cursor: pointer;
+  user-select: none;
+  font-size: $font-size-sm;
+
+  input {
+    cursor: pointer;
+  }
+}
+
+// ─── Additional Utility Classes ─────────────────────────────────────
+
+.text-xs { font-size: $font-size-xs; }
+.text-sm { font-size: $font-size-sm; }
+
+.flex-between { display: flex; justify-content: space-between; align-items: center; }
+.flex-center { display: flex; align-items: center; }
+
+// ─── Animations ─────────────────────────────────────────────────────
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+// ─── Page Transitions ───────────────────────────────────────────────
+
+.page-fade-enter-active,
+.page-fade-leave-active {
+  transition: opacity 0.15s ease;
+}
+
+.page-fade-enter-from,
+.page-fade-leave-to {
+  opacity: 0;
 }
 
 // ─── Skeleton Loading ──────────────────────────────────────────────

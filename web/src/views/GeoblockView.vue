@@ -81,9 +81,6 @@ onMounted(async () => {
 <style scoped lang="scss">
 @use '@/assets/scss/variables' as *;
 
-.form-label { display: block; font-size: $font-size-sm; font-weight: $font-weight-medium; margin-bottom: $spacing-sm; color: $text-secondary; }
-.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: $spacing-md; }
-
 .country-tags { display: flex; flex-wrap: wrap; gap: $spacing-sm; }
 .country-tag {
   display: inline-flex;
@@ -104,5 +101,4 @@ onMounted(async () => {
   opacity: 0.6;
   &:hover { opacity: 1; }
 }
-.text-sm { font-size: $font-size-xs; }
 </style>

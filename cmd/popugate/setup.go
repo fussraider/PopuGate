@@ -3,11 +3,12 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 	"path/filepath"
 	"syscall"
 
 	"github.com/spf13/cobra"
+
+	"github.com/fussraider/PopuGate/pkg/logger"
 	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/term"
 
@@ -87,7 +88,7 @@ func runSetup(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("save password hash: %w", err)
 	}
 
-	log.Println("Admin password set successfully. You can now access the web UI.")
+	logger.WithScope("setup").Infof("Admin password set successfully. You can now access the web UI.")
 	return nil
 }
 

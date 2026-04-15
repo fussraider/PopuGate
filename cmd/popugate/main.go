@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/fussraider/PopuGate/internal/model"
+	"github.com/fussraider/PopuGate/pkg/logger"
 )
 
 func init() {
@@ -19,6 +20,7 @@ func init() {
 }
 
 func main() {
+	logger.Init()
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

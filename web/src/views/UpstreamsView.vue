@@ -1,16 +1,13 @@
 <template>
   <div>
-    <div class="page-header flex justify-between items-center mb-lg">
-      <div />
+    <PageHeader>
       <button class="btn btn-primary" @click="openAddModal">+ Add Upstream</button>
-    </div>
+    </PageHeader>
 
     <LoadingSpinner v-if="store.loading" message="Loading upstreams..." />
 
-    <div v-else-if="!(store.upstreams?.length)" class="card empty-state">
-      <div class="empty-icon">🔀</div>
-      <p>No upstreams configured. Traffic will go directly.</p>
-    </div>
+    <EmptyState v-else-if="!(store.upstreams?.length)" icon="🔀"
+                message="No upstreams configured. Traffic will go directly." />
 
     <div v-else class="table-wrapper">
       <table class="table">
@@ -115,6 +112,8 @@ import Modal from '@/components/common/Modal.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
+import PageHeader from '@/components/common/PageHeader.vue'
+import EmptyState from '@/components/common/EmptyState.vue'
 
 const store = useUpstreamsStore()
 const toast = useToastStore()
@@ -160,8 +159,3 @@ async function testUpstream(name: string) {
 
 onMounted(() => store.load())
 </script>
-
-<style scoped lang="scss">
-@use '@/assets/scss/variables' as *;
-.actions-cell { display: flex; gap: 2px; }
-</style>

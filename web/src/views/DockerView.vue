@@ -38,26 +38,22 @@
     <!-- Container Info -->
     <div class="card">
       <h3 class="mb-md">Container</h3>
-      <div class="info-grid">
-        <div class="info-item">
-          <span class="info-label">Name</span>
+      <InfoGrid>
+        <InfoItem label="Name">
           <code>popugate</code>
-        </div>
-        <div class="info-item">
-          <span class="info-label">Image</span>
+        </InfoItem>
+        <InfoItem label="Image">
           <code>popugate-telemt:latest</code>
-        </div>
-        <div class="info-item">
-          <span class="info-label">Running</span>
+        </InfoItem>
+        <InfoItem label="Running">
           <StatusBadge :variant="proxyStore.status?.running ? 'success' : 'danger'">
             {{ proxyStore.status?.running ? 'Yes' : 'No' }}
           </StatusBadge>
-        </div>
-        <div v-if="proxyStore.status?.container_id" class="info-item">
-          <span class="info-label">Container ID</span>
+        </InfoItem>
+        <InfoItem v-if="proxyStore.status?.container_id" label="Container ID">
           <code>{{ proxyStore.status.container_id }}</code>
-        </div>
-      </div>
+        </InfoItem>
+      </InfoGrid>
     </div>
   </div>
 </template>
@@ -66,6 +62,8 @@
 import { onMounted } from 'vue'
 import { useDockerStore, useProxyStore } from '@/stores'
 import StatusBadge from '@/components/common/StatusBadge.vue'
+import InfoGrid from '@/components/common/InfoGrid.vue'
+import InfoItem from '@/components/common/InfoItem.vue'
 
 const dockerStore = useDockerStore()
 const proxyStore = useProxyStore()
@@ -76,12 +74,3 @@ onMounted(() => {
   proxyStore.loadStatus()
 })
 </script>
-
-<style scoped lang="scss">
-@use '@/assets/scss/variables' as *;
-
-.status-row { display: flex; align-items: center; gap: $spacing-md; flex-wrap: wrap; }
-.info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: $spacing-md; }
-.info-item { display: flex; flex-direction: column; gap: $spacing-xs; }
-.info-label { font-size: $font-size-xs; color: $text-muted; text-transform: uppercase; }
-</style>

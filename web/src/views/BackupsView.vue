@@ -1,18 +1,15 @@
 <template>
   <div>
-    <div class="page-header flex justify-between items-center mb-lg">
-      <div />
+    <PageHeader>
       <button class="btn btn-primary" :disabled="backupStore.creating" @click="handleCreate">
         {{ backupStore.creating ? 'Creating...' : 'Create Backup' }}
       </button>
-    </div>
+    </PageHeader>
 
     <LoadingSpinner v-if="backupStore.loading" message="Loading backups..." />
 
-    <div v-else-if="!(backupStore.backups && backupStore.backups.length)" class="card empty-state">
-      <div class="empty-icon">💾</div>
-      <p>No backups found. Create your first backup.</p>
-    </div>
+    <EmptyState v-else-if="!(backupStore.backups && backupStore.backups.length)" icon="💾"
+                message="No backups found. Create your first backup." />
 
     <div v-else class="table-wrapper">
       <table class="table">
@@ -48,29 +45,50 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useBackupStore } from '@/stores/backup'
+import { useToastStore } from '@/stores/toast'
 import { backupApi } from '@/api/endpoints'
 import { formatBytes } from '@/utils/format'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
+import PageHeader from '@/components/common/PageHeader.vue'
+import EmptyState from '@/components/common/EmptyState.vue'
 
 const backupStore = useBackupStore()
+const toast = useToastStore()
 
 const confirmModal = ref(false)
 const removeTarget = ref('')
 function confirmRemove(filename: string) { removeTarget.value = filename; confirmModal.value = true }
-async function handleRemove() { await backupStore.remove(removeTarget.value); confirmModal.value = false }
+async function handleRemove() {
+  try {
+    await backupStore.remove(removeTarget.value)
+    confirmModal.value = false
+    toast.success(`Backup "${removeTarget.value}" removed`)
+  } catch (e: any) {
+    toast.error(e.response?.data?.error ?? e.message)
+  }
+}
 
 const restoreModal = ref(false)
 const restoreTarget = ref('')
 function handleRestore(filename: string) { restoreTarget.value = filename; restoreModal.value = true }
 async function handleRestoreConfirm() {
-  await backupStore.restore(restoreTarget.value)
-  restoreModal.value = false
-  alert('Backup restored. Restart the service for changes to take effect.')
+  try {
+    await backupStore.restore(restoreTarget.value)
+    restoreModal.value = false
+    toast.info('Backup restored. Restart the service for changes to take effect.')
+  } catch (e: any) {
+    toast.error(e.response?.data?.error ?? e.message)
+  }
 }
 
 async function handleCreate() {
-  await backupStore.create()
+  try {
+    await backupStore.create()
+    toast.success('Backup created')
+  } catch (e: any) {
+    toast.error(e.response?.data?.error ?? e.message)
+  }
 }
 
 async function handleDownload(filename: string) {
@@ -84,17 +102,10 @@ async function handleDownload(filename: string) {
     link.click()
     link.remove()
     window.URL.revokeObjectURL(url)
-  } catch (err) {
-    console.error('Download failed:', err)
-    alert('Failed to download backup')
+  } catch (e: any) {
+    toast.error('Failed to download backup')
   }
 }
 
 onMounted(() => backupStore.load())
 </script>
-
-<style scoped lang="scss">
-@use '@/assets/scss/variables' as *;
-.actions-cell { display: flex; gap: $spacing-sm; }
-.btn-danger-text { color: $color-danger; }
-</style>

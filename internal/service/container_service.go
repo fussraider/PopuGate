@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"fmt"
-	"log"
 	"net"
 	"os"
 	"time"
@@ -11,10 +10,13 @@ import (
 	"github.com/fussraider/PopuGate/internal/model"
 	"github.com/fussraider/PopuGate/internal/store"
 	"github.com/fussraider/PopuGate/pkg/dockerutil"
+	"github.com/fussraider/PopuGate/pkg/logger"
 	"github.com/fussraider/PopuGate/pkg/telemt"
 )
 
 const stopFlagPath = "/tmp/.popugate_stopped"
+
+var statusLog = logger.WithScope("status")
 
 // ContainerService manages proxy container lifecycle.
 type ContainerService struct {
@@ -193,7 +195,7 @@ func (s *ContainerService) Status(ctx context.Context) (*model.ProxyStatus, erro
 		// Add metrics if available
 		metrics, err := s.trafficSvc.GetLiveMetrics(ctx)
 		if err != nil {
-			log.Printf("[status] live metrics unavailable: %v", err)
+			statusLog.Warnf("live metrics unavailable: %v", err)
 		} else {
 			status.ConnsCurrent = int(metrics.ConnsCurrent)
 			status.ConnsTotal = int64(metrics.ConnsTotal)

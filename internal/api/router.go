@@ -8,6 +8,7 @@ import (
 	"github.com/fussraider/PopuGate/internal/service"
 	"github.com/fussraider/PopuGate/internal/store"
 	"github.com/fussraider/PopuGate/pkg/dockerutil"
+	"github.com/fussraider/PopuGate/pkg/logger"
 )
 
 // RouterConfig holds dependencies for router setup.
@@ -45,7 +46,7 @@ func SetupRouter(cfg RouterConfig) *gin.Engine {
 	}
 
 	r := gin.New()
-	r.Use(gin.Logger(), gin.Recovery())
+	r.Use(logger.GinLogger(), gin.Recovery())
 
 	// CORS
 	r.Use(CORSMiddleware([]string{"*"}))

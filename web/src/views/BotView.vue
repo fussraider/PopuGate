@@ -109,10 +109,6 @@ onMounted(async () => {
 <style scoped lang="scss">
 @use '@/assets/scss/variables' as *;
 
-.status-row { display: flex; align-items: center; gap: $spacing-md; }
-.form-label { display: block; font-size: $font-size-sm; font-weight: $font-weight-medium; margin-bottom: $spacing-sm; color: $text-secondary; }
-.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: $spacing-md; }
-
 .commands-list { display: flex; flex-direction: column; gap: $spacing-sm; }
 .command-item { display: flex; gap: $spacing-md; align-items: baseline; }
 .command-item code { min-width: 180px; }

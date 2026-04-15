@@ -27,10 +27,7 @@
       <div class="flex justify-between items-center mb-md">
         <h3>Live Metrics</h3>
         <div v-if="proxyRunning" class="flex items-center gap-md">
-          <label class="toggle-label">
-            <input type="checkbox" :checked="trafficStore.autoRefresh" @change="trafficStore.toggleAutoRefresh(!trafficStore.autoRefresh)" />
-            <span class="toggle-text">Auto-refresh</span>
-          </label>
+          <ToggleSwitch v-model="autoRefresh" label="Auto-refresh" />
           <button class="btn btn-secondary btn-sm" :disabled="trafficStore.liveLoading" @click="trafficStore.loadLive()">
             {{ trafficStore.liveLoading ? 'Loading...' : 'Refresh' }}
           </button>
@@ -38,14 +35,11 @@
       </div>
 
       <!-- Proxy not running -->
-      <div v-if="!proxyRunning" class="empty-state">
-        <div class="empty-icon status-stopped">&#9632;</div>
-        <p class="text-muted">Proxy engine is not running. Start the proxy to see live metrics.</p>
-      </div>
+      <EmptyState v-if="!proxyRunning" icon="▪" message="Proxy engine is not running. Start the proxy to see live metrics." />
 
       <!-- Proxy running but metrics not available (engine starting up) -->
       <div v-else-if="trafficStore.liveError && !trafficStore.live" class="empty-state">
-        <div class="empty-icon status-waiting">&#8987;</div>
+        <div class="empty-icon status-waiting">⏳</div>
         <p class="text-muted">Engine is starting up, waiting for metrics...</p>
       </div>
 
@@ -160,22 +154,33 @@
           </tbody>
         </table>
       </div>
-      <div v-else class="empty-state">
-        <div class="empty-icon">📈</div>
-        <p class="text-muted">No traffic data yet. Start the proxy and wait for traffic to flow.</p>
-      </div>
+      <EmptyState v-else icon="📈" message="No traffic data yet. Start the proxy and wait for traffic to flow." />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, watch } from 'vue'
+import { computed, onMounted, onUnmounted, watch, ref } from 'vue'
 import { useTrafficStore } from '@/stores/traffic'
 import { useProxyStore } from '@/stores/proxy'
 import { formatBytes } from '@/utils/format'
+import ToggleSwitch from '@/components/common/ToggleSwitch.vue'
+import EmptyState from '@/components/common/EmptyState.vue'
 
 const trafficStore = useTrafficStore()
 const proxyStore = useProxyStore()
+
+const autoRefresh = ref(trafficStore.autoRefresh)
+
+watch(autoRefresh, (val) => {
+  trafficStore.toggleAutoRefresh(val)
+  if (val && proxyRunning.value) {
+    trafficStore.loadLive()
+    trafficStore.startAutoRefresh()
+  } else {
+    trafficStore.stopAutoRefresh()
+  }
+})
 
 const proxyRunning = computed(() => proxyStore.status?.running ?? false)
 
@@ -191,7 +196,7 @@ function formatInt(v: number): string {
 }
 
 watch(proxyRunning, (running) => {
-  if (running && trafficStore.autoRefresh) {
+  if (running && autoRefresh.value) {
     trafficStore.loadLive()
     trafficStore.startAutoRefresh()
   } else if (!running) {
@@ -203,7 +208,7 @@ watch(proxyRunning, (running) => {
 onMounted(async () => {
   trafficStore.load()
   await proxyStore.loadStatus()
-  if (proxyRunning.value && trafficStore.autoRefresh) {
+  if (proxyRunning.value && autoRefresh.value) {
     trafficStore.loadLive()
     trafficStore.startAutoRefresh()
   }
@@ -221,26 +226,6 @@ onUnmounted(() => {
 .traffic-item { display: flex; flex-direction: column; gap: $spacing-xs; }
 .traffic-label { font-size: $font-size-xs; color: $text-muted; text-transform: uppercase; }
 .traffic-value { font-size: $font-size-xl; font-weight: $font-weight-bold; }
-.text-sm { font-size: $font-size-xs; }
-
-.toggle-label {
-  display: flex;
-  align-items: center;
-  gap: $spacing-xs;
-  cursor: pointer;
-  user-select: none;
-}
-
-.toggle-text {
-  font-size: $font-size-sm;
-  color: $text-secondary;
-}
-
-.status-stopped {
-  color: #{$text-muted};
-  font-size: 2.5rem;
-  line-height: 1;
-}
 
 .status-waiting {
   color: #{$text-secondary};

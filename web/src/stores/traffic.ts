@@ -28,8 +28,7 @@ export const useTrafficStore = defineStore('traffic', () => {
   async function loadLive() {
     liveLoading.value = true
     try {
-      const data = await trafficApi.getLive()
-      live.value = data
+      live.value = await trafficApi.getLive()
       liveError.value = false
     } catch {
       liveError.value = true

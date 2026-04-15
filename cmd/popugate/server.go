@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -21,6 +20,7 @@ import (
 	"github.com/fussraider/PopuGate/internal/service"
 	"github.com/fussraider/PopuGate/internal/store"
 	"github.com/fussraider/PopuGate/pkg/dockerutil"
+	"github.com/fussraider/PopuGate/pkg/logger"
 	"github.com/fussraider/PopuGate/pkg/qrutil"
 )
 
@@ -29,6 +29,8 @@ var version string
 
 // commit is set at build time via -ldflags "-X main.commit=..."
 var commit string
+
+var srvLog = logger.WithScope("server")
 
 // serverCmd represents the server command.
 var serverCmd = &cobra.Command{
@@ -73,7 +75,7 @@ func runServer(cmd *cobra.Command, args []string) {
 	// Open database
 	db, err := database.Open(database.Config{Path: dbPath})
 	if err != nil {
-		log.Fatalf("Failed to open database: %v", err)
+		logger.Fatalf("Failed to open database: %v", err)
 	}
 	defer database.Close()
 
@@ -92,13 +94,13 @@ func runServer(cmd *cobra.Command, args []string) {
 	// Get JWT secret (auto-generated on first run)
 	jwtSecret, err := settingsStore.GetJWTSecret(context.Background())
 	if err != nil {
-		log.Fatalf("Failed to get JWT secret: %v", err)
+		logger.Fatalf("Failed to get JWT secret: %v", err)
 	}
 
 	// Docker client
 	dockerClient, err := dockerutil.NewDockerClient()
 	if err != nil {
-		log.Printf("Warning: Docker client unavailable: %v", err)
+		srvLog.Warnf("Docker client unavailable: %v", err)
 	}
 
 	// Initialize services
@@ -161,13 +163,13 @@ func runServer(cmd *cobra.Command, args []string) {
 	ctx := context.Background()
 	settings, err := settingsStore.Load(ctx)
 	if err != nil {
-		log.Printf("Warning: Failed to load settings: %v", err)
+		srvLog.Warnf("Failed to load settings: %v", err)
 	}
 
 	// Seed default instance if table is empty (migration from single-port to multi-port)
 	if settings != nil {
 		if err := instanceStore.EnsureDefaultInstance(ctx, settings.ProxyPort, settings.ProxyMetricsPort); err != nil {
-			log.Printf("Warning: Failed to seed default instance: %v", err)
+			srvLog.Warnf("Failed to seed default instance: %v", err)
 		}
 	}
 	isDebug := settings.Debug
@@ -219,7 +221,7 @@ func runServer(cmd *cobra.Command, args []string) {
 		quit := make(chan os.Signal, 1)
 		signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 		<-quit
-		log.Println("Shutting down server...")
+		srvLog.Infof("Shutting down server...")
 
 		botCancel()
 		if activeBot != nil {
@@ -230,22 +232,22 @@ func runServer(cmd *cobra.Command, args []string) {
 		defer cancel()
 
 		if containerSvc != nil {
-			log.Println("Stopping proxy containers...")
+			srvLog.Infof("Stopping proxy containers...")
 			if err := containerSvc.Stop(ctx); err != nil {
-				log.Printf("Proxy stop error: %v", err)
+				srvLog.Errorf("Proxy stop error: %v", err)
 			}
 		}
 
 		if err := srv.Shutdown(ctx); err != nil {
-			log.Printf("Server shutdown error: %v", err)
+			srvLog.Errorf("Server shutdown error: %v", err)
 		}
 	}()
 
-	log.Printf("PopuGate API server starting on :%d", port)
+	srvLog.Infof("PopuGate API server starting on :%d", port)
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		log.Fatalf("Server error: %v", err)
+		logger.Fatalf("Server error: %v", err)
 	}
-	log.Println("Server stopped")
+	srvLog.Infof("Server stopped")
 }
 
 func startBotIfNeeded(ctx context.Context, settingsStore *store.SettingsStore, deps *bot.Dependencies, activeBot **bot.Bot) {
@@ -259,7 +261,7 @@ func startBotIfNeeded(ctx context.Context, settingsStore *store.SettingsStore, d
 	b := bot.New(settings.TelegramBotToken, settings.TelegramChatID, settings.TelegramServerLabel, deps)
 	*activeBot = b
 	go b.Start(ctx)
-	log.Println("[bot] started")
+	logger.WithScope("bot").Infof("started")
 }
 
 func setupScheduler(
@@ -332,7 +334,7 @@ func setupScheduler(
 						return err
 					}
 					if status.UpdateAvailable {
-						log.Printf("[scheduler] update available: v%s (current: v%s)", status.Latest, status.Current)
+						srvLog.Infof("update available: v%s (current: v%s)", status.Latest, status.Current)
 					}
 					return nil
 				}

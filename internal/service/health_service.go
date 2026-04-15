@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"fmt"
-	"log"
 	"net"
 	"net/http"
 	"os"
@@ -11,7 +10,10 @@ import (
 
 	"github.com/fussraider/PopuGate/internal/store"
 	"github.com/fussraider/PopuGate/pkg/dockerutil"
+	"github.com/fussraider/PopuGate/pkg/logger"
 )
+
+var healthLog = logger.WithScope("health")
 
 // HealthService provides health diagnostics and auto-recovery.
 type HealthService struct {
@@ -137,11 +139,11 @@ func (h *HealthService) AutoRecover(ctx context.Context) error {
 		return fmt.Errorf("auto-recovery: container service not available")
 	}
 
-	log.Printf("[health] some instances not running, attempting auto-recovery...")
+	healthLog.Infof("some instances not running, attempting auto-recovery...")
 	if err := h.containerSvc.Start(ctx); err != nil {
 		return fmt.Errorf("auto-recovery failed: %w", err)
 	}
-	log.Printf("[health] auto-recovery successful")
+	healthLog.Infof("auto-recovery successful")
 	return nil
 }
 

@@ -56,47 +56,39 @@
     <!-- Health Status -->
     <div class="card mb-lg">
       <h3 class="mb-md">System Health</h3>
-      <div class="health-grid">
-        <div class="health-item">
-          <span class="health-label">Docker</span>
+      <InfoGrid>
+        <InfoItem label="Docker">
           <StatusBadge :variant="healthStatus(proxyStore.health?.docker)">{{ proxyStore.health?.docker || '—' }}</StatusBadge>
-        </div>
-        <div class="health-item">
-          <span class="health-label">Container</span>
+        </InfoItem>
+        <InfoItem label="Container">
           <StatusBadge :variant="healthStatus(proxyStore.health?.container)">{{ proxyStore.health?.container || '—' }}</StatusBadge>
-        </div>
-        <div class="health-item">
-          <span class="health-label">Port</span>
+        </InfoItem>
+        <InfoItem label="Port">
           <StatusBadge :variant="healthStatus(proxyStore.health?.port)">{{ proxyStore.health?.port || '—' }}</StatusBadge>
-        </div>
-        <div class="health-item">
-          <span class="health-label">Metrics</span>
+        </InfoItem>
+        <InfoItem label="Metrics">
           <StatusBadge :variant="healthStatus(proxyStore.health?.metrics)">{{ proxyStore.health?.metrics || '—' }}</StatusBadge>
-        </div>
-      </div>
+        </InfoItem>
+      </InfoGrid>
     </div>
 
     <!-- Engine Info -->
     <div class="card">
       <h3 class="mb-md">Engine</h3>
-      <div class="info-grid">
-        <div class="info-item">
-          <span class="info-label">Version</span>
+      <InfoGrid>
+        <InfoItem label="Version">
           <code>{{ dockerStore.engineStatus?.version || '—' }}</code>
-        </div>
-        <div class="info-item">
-          <span class="info-label">Port</span>
+        </InfoItem>
+        <InfoItem label="Port">
           <span>{{ configStore.settings?.proxy_port }}</span>
-        </div>
-        <div class="info-item">
-          <span class="info-label">Domain</span>
+        </InfoItem>
+        <InfoItem label="Domain">
           <span>{{ configStore.settings?.proxy_domain || '—' }}</span>
-        </div>
-        <div class="info-item">
-          <span class="info-label">Uptime</span>
+        </InfoItem>
+        <InfoItem label="Uptime">
           <span>{{ proxyStore.status?.uptime || '—' }}</span>
-        </div>
-      </div>
+        </InfoItem>
+      </InfoGrid>
     </div>
   </div>
 </template>
@@ -107,6 +99,8 @@ import { useSecretsStore, useProxyStore, useDockerStore, useConfigStore } from '
 import { useToastStore } from '@/stores/toast'
 import { formatBytes } from '@/utils/format'
 import StatusBadge from '@/components/common/StatusBadge.vue'
+import InfoGrid from '@/components/common/InfoGrid.vue'
+import InfoItem from '@/components/common/InfoItem.vue'
 
 const secretsStore = useSecretsStore()
 const proxyStore = useProxyStore()
@@ -131,7 +125,7 @@ async function proxyAction(action: 'start' | 'stop' | 'restart' | 'reload') {
   }
 }
 
-function healthStatus(status?: string) {
+function healthStatus(status?: string): 'success' | 'warning' | 'danger' | 'neutral' {
   if (!status) return 'neutral'
   const s = status.toLowerCase()
   if (s.includes('running') || s.includes('listening') || s.includes('responding') || s === 'installed') return 'success'
@@ -179,41 +173,5 @@ onMounted(async () => {
   display: flex;
   gap: $spacing-sm;
   flex-wrap: wrap;
-}
-
-.health-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: $spacing-md;
-}
-
-.health-item {
-  display: flex;
-  flex-direction: column;
-  gap: $spacing-xs;
-}
-
-.health-label {
-  font-size: $font-size-xs;
-  color: $text-muted;
-  text-transform: uppercase;
-}
-
-.info-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: $spacing-md;
-}
-
-.info-item {
-  display: flex;
-  flex-direction: column;
-  gap: $spacing-xs;
-}
-
-.info-label {
-  font-size: $font-size-xs;
-  color: $text-muted;
-  text-transform: uppercase;
 }
 </style>

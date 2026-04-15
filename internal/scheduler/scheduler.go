@@ -2,11 +2,14 @@ package scheduler
 
 import (
 	"context"
-	"log"
 	"time"
 
 	"github.com/robfig/cron/v3"
+
+	"github.com/fussraider/PopuGate/pkg/logger"
 )
+
+var log = logger.WithScope("scheduler")
 
 // Scheduler runs periodic tasks.
 type Scheduler struct {
@@ -31,7 +34,7 @@ type Task struct {
 func (s *Scheduler) Start(tasks []Task) {
 	for _, t := range tasks {
 		if t.Fn == nil {
-			log.Printf("[scheduler] skip scheduling %s: no function provided", t.Name)
+			log.Warnf("skip scheduling %s: no function provided", t.Name)
 			continue
 		}
 		task := t // capture
@@ -40,13 +43,13 @@ func (s *Scheduler) Start(tasks []Task) {
 			defer cancel()
 
 			if err := task.Fn(ctx); err != nil {
-				log.Printf("[scheduler] %s error: %v", task.Name, err)
+				log.Errorf("%s error: %v", task.Name, err)
 			}
 		})
 		if err != nil {
-			log.Printf("[scheduler] failed to schedule %s: %v", task.Name, err)
+			log.Errorf("failed to schedule %s: %v", task.Name, err)
 		} else {
-			log.Printf("[scheduler] scheduled: %s (%s)", task.Name, task.Schedule)
+			log.Infof("scheduled: %s (%s)", task.Name, task.Schedule)
 		}
 	}
 	s.cron.Start()

@@ -1,16 +1,13 @@
 <template>
   <div>
-    <div class="page-header flex justify-between items-center mb-lg">
-      <div />
+    <PageHeader>
       <button class="btn btn-primary" @click="openAddModal">+ Add Instance</button>
-    </div>
+    </PageHeader>
 
     <LoadingSpinner v-if="store.loading" message="Loading instances..." />
 
-    <div v-else-if="!(store.instances && store.instances.length)" class="card empty-state">
-      <div class="empty-icon">🖥</div>
-      <p>No additional instances. Only the primary proxy is running.</p>
-    </div>
+    <EmptyState v-else-if="!(store.instances && store.instances.length)" icon="🖥"
+                message="No additional instances. Only the primary proxy is running." />
 
     <div v-else class="table-wrapper">
       <table class="table">
@@ -59,27 +56,45 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useInstancesStore } from '@/stores/instances'
+import { useToastStore } from '@/stores/toast'
 import Modal from '@/components/common/Modal.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
+import PageHeader from '@/components/common/PageHeader.vue'
+import EmptyState from '@/components/common/EmptyState.vue'
 
 const store = useInstancesStore()
+const toast = useToastStore()
+
 const addModal = ref(false)
 const form = ref({ port: 0, label: '' })
 const confirmModal = ref(false)
 const removeTarget = ref(0)
 
 function openAddModal() { form.value = { port: 0, label: '' }; addModal.value = true }
-async function handleAdd() { try { await store.add(form.value.port, form.value.label); addModal.value = false } catch (e: any) { alert(e.message) } }
+
+async function handleAdd() {
+  try {
+    await store.add(form.value.port, form.value.label)
+    addModal.value = false
+    toast.success(`Instance on port ${form.value.port} added`)
+  } catch (e: any) {
+    toast.error(e.response?.data?.error ?? e.message)
+  }
+}
+
 function confirmRemove(port: number) { removeTarget.value = port; confirmModal.value = true }
-async function handleRemove() { await store.remove(removeTarget.value); confirmModal.value = false }
+
+async function handleRemove() {
+  try {
+    await store.remove(removeTarget.value)
+    confirmModal.value = false
+    toast.success(`Instance on port ${removeTarget.value} removed`)
+  } catch (e: any) {
+    toast.error(e.response?.data?.error ?? e.message)
+  }
+}
 
 onMounted(() => store.load())
 </script>
-
-<style scoped lang="scss">
-@use '@/assets/scss/variables' as *;
-.form-label { display: block; font-size: $font-size-sm; font-weight: $font-weight-medium; margin-bottom: $spacing-sm; color: $text-secondary; }
-.btn-danger-text { color: $color-danger; }
-</style>

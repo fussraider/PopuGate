@@ -6,14 +6,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"mime/multipart"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/fussraider/PopuGate/internal/store"
+	"github.com/fussraider/PopuGate/pkg/logger"
 )
+
+var log = logger.WithScope("bot")
 
 // Dependencies holds the stores/services the bot needs for command execution.
 type Dependencies struct {
@@ -24,12 +26,12 @@ type Dependencies struct {
 	Instances *store.InstanceStore
 
 	// Callbacks for actions that need service layer (set by caller)
-	GetPublicIP    func(ctx context.Context) string
-	IsProxyRunning func(ctx context.Context) bool
-	GetUptime      func(ctx context.Context) string
+	GetPublicIP      func(ctx context.Context) string
+	IsProxyRunning   func(ctx context.Context) bool
+	GetUptime        func(ctx context.Context) string
 	GetEngineVersion func() string
-	RestartProxy   func(ctx context.Context) error
-	GenerateQR     func(ctx context.Context, link string) ([]byte, error)
+	RestartProxy     func(ctx context.Context) error
+	GenerateQR       func(ctx context.Context, link string) ([]byte, error)
 }
 
 // Bot represents the Telegram bot.
@@ -194,7 +196,7 @@ func (b *Bot) getUpdates(ctx context.Context, offset int64) ([]TelegramUpdate, e
 	defer resp.Body.Close()
 
 	var result struct {
-		OK     bool              `json:"ok"`
+		OK     bool             `json:"ok"`
 		Result []TelegramUpdate `json:"result"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
@@ -259,7 +261,7 @@ func (b *Bot) handleUpdate(ctx context.Context, update TelegramUpdate) {
 
 	if response != "" {
 		if err := b.SendMessage(ctx, response); err != nil {
-			log.Printf("[bot] send error: %v", err)
+			log.Errorf("send error: %v", err)
 		}
 	}
 }

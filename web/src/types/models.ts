@@ -117,21 +117,24 @@ export interface GlobalTraffic {
 
 export interface LiveMetrics {
   connections: number
-  upstreams: UpstreamMetrics[]
+  connections_total: number
+  connections_bad_total: number
+  connections_me_current: number
+  connections_direct_current: number
+  upstream_attempt_total: number
+  upstream_success_total: number
+  upstream_fail_total: number
+  me_writers_active: number
+  me_writers_warm: number
+  uptime_seconds: number
   user_metrics: Record<string, UserLiveMetric>
-}
-
-export interface UpstreamMetrics {
-  name: string
-  p50: number
-  p90: number
-  p99: number
 }
 
 export interface UserLiveMetric {
   octets_from_client: number
   octets_to_client: number
   connections: number
+  unique_ips: number
 }
 
 export interface ProxyStatus {

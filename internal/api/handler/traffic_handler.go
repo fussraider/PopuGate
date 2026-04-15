@@ -65,8 +65,18 @@ func (h *TrafficHandler) GetLive(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"connections":  live.ConnsCurrent,
-		"user_metrics": live.UserMetrics,
+		"connections":              live.ConnsCurrent,
+		"connections_total":        live.ConnsTotal,
+		"connections_bad_total":    live.ConnsBadTotal,
+		"connections_me_current":   live.ConnsMECurrent,
+		"connections_direct_current": live.ConnsDirectCurrent,
+		"upstream_attempt_total":   live.UpstreamAttemptTotal,
+		"upstream_success_total":   live.UpstreamSuccessTotal,
+		"upstream_fail_total":      live.UpstreamFailTotal,
+		"me_writers_active":        live.MEWritersActive,
+		"me_writers_warm":          live.MEWritersWarm,
+		"uptime_seconds":           live.UptimeSeconds,
+		"user_metrics":             live.UserMetrics,
 	})
 }
 

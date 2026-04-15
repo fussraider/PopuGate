@@ -167,7 +167,7 @@ export const geoblockApi = {
 export const trafficApi = {
   get: () =>
     api.get<{ global: GlobalTraffic; users: UserTraffic[] }>('/traffic').then((r) => r.data),
-  getLive: () => api.get<LiveMetrics>('/traffic/live').then((r) => r.data),
+  getLive: () => api.get<LiveMetrics>('/traffic/live', { _silent: true }).then((r) => r.data),
   getUser: (label: string) =>
     api.get<UserTraffic>(`/traffic/${label}`).then((r) => r.data),
 }

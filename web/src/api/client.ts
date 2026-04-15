@@ -21,7 +21,7 @@ apiClient.interceptors.request.use((config) => {
 apiClient.interceptors.response.use(
   (res) => res,
   async (error) => {
-    const original = error.config as AxiosRequestConfig & { _retry?: boolean }
+    const original = error.config as AxiosRequestConfig & { _retry?: boolean; _silent?: boolean }
     const status = error.response?.status
     const toastStore = useToastStore()
 
@@ -49,9 +49,11 @@ apiClient.interceptors.response.use(
       return Promise.reject(error)
     }
 
-    // Show error toast for other errors
-    const errorMessage = error.response?.data?.error || error.message || 'Request failed'
-    toastStore.error(errorMessage)
+    // Show error toast for other errors (unless silenced)
+    if (!original._silent) {
+      const errorMessage = error.response?.data?.error || error.message || 'Request failed'
+      toastStore.error(errorMessage)
+    }
 
     return Promise.reject(error)
   },

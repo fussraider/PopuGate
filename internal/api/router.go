@@ -35,6 +35,7 @@ type RouterConfig struct {
 	TrafficSvc   *service.TrafficService
 	ReplSvc      *service.ReplicationService
 	UpdateSvc    *service.UpdateService
+	CORSOrigins  []string // defaults to ["*"] if empty
 }
 
 // SetupRouter creates and configures the Gin router.
@@ -49,7 +50,11 @@ func SetupRouter(cfg RouterConfig) *gin.Engine {
 	r.Use(logger.GinLogger(), gin.Recovery())
 
 	// CORS
-	r.Use(CORSMiddleware([]string{"*"}))
+	origins := cfg.CORSOrigins
+	if len(origins) == 0 {
+		origins = []string{"*"}
+	}
+	r.Use(CORSMiddleware(origins))
 
 	// Health endpoint (no auth)
 	healthHandler := handler.NewHealthHandler()

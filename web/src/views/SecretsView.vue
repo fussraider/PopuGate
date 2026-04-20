@@ -1,25 +1,25 @@
 <template>
   <div>
     <PageHeader>
-      <button class="btn btn-primary" @click="openAddModal">+ Add Secret</button>
+      <button class="btn btn-primary" @click="openAddModal">+ {{ t('secrets.add_secret') }}</button>
     </PageHeader>
 
-    <LoadingSpinner v-if="secretsStore.loading" message="Loading secrets..." />
+    <LoadingSpinner v-if="secretsStore.loading" :message="t('secrets.loading')" />
 
-    <EmptyState v-else-if="!(secretsStore.secrets?.length)" icon="🔑"
-                message="No secrets configured. Add your first secret to get started." />
+    <EmptyState v-else-if="!(secretsStore.secrets?.length)" :icon="KeyRound"
+                :message="t('secrets.empty')" />
 
     <div v-else class="table-wrapper">
       <table class="table">
         <thead>
           <tr>
-            <th>Label</th>
-            <th>Status</th>
-            <th>Traffic</th>
-            <th>Quota</th>
-            <th>Expires</th>
-            <th>Limits</th>
-            <th>Actions</th>
+            <th>{{ t('secrets.table.label') }}</th>
+            <th>{{ t('secrets.table.status') }}</th>
+            <th>{{ t('secrets.table.traffic') }}</th>
+            <th>{{ t('secrets.table.quota') }}</th>
+            <th>{{ t('secrets.table.expires') }}</th>
+            <th>{{ t('secrets.table.limits') }}</th>
+            <th>{{ t('secrets.table.actions') }}</th>
           </tr>
         </thead>
         <tbody>
@@ -30,7 +30,7 @@
             </td>
             <td>
               <StatusBadge :variant="sec.enabled ? 'success' : 'danger'">
-                {{ sec.enabled ? 'Active' : 'Disabled' }}
+                {{ sec.enabled ? t('secrets.active') : t('secrets.disabled') }}
               </StatusBadge>
             </td>
             <td>
@@ -45,23 +45,34 @@
                        :class="{ 'quota-warn': quotaPercent(sec) >= 80, 'quota-over': quotaPercent(sec) >= 100 }" />
                 </div>
               </template>
-              <span v-else class="text-muted">Unlimited</span>
+              <span v-else class="text-muted">{{ t('secrets.unlimited') }}</span>
             </td>
             <td>{{ formatISODate(sec.expires_at) }}</td>
             <td>
-              <span class="text-sm">{{ sec.max_conns || '∞' }} conns</span><br />
-              <span class="text-sm">{{ sec.max_ips || '∞' }} IPs</span>
+              <span class="text-sm">{{ sec.max_conns || '∞' }} {{ t('secrets.conns') }}</span><br />
+              <span class="text-sm">{{ sec.max_ips || '∞' }} {{ t('secrets.ips') }}</span>
             </td>
             <td>
               <div class="actions-cell">
-                <button class="btn btn-ghost btn-sm" title="Rotate" @click="confirmRotate(sec.label)">🔄</button>
-                <button class="btn btn-ghost btn-sm" title="Limits" @click="openLimitsModal(sec)">⚙️</button>
-                <button class="btn btn-ghost btn-sm" title="QR" @click="showQR(sec.label)">📱</button>
-                <button class="btn btn-ghost btn-sm" :title="sec.enabled ? 'Disable' : 'Enable'"
-                        @click="secretsStore.toggle(sec.label, !sec.enabled)">
-                  {{ sec.enabled ? '⏸' : '▶️' }}
+                <button class="btn btn-ghost btn-sm" :title="t('secrets.rotate')"
+                        :disabled="secretsStore.rotating === sec.label" @click="confirmRotate(sec.label)">
+                  <Loader2 v-if="secretsStore.rotating === sec.label" :size="16" class="animate-spin" />
+                  <RotateCw v-else :size="16" />
                 </button>
-                <button class="btn btn-ghost btn-sm btn-danger-text" title="Delete" @click="confirmRemove(sec.label)">🗑</button>
+                <button class="btn btn-ghost btn-sm" :title="t('secrets.limits_title')" @click="openLimitsModal(sec)">
+                  <Settings :size="16" />
+                </button>
+                <button class="btn btn-ghost btn-sm" :title="t('secrets.qr')" @click="showQR(sec.label)">
+                  <QrCode :size="16" />
+                </button>
+                <button class="btn btn-ghost btn-sm" :title="sec.enabled ? t('secrets.disable') : t('secrets.enable')"
+                        :disabled="secretsStore.toggling === sec.label" @click="secretsStore.toggle(sec.label, !sec.enabled)">
+                  <Loader2 v-if="secretsStore.toggling === sec.label" :size="16" class="animate-spin" />
+                  <component v-else :is="sec.enabled ? Pause : Play" :size="16" />
+                </button>
+                <button class="btn btn-ghost btn-sm btn-danger-text" :title="t('secrets.delete')" @click="confirmRemove(sec.label)">
+                  <Trash2 :size="16" />
+                </button>
               </div>
             </td>
           </tr>
@@ -70,82 +81,82 @@
     </div>
 
     <!-- Add Secret Modal -->
-    <Modal v-model="addModal" title="Add Secret">
+    <Modal v-model="addModal" :title="t('secrets.add_title')">
       <form @submit.prevent="handleAdd">
         <div class="form-group mb-md">
-          <label class="form-label">Label</label>
-          <input v-model="addForm.label" class="input" placeholder="user1" required />
+          <label class="form-label">{{ t('secrets.table.label') }}</label>
+          <input v-model="addForm.label" class="input" :placeholder="t('secrets.user_placeholder')" required />
         </div>
         <div class="form-group mb-md">
-          <label class="form-label">Secret Key <span class="text-muted">(optional, auto-generated if empty)</span></label>
-          <input v-model="addForm.secret" class="input" placeholder="32 hex characters" maxlength="32" />
+          <label class="form-label">{{ t('secrets.secret_key') }} <span class="text-muted">{{ t('secrets.optional_auto') }}</span></label>
+          <input v-model="addForm.secret" class="input" :placeholder="t('secrets.hex_placeholder')" maxlength="32" />
         </div>
         <div class="modal-footer-inline">
-          <button type="button" class="btn btn-secondary" @click="addModal = false">Cancel</button>
-          <button type="submit" class="btn btn-primary" :disabled="adding">Add</button>
+          <button type="button" class="btn btn-secondary" @click="addModal = false">{{ t('common.cancel') }}</button>
+          <button type="submit" class="btn btn-primary" :disabled="adding">{{ t('common.add') }}</button>
         </div>
       </form>
     </Modal>
 
     <!-- Limits Modal -->
-    <Modal v-model="limitsModal" title="Set Limits">
+    <Modal v-model="limitsModal" :title="t('secrets.set_limits_title')">
       <form @submit.prevent="handleSetLimits">
         <div class="form-row mb-sm">
           <div class="form-group">
-            <label class="form-label">Max Connections</label>
-            <input v-model.number="limitsForm.maxConns" class="input" type="number" min="0" placeholder="0 = unlimited" />
+            <label class="form-label">{{ t('secrets.max_conns') }}</label>
+            <input v-model.number="limitsForm.maxConns" class="input" type="number" min="0" :placeholder="t('secrets.unlimited_placeholder')" />
           </div>
           <div class="form-group">
-            <label class="form-label">Max IPs</label>
-            <input v-model.number="limitsForm.maxIPs" class="input" type="number" min="0" placeholder="0 = unlimited" />
+            <label class="form-label">{{ t('secrets.max_ips') }}</label>
+            <input v-model.number="limitsForm.maxIPs" class="input" type="number" min="0" :placeholder="t('secrets.unlimited_placeholder')" />
           </div>
         </div>
         <div class="form-row mb-sm">
           <div class="form-group">
-            <label class="form-label">Quota (MB)</label>
-            <input v-model.number="limitsForm.quotaMB" class="input" type="number" min="0" placeholder="0 = unlimited" />
+            <label class="form-label">{{ t('secrets.quota_mb') }}</label>
+            <input v-model.number="limitsForm.quotaMB" class="input" type="number" min="0" :placeholder="t('secrets.unlimited_placeholder')" />
           </div>
           <div class="form-group">
-            <label class="form-label">Expires</label>
+            <label class="form-label">{{ t('secrets.table.expires') }}</label>
             <input v-model="limitsForm.expiresAt" class="input" type="date" />
           </div>
         </div>
         <div class="modal-footer-inline">
-          <button type="button" class="btn btn-secondary" @click="limitsModal = false">Cancel</button>
-          <button type="submit" class="btn btn-primary">Save</button>
+          <button type="button" class="btn btn-secondary" @click="limitsModal = false">{{ t('common.cancel') }}</button>
+          <button type="submit" class="btn btn-primary">{{ t('common.save') }}</button>
         </div>
       </form>
     </Modal>
 
     <!-- Confirm Remove -->
-    <ConfirmDialog v-model="confirmModal" title="Remove Secret"
-                   :message="`Are you sure you want to remove '${removeTarget}'?`"
-                   confirm-text="Remove" @confirm="handleRemove" />
+    <ConfirmDialog v-model="confirmModal" :title="t('secrets.remove_title')"
+                   :message="t('secrets.confirm_remove', { label: removeTarget })"
+                   :confirm-text="t('common.delete')" @confirm="handleRemove" />
 
     <!-- Confirm Rotate -->
-    <ConfirmDialog v-model="rotateConfirmModal" title="Rotate Secret"
-                   :message="`Rotate secret '${rotateTarget}'? The old key will stop working immediately.`"
-                   confirm-text="Rotate" @confirm="handleRotate" />
+    <ConfirmDialog v-model="rotateConfirmModal" :title="t('secrets.rotate_title')"
+                   :message="t('secrets.confirm_rotate', { label: rotateTarget })"
+                   :confirm-text="t('secrets.rotate')" @confirm="handleRotate" />
 
     <!-- QR Modal -->
-    <Modal v-model="qrModal" :title="`Connect: ${qrLabel}`">
+    <Modal v-model="qrModal" :title="t('secrets.connect_title', { label: qrLabel })">
       <div class="qr-container text-center">
         <img v-if="qrImage" :src="qrImage" alt="QR Code" class="qr-image" />
-        <p class="text-muted mt-sm mb-md">Scan with Telegram to connect</p>
+        <p class="text-muted mt-sm mb-md">{{ t('secrets.scan_tip') }}</p>
 
         <div class="links-section text-left">
           <div class="form-group mb-sm">
-            <label class="form-label text-xs">Telegram Link (tg://)</label>
+            <label class="form-label text-xs">{{ t('secrets.tg_link') }}</label>
             <div class="input-group">
               <input :value="tgLink" class="input input-sm" readonly />
-              <button class="btn btn-secondary btn-sm" @click="copyToClipboard(tgLink)">Copy</button>
+              <button class="btn btn-secondary btn-sm" @click="copyToClipboard(tgLink)">{{ t('secrets.copy') }}</button>
             </div>
           </div>
           <div class="form-group">
-            <label class="form-label text-xs">Web Link (https://)</label>
+            <label class="form-label text-xs">{{ t('secrets.web_link') }}</label>
             <div class="input-group">
               <input :value="webLink" class="input input-sm" readonly />
-              <button class="btn btn-secondary btn-sm" @click="copyToClipboard(webLink)">Copy</button>
+              <button class="btn btn-secondary btn-sm" @click="copyToClipboard(webLink)">{{ t('secrets.copy') }}</button>
             </div>
           </div>
         </div>
@@ -156,6 +167,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useSecretsStore } from '@/stores'
 import { useToastStore } from '@/stores/toast'
 import { secretsApi } from '@/api/endpoints'
@@ -166,7 +178,9 @@ import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import PageHeader from '@/components/common/PageHeader.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
+import { KeyRound, RotateCw, Settings, QrCode, Play, Pause, Trash2, Loader2 } from '@lucide/vue'
 
+const { t } = useI18n()
 const secretsStore = useSecretsStore()
 const toast = useToastStore()
 
@@ -182,7 +196,7 @@ async function handleAdd() {
   try {
     await secretsStore.add(addForm.value.label, addForm.value.secret || undefined)
     addModal.value = false
-    toast.success(`Secret "${addForm.value.label}" added`)
+    toast.success(t('secrets.added_success', { label: addForm.value.label }))
   } catch (e: any) {
     toast.error(e.response?.data?.error ?? e.message)
   } finally {
@@ -200,7 +214,7 @@ async function handleRemove() {
   try {
     await secretsStore.remove(removeTarget.value)
     confirmModal.value = false
-    toast.success(`Secret "${removeTarget.value}" removed`)
+    toast.success(t('secrets.removed_success', { label: removeTarget.value }))
   } catch (e: any) {
     toast.error(e.response?.data?.error ?? e.message)
   }
@@ -219,7 +233,7 @@ async function handleRotate() {
   try {
     await secretsStore.rotate(rotateTarget.value)
     rotateConfirmModal.value = false
-    toast.success(`Secret "${rotateTarget.value}" rotated`)
+    toast.success(t('secrets.rotated_success', { label: rotateTarget.value }))
   } catch (e: any) {
     toast.error(e.response?.data?.error ?? e.message)
   }
@@ -274,16 +288,16 @@ async function showQR(label: string) {
     webLink.value = linkData.web_link || ''
     qrModal.value = true
   } catch (e: any) {
-    toast.error(`Failed to load connection info for "${label}"`)
+    toast.error(t('secrets.load_failed', { label }))
   }
 }
 
 async function copyToClipboard(text: string) {
   try {
     await navigator.clipboard.writeText(text)
-    toast.success('Copied to clipboard')
+    toast.success(t('secrets.copied'))
   } catch (e) {
-    toast.error('Failed to copy')
+    toast.error(t('secrets.copy_failed'))
   }
 }
 

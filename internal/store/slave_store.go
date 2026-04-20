@@ -36,7 +36,7 @@ func (s *SlaveStore) List(ctx context.Context) ([]model.Slave, error) {
 			&enabled, &sl.LastSync, &sl.Status); err != nil {
 			return nil, fmt.Errorf("scan slave: %w", err)
 		}
-		sl.Enabled = enabled == 1
+		sl.Enabled = intToBool(enabled)
 		slaves = append(slaves, sl)
 	}
 	return slaves, nil
@@ -55,7 +55,7 @@ func (s *SlaveStore) GetByHost(ctx context.Context, host string) (*model.Slave, 
 	if err != nil {
 		return nil, fmt.Errorf("get slave %s: %w", host, err)
 	}
-	sl.Enabled = enabled == 1
+	sl.Enabled = intToBool(enabled)
 	return &sl, nil
 }
 

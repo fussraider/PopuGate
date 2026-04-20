@@ -18,6 +18,7 @@
 .DS_Store
 AGENTS.md
 CLAUDE.md
+GEMINI.md
 *.log
 *.tmp
 *.db

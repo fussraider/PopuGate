@@ -40,6 +40,8 @@ func (b *Bot) cmdStatus(ctx context.Context) string {
 	if err == nil {
 		totalIn = global.BytesIn
 		totalOut = global.BytesOut
+	} else {
+		log.Warnf("cmdStatus: get global traffic: %v", err)
 	}
 
 	// Secret count
@@ -339,6 +341,7 @@ func (b *Bot) cmdHealth(ctx context.Context) string {
 func (b *Bot) cmdTraffic(ctx context.Context) string {
 	global, err := b.deps.Traffic.GetGlobal(ctx)
 	if err != nil {
+		log.Warnf("cmdTraffic: get global traffic: %v", err)
 		return "📊 Traffic data unavailable."
 	}
 

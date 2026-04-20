@@ -1,22 +1,25 @@
 <template>
   <div>
     <div class="card mb-lg">
-      <h3 class="mb-md">Geo-Blocking Configuration</h3>
+      <h3 class="mb-md">{{ t('geoblock.title') }}</h3>
 
       <div class="form-row mb-lg">
         <div class="form-group">
-          <label class="form-label">Mode</label>
+          <label class="form-label">{{ t('geoblock.mode') }}</label>
           <select v-model="localMode" class="select" @change="handleModeChange">
-            <option value="blacklist">Blacklist (block listed countries)</option>
-            <option value="whitelist">Whitelist (allow only listed countries)</option>
+            <option value="blacklist">{{ t('geoblock.blacklist_desc') }}</option>
+            <option value="whitelist">{{ t('geoblock.whitelist_desc') }}</option>
           </select>
         </div>
         <div class="form-group">
-          <label class="form-label">Add Country</label>
+          <label class="form-label">{{ t('geoblock.add_country') }}</label>
           <div class="input-group">
-            <input v-model="countryInput" class="input" placeholder="US, DE, CN..."
+            <input v-model="countryInput" class="input" :placeholder="t('geoblock.country_placeholder')"
                    @keydown.enter="handleAddCountry" />
-            <button class="btn btn-primary" :disabled="geoblockStore.loading" @click="handleAddCountry">Add</button>
+            <button class="btn btn-primary" :disabled="geoblockStore.loading" @click="handleAddCountry">
+              <Loader2 v-if="geoblockStore.loading" :size="16" class="animate-spin" />
+              {{ t('common.add') }}
+            </button>
           </div>
         </div>
       </div>
@@ -27,21 +30,23 @@
           <button class="country-remove" @click="geoblockStore.removeCountry(cc)">&times;</button>
         </span>
       </div>
-      <div v-else class="text-muted">No countries configured.</div>
+      <div v-else class="text-muted">{{ t('geoblock.empty') }}</div>
 
       <button v-if="geoblockStore.countries && geoblockStore.countries.length" class="btn btn-danger btn-sm mt-md"
-              @click="geoblockStore.clear()">Clear All</button>
+              :disabled="geoblockStore.loading" @click="geoblockStore.clear()">
+        <Loader2 v-if="geoblockStore.loading" :size="14" class="animate-spin" />
+        {{ t('geoblock.clear_all') }}
+      </button>
     </div>
 
     <div class="card">
-      <h3 class="mb-md">Help</h3>
+      <h3 class="mb-md">{{ t('geoblock.help') }}</h3>
       <div class="alert alert-info">
-        <strong>Blacklist mode:</strong> Traffic from listed countries will be blocked.<br />
-        <strong>Whitelist mode:</strong> Only traffic from listed countries will be allowed.
+        <strong>{{ t('geoblock.blacklist_desc') }}:</strong> {{ t('geoblock.blacklist_help') }}<br />
+        <strong>{{ t('geoblock.whitelist_desc') }}:</strong> {{ t('geoblock.whitelist_help') }}
       </div>
       <p class="mt-sm text-muted text-sm">
-        Country codes should be 2-letter ISO codes (e.g., US, DE, CN, RU).
-        Changes take effect immediately via iptables/ipset rules.
+        {{ t('geoblock.help_tip') }}
       </p>
     </div>
   </div>
@@ -49,8 +54,11 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useGeoblockStore, useConfigStore } from '@/stores'
+import { Loader2 } from '@lucide/vue'
 
+const { t } = useI18n()
 const geoblockStore = useGeoblockStore()
 const configStore = useConfigStore()
 

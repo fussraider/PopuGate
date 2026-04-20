@@ -6,6 +6,8 @@ import type { Secret } from '@/types/models'
 export const useSecretsStore = defineStore('secrets', () => {
   const secrets = ref<Secret[]>([])
   const loading = ref(false)
+  const toggling = ref<string | null>(null)
+  const rotating = ref<string | null>(null)
 
   async function load() {
     loading.value = true
@@ -27,15 +29,25 @@ export const useSecretsStore = defineStore('secrets', () => {
   }
 
   async function rotate(label: string) {
-    const updated = await secretsApi.rotate(label)
-    const idx = secrets.value.findIndex((s) => s.label === label)
-    if (idx !== -1) secrets.value[idx] = updated
+    rotating.value = label
+    try {
+      const updated = await secretsApi.rotate(label)
+      const idx = secrets.value.findIndex((s) => s.label === label)
+      if (idx !== -1) secrets.value[idx] = updated
+    } finally {
+      rotating.value = null
+    }
   }
 
   async function toggle(label: string, enabled: boolean) {
-    await secretsApi.toggle(label, enabled)
-    const sec = secrets.value.find((s) => s.label === label)
-    if (sec) sec.enabled = enabled
+    toggling.value = label
+    try {
+      await secretsApi.toggle(label, enabled)
+      const sec = secrets.value.find((s) => s.label === label)
+      if (sec) sec.enabled = enabled
+    } finally {
+      toggling.value = null
+    }
   }
 
   async function setLimits(
@@ -83,6 +95,8 @@ export const useSecretsStore = defineStore('secrets', () => {
   return {
     secrets,
     loading,
+    toggling,
+    rotating,
     load,
     add,
     remove,

@@ -41,7 +41,9 @@ func GenerateEd25519Key(privateKeyPath string) (string, error) {
 	}
 	pubStr := string(ssh.MarshalAuthorizedKey(pubKey))
 
-	_ = os.WriteFile(privateKeyPath+".pub", []byte(pubStr), 0644)
+	if err := os.WriteFile(privateKeyPath+".pub", []byte(pubStr), 0644); err != nil {
+		return "", fmt.Errorf("write public key: %w", err)
+	}
 
 	return pubStr, nil
 }

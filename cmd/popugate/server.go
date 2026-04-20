@@ -102,6 +102,9 @@ func runServer(cmd *cobra.Command, args []string) {
 	if err != nil {
 		srvLog.Warnf("Docker client unavailable: %v", err)
 	}
+	if dockerClient != nil {
+		defer dockerClient.Close()
+	}
 
 	// Initialize services
 	secretSvc := service.NewSecretService(secretStore)

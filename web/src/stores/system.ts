@@ -44,6 +44,7 @@ export const useSystemStore = defineStore('system', () => {
     loading.value = true
     try {
       await systemApi.restartService()
+      await loadServiceStatus()
     } finally {
       loading.value = false
     }
@@ -53,6 +54,7 @@ export const useSystemStore = defineStore('system', () => {
     loading.value = true
     try {
       await systemApi.reloadService()
+      await loadServiceStatus()
     } finally {
       loading.value = false
     }

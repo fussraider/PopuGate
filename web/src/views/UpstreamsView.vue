@@ -1,25 +1,25 @@
 <template>
   <div>
     <PageHeader>
-      <button class="btn btn-primary" @click="openAddModal">+ Add Upstream</button>
+      <button class="btn btn-primary" @click="openAddModal">+ {{ t('upstreams.add') }}</button>
     </PageHeader>
 
-    <LoadingSpinner v-if="store.loading" message="Loading upstreams..." />
+    <LoadingSpinner v-if="store.loading" :message="t('upstreams.loading')" />
 
-    <EmptyState v-else-if="!(store.upstreams?.length)" icon="🔀"
-                message="No upstreams configured. Traffic will go directly." />
+    <EmptyState v-else-if="!(store.upstreams?.length)" :icon="GitBranch"
+                :message="t('upstreams.empty')" />
 
     <div v-else class="table-wrapper">
       <table class="table">
         <thead>
           <tr>
-            <th>Name</th>
-            <th>Type</th>
-            <th>Address</th>
-            <th>Weight</th>
-            <th>Interface</th>
-            <th>Status</th>
-            <th>Actions</th>
+            <th>{{ t('upstreams.table.name') }}</th>
+            <th>{{ t('upstreams.table.type') }}</th>
+            <th>{{ t('upstreams.table.address') }}</th>
+            <th>{{ t('upstreams.table.weight') }}</th>
+            <th>{{ t('upstreams.table.interface') }}</th>
+            <th>{{ t('upstreams.table.status') }}</th>
+            <th>{{ t('upstreams.table.actions') }}</th>
           </tr>
         </thead>
         <tbody>
@@ -28,22 +28,29 @@
             <td>
               <span class="badge badge-info">{{ up.type }}</span>
             </td>
-            <td>{{ up.address || 'direct' }}</td>
+            <td>{{ up.address || t('upstreams.direct') }}</td>
             <td>{{ up.weight }}</td>
             <td>{{ up.iface || '—' }}</td>
             <td>
               <StatusBadge :variant="up.enabled ? 'success' : 'neutral'">
-                {{ up.enabled ? 'Enabled' : 'Disabled' }}
+                {{ up.enabled ? t('instances.enabled') : t('instances.disabled') }}
               </StatusBadge>
             </td>
             <td>
               <div class="actions-cell">
-                <button class="btn btn-ghost btn-sm" title="Test" @click="testUpstream(up.name)">🧪</button>
-                <button class="btn btn-ghost btn-sm" :title="up.enabled ? 'Disable' : 'Enable'"
-                        @click="store.toggle(up.name, !up.enabled)">
-                  {{ up.enabled ? '⏸' : '▶️' }}
+                <button class="btn btn-ghost btn-sm" :title="t('upstreams.test')"
+                        :disabled="store.testing === up.name" @click="testUpstream(up.name)">
+                  <Loader2 v-if="store.testing === up.name" :size="16" class="animate-spin" />
+                  <FlaskConical v-else :size="16" />
                 </button>
-                <button class="btn btn-ghost btn-sm" title="Delete" @click="confirmRemove(up.name)">🗑</button>
+                <button class="btn btn-ghost btn-sm" :title="up.enabled ? t('secrets.disable') : t('secrets.enable')"
+                        :disabled="store.toggling === up.name" @click="store.toggle(up.name, !up.enabled)">
+                  <Loader2 v-if="store.toggling === up.name" :size="16" class="animate-spin" />
+                  <component v-else :is="up.enabled ? Pause : Play" :size="16" />
+                </button>
+                <button class="btn btn-ghost btn-sm" :title="t('upstreams.delete')" @click="confirmRemove(up.name)">
+                  <Trash2 :size="16" />
+                </button>
               </div>
             </td>
           </tr>
@@ -51,61 +58,62 @@
       </table>
     </div>
 
-    <Modal v-model="addModal" title="Add Upstream">
+    <Modal v-model="addModal" :title="t('upstreams.add_title')">
       <form @submit.prevent="handleAdd">
         <div class="form-group mb-md">
-          <label class="form-label">Name</label>
+          <label class="form-label">{{ t('upstreams.table.name') }}</label>
           <input v-model="form.name" class="input" required placeholder="upstream1" />
         </div>
         <div class="form-group mb-md">
-          <label class="form-label">Type</label>
+          <label class="form-label">{{ t('upstreams.table.type') }}</label>
           <select v-model="form.type" class="select">
-            <option value="direct">Direct</option>
+            <option value="direct">{{ t('upstreams.direct') }}</option>
             <option value="socks5">SOCKS5</option>
             <option value="socks4">SOCKS4</option>
           </select>
         </div>
         <div v-if="form.type !== 'direct'" class="form-group mb-md">
-          <label class="form-label">Address (host:port)</label>
+          <label class="form-label">{{ t('upstreams.address_label') }}</label>
           <input v-model="form.address" class="input" required placeholder="127.0.0.1:1080" />
         </div>
         <template v-if="form.type === 'socks5'">
           <div class="form-row mb-sm">
             <div class="form-group">
-              <label class="form-label">Username</label>
+              <label class="form-label">{{ t('upstreams.username') }}</label>
               <input v-model="form.username" class="input" />
             </div>
             <div class="form-group">
-              <label class="form-label">Password</label>
+              <label class="form-label">{{ t('upstreams.password') }}</label>
               <input v-model="form.password" class="input" type="password" />
             </div>
           </div>
         </template>
         <div class="form-row mb-sm">
           <div class="form-group">
-            <label class="form-label">Weight</label>
+            <label class="form-label">{{ t('upstreams.table.weight') }}</label>
             <input v-model.number="form.weight" class="input" type="number" min="1" value="1" />
           </div>
           <div class="form-group">
-            <label class="form-label">Interface</label>
+            <label class="form-label">{{ t('upstreams.table.interface') }}</label>
             <input v-model="form.iface" class="input" placeholder="eth0" />
           </div>
         </div>
         <div class="modal-footer-inline">
-          <button type="button" class="btn btn-secondary" @click="addModal = false">Cancel</button>
-          <button type="submit" class="btn btn-primary">Add</button>
+          <button type="button" class="btn btn-secondary" @click="addModal = false">{{ t('common.cancel') }}</button>
+          <button type="submit" class="btn btn-primary">{{ t('common.add') }}</button>
         </div>
       </form>
     </Modal>
 
-    <ConfirmDialog v-model="confirmModal" title="Remove Upstream"
-                   :message="`Remove upstream '${removeTarget}'?`" confirm-text="Remove"
+    <ConfirmDialog v-model="confirmModal" :title="t('upstreams.remove_title')"
+                   :message="t('upstreams.confirm_remove', { name: removeTarget })" :confirm-text="t('upstreams.delete')"
                    @confirm="handleRemove" />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useUpstreamsStore } from '@/stores/upstreams'
 import { useToastStore } from '@/stores/toast'
 import Modal from '@/components/common/Modal.vue'
@@ -114,7 +122,9 @@ import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import PageHeader from '@/components/common/PageHeader.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
+import { GitBranch, FlaskConical, Play, Pause, Trash2, Loader2 } from '@lucide/vue'
 
+const { t } = useI18n()
 const store = useUpstreamsStore()
 const toast = useToastStore()
 
@@ -127,7 +137,7 @@ async function handleAdd() {
   try {
     await store.add(form.value as any)
     addModal.value = false
-    toast.success(`Upstream "${form.value.name}" added`)
+    toast.success(t('upstreams.added_success', { name: form.value.name }))
   } catch (e: any) {
     toast.error(e.response?.data?.error ?? e.message)
   }
@@ -142,7 +152,7 @@ async function handleRemove() {
   try {
     await store.remove(removeTarget.value)
     confirmModal.value = false
-    toast.success(`Upstream "${removeTarget.value}" removed`)
+    toast.success(t('upstreams.removed_success', { name: removeTarget.value }))
   } catch (e: any) {
     toast.error(e.response?.data?.error ?? e.message)
   }
@@ -151,9 +161,9 @@ async function handleRemove() {
 async function testUpstream(name: string) {
   try {
     await store.test(name)
-    toast.success(`Upstream "${name}" is reachable`)
+    toast.success(t('upstreams.test_success', { name }))
   } catch (e: any) {
-    toast.error(`Upstream "${name}" unreachable: ${e.response?.data?.error ?? e.message}`)
+    toast.error(t('upstreams.test_failed', { name, error: e.response?.data?.error ?? e.message }))
   }
 }
 

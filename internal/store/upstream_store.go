@@ -37,7 +37,7 @@ func (s *UpstreamStore) List(ctx context.Context) ([]model.Upstream, error) {
 			&u.Password, &u.Weight, &u.Iface, &enabled); err != nil {
 			return nil, fmt.Errorf("scan upstream: %w", err)
 		}
-		u.Enabled = enabled == 1
+		u.Enabled = intToBool(enabled)
 		upstreams = append(upstreams, u)
 	}
 	return upstreams, nil
@@ -58,7 +58,7 @@ func (s *UpstreamStore) GetByName(ctx context.Context, name string) (*model.Upst
 	if err != nil {
 		return nil, fmt.Errorf("get upstream %s: %w", name, err)
 	}
-	u.Enabled = enabled == 1
+	u.Enabled = intToBool(enabled)
 	return &u, nil
 }
 

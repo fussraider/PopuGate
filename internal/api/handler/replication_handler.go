@@ -65,7 +65,10 @@ func (h *ReplicationHandler) Setup(c *gin.Context) {
 		updates["replication_ssh_port"] = fmt.Sprintf("%d", req.SSHPort)
 	}
 
-	_ = h.settings.Save(c.Request.Context(), updates)
+	if err := h.settings.Save(c.Request.Context(), updates); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("save settings: %v", err)})
+		return
+	}
 
 	c.JSON(http.StatusOK, gin.H{"ok": true, "role": req.Role})
 }

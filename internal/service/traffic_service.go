@@ -32,6 +32,7 @@ type TrafficService struct {
 	mu       sync.Mutex
 	lastLive *model.LiveMetrics
 	lastTime time.Time
+	client   *http.Client
 }
 
 // NewTrafficService creates a new TrafficService.
@@ -41,6 +42,7 @@ func NewTrafficService(traffic *store.TrafficStore, settings *store.SettingsStor
 		settings:  settings,
 		docker:    docker,
 		instances: instances,
+		client:    &http.Client{Timeout: 2 * time.Second},
 	}
 }
 
@@ -97,7 +99,6 @@ func (s *TrafficService) GetLiveMetrics(ctx context.Context) (*model.LiveMetrics
 		UserMetrics: make(map[string]*model.UserLiveMetrics),
 	}
 
-	client := &http.Client{Timeout: 2 * time.Second}
 	foundAny := false
 
 	for _, inst := range instances {
@@ -106,7 +107,7 @@ func (s *TrafficService) GetLiveMetrics(ctx context.Context) (*model.LiveMetrics
 		}
 
 		url := fmt.Sprintf("http://%s:%d/metrics", addr, inst.MetricsPort)
-		resp, err := client.Get(url)
+		resp, err := s.client.Get(url)
 		if err != nil {
 			trafficLog.Warnf("failed to fetch metrics from %s: %v", url, err)
 			continue
@@ -218,6 +219,7 @@ func (s *TrafficService) Flush(ctx context.Context) error {
 		return fmt.Errorf("flush traffic: %w", err)
 	}
 
+	trafficLog.Debugf("flush ok: global ↓%d ↑%d, users=%d", globalDeltaIn, globalDeltaOut, len(userDeltas))
 	return nil
 }
 
@@ -255,18 +257,25 @@ func (s *TrafficService) CheckQuotas(ctx context.Context) {
 				enabled, _ := s.secrets.CountEnabled(ctx)
 				if enabled > 1 {
 					sec.Enabled = false
-					_ = s.secrets.Update(ctx, &sec)
-					quotaLog.Warnf("auto-disabled secret %s (quota exceeded: %d%%)", sec.Label, pct)
+					if err := s.secrets.Update(ctx, &sec); err != nil {
+						quotaLog.Warnf("failed to disable secret %s: %v", sec.Label, err)
+					} else {
+						quotaLog.Warnf("auto-disabled secret %s (quota exceeded: %d%%)", sec.Label, pct)
+					}
 				} else {
 					quotaLog.Warnf("cannot auto-disable %s (last active secret), quota exceeded %d%%", sec.Label, pct)
 				}
-				_ = s.quota.MarkAlerted(ctx, sec.Label, 100)
-			}
-		} else if pct >= 80 {
-			alerted, _ := s.quota.WasAlerted(ctx, sec.Label, 80)
-			if !alerted {
-				quotaLog.Warnf("warning: secret %s at %d%% of quota", sec.Label, pct)
-				_ = s.quota.MarkAlerted(ctx, sec.Label, 80)
+				if err := s.quota.MarkAlerted(ctx, sec.Label, 100); err != nil {
+						quotaLog.Warnf("mark alert for %s: %v", sec.Label, err)
+					}
+				}
+			} else if pct >= 80 {
+				alerted, _ := s.quota.WasAlerted(ctx, sec.Label, 80)
+				if !alerted {
+					quotaLog.Warnf("warning: secret %s at %d%% of quota", sec.Label, pct)
+					if err := s.quota.MarkAlerted(ctx, sec.Label, 80); err != nil {
+						quotaLog.Warnf("mark alert for %s: %v", sec.Label, err)
+					}
 			}
 		}
 	}
@@ -298,8 +307,11 @@ func (s *TrafficService) CheckExpirations(ctx context.Context) {
 			enabled, _ := s.secrets.CountEnabled(ctx)
 			if enabled > 1 {
 				sec.Enabled = false
-				_ = s.secrets.Update(ctx, &sec)
-				quotaLog.Infof("auto-disabled expired secret %s (expired %s)", sec.Label, sec.ExpiresAt)
+				if err := s.secrets.Update(ctx, &sec); err != nil {
+					quotaLog.Warnf("failed to disable expired secret %s: %v", sec.Label, err)
+				} else {
+					quotaLog.Infof("auto-disabled expired secret %s (expired %s)", sec.Label, sec.ExpiresAt)
+				}
 			}
 		}
 	}

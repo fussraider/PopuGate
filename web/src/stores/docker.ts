@@ -38,6 +38,7 @@ export const useDockerStore = defineStore('docker', () => {
     try {
       const res = await dockerApi.build(force)
       buildResult.value = `[${res.method}] ${res.version}: ${res.message}`
+      await loadEngineStatus()
     } catch (e: any) {
       buildResult.value = `Error: ${e.message}`
     } finally {

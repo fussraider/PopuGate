@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/fussraider/PopuGate/pkg/logger"
+
 	"github.com/gin-gonic/gin"
 
 	"github.com/fussraider/PopuGate/internal/service"
@@ -62,6 +64,8 @@ func (h *UpdateHandler) Apply(c *gin.Context) {
 	// Restart in background after response is sent
 	go func() {
 		time.Sleep(1 * time.Second)
-		_ = h.updateSvc.RestartSelf()
+		if err := h.updateSvc.RestartSelf(); err != nil {
+			logger.WithScope("update").Warnf("restart after update: %v", err)
+		}
 	}()
 }

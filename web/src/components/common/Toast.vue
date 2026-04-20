@@ -1,20 +1,22 @@
 <template>
   <TransitionGroup name="toast" tag="div" class="toast-container">
     <div v-for="toast in toastStore.toasts" :key="toast.id" :class="['toast', `toast-${toast.type}`]">
-      <span class="toast-icon">{{ toastIcon(toast.type) }}</span>
+      <component :is="toastIcon(toast.type)" class="toast-icon" :size="18" />
       <span class="toast-message">{{ toast.message }}</span>
-      <button class="toast-close" @click="toastStore.remove(toast.id)">&times;</button>
+      <button class="toast-close" @click="toastStore.remove(toast.id)"><X :size="16" /></button>
     </div>
   </TransitionGroup>
 </template>
 
 <script setup lang="ts">
+import { type Component } from 'vue'
 import { useToastStore } from '@/stores/toast'
+import { Check, X, AlertTriangle, Info } from '@lucide/vue'
 
 const toastStore = useToastStore()
 
-function toastIcon(type: string) {
-  return ({ success: '✓', error: '✗', warning: '⚠', info: 'ℹ' } as Record<string, string>)[type] ?? 'ℹ'
+function toastIcon(type: string): Component {
+  return ({ success: Check, error: X, warning: AlertTriangle, info: Info } as Record<string, Component>)[type] ?? Info
 }
 </script>
 
@@ -51,7 +53,7 @@ function toastIcon(type: string) {
   &.toast-info    { border-left: 4px solid $color-info; }
 }
 
-.toast-icon { font-size: 1.1rem; }
+.toast-icon { flex-shrink: 0; }
 .toast-message { flex: 1; }
 .toast-close {
   background: none;

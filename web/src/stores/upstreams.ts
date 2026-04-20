@@ -6,6 +6,8 @@ import type { Upstream } from '@/types/models'
 export const useUpstreamsStore = defineStore('upstreams', () => {
   const upstreams = ref<Upstream[]>([])
   const loading = ref(false)
+  const testing = ref<string | null>(null)
+  const toggling = ref<string | null>(null)
 
   async function load() {
     loading.value = true
@@ -27,14 +29,24 @@ export const useUpstreamsStore = defineStore('upstreams', () => {
   }
 
   async function toggle(name: string, enable: boolean) {
-    await upstreamsApi.toggle(name, enable)
-    const u = upstreams.value.find((x) => x.name === name)
-    if (u) u.enabled = enable
+    toggling.value = name
+    try {
+      await upstreamsApi.toggle(name, enable)
+      const u = upstreams.value.find((x) => x.name === name)
+      if (u) u.enabled = enable
+    } finally {
+      toggling.value = null
+    }
   }
 
   async function test(name: string) {
-    await upstreamsApi.test(name)
+    testing.value = name
+    try {
+      await upstreamsApi.test(name)
+    } finally {
+      testing.value = null
+    }
   }
 
-  return { upstreams, loading, load, add, remove, toggle, test }
+  return { upstreams, loading, testing, toggling, load, add, remove, toggle, test }
 })

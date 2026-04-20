@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"fmt"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -54,7 +55,10 @@ func (h *GeoblockHandler) Add(c *gin.Context) {
 	}
 	countries += req.Country
 
-	_ = h.settings.Save(ctx, map[string]string{"blocklist_countries": countries})
+	if err := h.settings.Save(ctx, map[string]string{"blocklist_countries": countries}); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("save settings: %v", err)})
+		return
+	}
 
 	// Apply rules
 	if h.geoSvc != nil {
@@ -83,7 +87,10 @@ func (h *GeoblockHandler) Remove(c *gin.Context) {
 			remaining = append(remaining, c)
 		}
 	}
-	_ = h.settings.Save(ctx, map[string]string{"blocklist_countries": stringsJoinComma(remaining)})
+	if err := h.settings.Save(ctx, map[string]string{"blocklist_countries": stringsJoinComma(remaining)}); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("save settings: %v", err)})
+		return
+	}
 
 	// Re-apply rules
 	if h.geoSvc != nil {
@@ -101,10 +108,16 @@ func (h *GeoblockHandler) Clear(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	if h.geoSvc != nil {
-		_ = h.geoSvc.Clear(ctx)
+		if err := h.geoSvc.Clear(ctx); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
 	}
 
-	_ = h.settings.Save(ctx, map[string]string{"blocklist_countries": ""})
+	if err := h.settings.Save(ctx, map[string]string{"blocklist_countries": ""}); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("save settings: %v", err)})
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
@@ -126,11 +139,17 @@ func (h *GeoblockHandler) SetMode(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	_ = h.settings.Save(ctx, map[string]string{"geoblock_mode": req.Mode})
+	if err := h.settings.Save(ctx, map[string]string{"geoblock_mode": req.Mode}); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("save settings: %v", err)})
+		return
+	}
 
 	// Re-apply rules with new mode
 	if h.geoSvc != nil {
-		_ = h.geoSvc.Apply(ctx)
+		if err := h.geoSvc.Apply(ctx); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{"ok": true, "mode": req.Mode})

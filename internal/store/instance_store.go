@@ -42,7 +42,7 @@ func (s *InstanceStore) List(ctx context.Context) ([]model.Instance, error) {
 		if err := rows.Scan(&inst.ID, &inst.Port, &inst.MetricsPort, &enabled, &inst.Label); err != nil {
 			return nil, fmt.Errorf("scan instance: %w", err)
 		}
-		inst.Enabled = enabled == 1
+		inst.Enabled = intToBool(enabled)
 		instances = append(instances, inst)
 	}
 	return instances, nil
@@ -61,7 +61,7 @@ func (s *InstanceStore) GetByPort(ctx context.Context, port int) (*model.Instanc
 	if err != nil {
 		return nil, fmt.Errorf("get instance port %d: %w", port, err)
 	}
-	inst.Enabled = enabled == 1
+	inst.Enabled = intToBool(enabled)
 	return &inst, nil
 }
 

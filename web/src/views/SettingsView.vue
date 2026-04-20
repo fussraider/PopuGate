@@ -1,42 +1,42 @@
 <template>
   <div>
-    <LoadingSpinner v-if="configStore.loading" message="Loading settings..." />
+    <LoadingSpinner v-if="configStore.loading" :message="t('common.loading')" />
 
     <template v-else-if="configStore.settings">
       <!-- Proxy Settings -->
       <div class="card mb-lg">
-        <h3 class="mb-md">Proxy</h3>
+        <h3 class="mb-md">{{ t('settings_view.title') }}</h3>
         <div class="settings-grid">
           <div class="form-group">
-            <label class="form-label">Port</label>
+            <label class="form-label">{{ t('instances.table.port') }}</label>
             <input v-model.number="form.proxy_port" class="input" type="number" min="1" max="65535" />
           </div>
           <div class="form-group">
-            <label class="form-label">Metrics Port</label>
+            <label class="form-label">{{ t('settings_view.metrics_port') }}</label>
             <input v-model.number="form.proxy_metrics_port" class="input" type="number" min="1" max="65535" />
           </div>
           <div class="form-group">
-            <label class="form-label">Domain</label>
+            <label class="form-label">{{ t('settings_view.domain') }}</label>
             <input v-model="form.proxy_domain" class="input" placeholder="cloudflare.com" />
           </div>
           <div class="form-group">
-            <label class="form-label">Concurrency</label>
+            <label class="form-label">{{ t('settings_view.concurrency') }}</label>
             <input v-model.number="form.proxy_concurrency" class="input" type="number" min="1" />
           </div>
           <div class="form-group">
-            <label class="form-label">CPU Limit</label>
-            <input v-model="form.proxy_cpus" class="input" placeholder="empty = unlimited" />
+            <label class="form-label">{{ t('settings_view.cpu_limit') }}</label>
+            <input v-model="form.proxy_cpus" class="input" :placeholder="t('settings_view.unlimited_tip')" />
           </div>
           <div class="form-group">
-            <label class="form-label">Memory Limit</label>
-            <input v-model="form.proxy_memory" class="input" placeholder="e.g. 256m, 1g" />
+            <label class="form-label">{{ t('settings_view.memory_limit') }}</label>
+            <input v-model="form.proxy_memory" class="input" :placeholder="t('settings_view.memory_placeholder')" />
           </div>
           <div class="form-group">
-            <label class="form-label">Custom IP</label>
-            <input v-model="form.custom_ip" class="input" placeholder="empty = auto-detect" />
+            <label class="form-label">{{ t('settings_view.custom_ip') }}</label>
+            <input v-model="form.custom_ip" class="input" :placeholder="t('settings_view.ip_auto_tip')" />
           </div>
           <div class="form-group">
-            <label class="form-label">Cert Length</label>
+            <label class="form-label">{{ t('settings_view.cert_len') }}</label>
             <input v-model.number="form.fake_cert_len" class="input" type="number" />
           </div>
         </div>
@@ -44,38 +44,38 @@
 
       <!-- Proxy Protocol -->
       <div class="card mb-lg">
-        <h3 class="mb-md">HAProxy PROXY Protocol</h3>
+        <h3 class="mb-md">{{ t('settings_view.proxy_proto') }}</h3>
         <label class="checkbox-label mb-md">
           <input v-model="form.proxy_protocol" type="checkbox" />
-          Enable PROXY Protocol
+          {{ t('settings_view.enable_proxy_proto') }}
         </label>
         <div class="form-group">
-          <label class="form-label">Trusted CIDRs</label>
-          <input v-model="form.proxy_protocol_trusted_cidrs" class="input" placeholder="10.0.0.0/8,172.16.0.0/12" />
+          <label class="form-label">{{ t('settings_view.trusted_cidrs') }}</label>
+          <input v-model="form.proxy_protocol_trusted_cidrs" class="input" :placeholder="t('settings_view.cidrs_placeholder')" />
         </div>
       </div>
 
       <!-- Masking -->
       <div class="card mb-lg">
-        <h3 class="mb-md">Traffic Masking</h3>
+        <h3 class="mb-md">{{ t('settings_view.masking_title') }}</h3>
         <label class="checkbox-label mb-md">
           <input v-model="form.masking_enabled" type="checkbox" />
-          Enable Masking
+          {{ t('settings_view.enable_masking') }}
         </label>
         <div class="settings-grid">
           <div class="form-group">
-            <label class="form-label">Masking Host</label>
-            <input v-model="form.masking_host" class="input" placeholder="empty = use domain" />
+            <label class="form-label">{{ t('settings_view.masking_host') }}</label>
+            <input v-model="form.masking_host" class="input" :placeholder="t('settings_view.masking_host_tip')" />
           </div>
           <div class="form-group">
-            <label class="form-label">Masking Port</label>
+            <label class="form-label">{{ t('settings_view.masking_port') }}</label>
             <input v-model.number="form.masking_port" class="input" type="number" />
           </div>
           <div class="form-group">
-            <label class="form-label">Unknown SNI Action</label>
+            <label class="form-label">{{ t('settings_view.unknown_sni') }}</label>
             <select v-model="form.unknown_sni_action" class="select">
-              <option value="mask">Mask (forward to real site)</option>
-              <option value="drop">Drop</option>
+              <option value="mask">{{ t('settings_view.mask_action') }}</option>
+              <option value="drop">{{ t('settings_view.drop_action') }}</option>
             </select>
           </div>
         </div>
@@ -83,34 +83,35 @@
 
       <!-- Ad Tag -->
       <div class="card mb-lg">
-        <h3 class="mb-md">Ad Tag</h3>
+        <h3 class="mb-md">{{ t('settings_view.ad_tag_title') }}</h3>
         <div class="form-group">
-          <label class="form-label">Ad Tag (from @MTProxyBot)</label>
+          <label class="form-label">{{ t('settings_view.ad_tag_label') }}</label>
           <input v-model="form.ad_tag" class="input" placeholder="32 hex characters" maxlength="32" />
         </div>
       </div>
 
       <!-- Auto-Update -->
       <div class="card mb-lg">
-        <h3 class="mb-md">Maintenance</h3>
+        <h3 class="mb-md">{{ t('settings_view.maintenance') }}</h3>
         <label class="checkbox-label mb-md">
           <input v-model="form.auto_update_enabled" type="checkbox" />
-          Enable automatic update checks
+          {{ t('settings_view.auto_update') }}
         </label>
         <label class="checkbox-label">
           <input v-model="form.debug" type="checkbox" />
-          Enable Debug Mode (Gin verbose logging)
+          {{ t('settings_view.debug_mode') }}
         </label>
       </div>
 
       <!-- Actions -->
       <div class="card">
         <div class="flex justify-between items-center">
-          <h3>Save Settings</h3>
+          <h3>{{ t('settings_view.save_settings') }}</h3>
           <div class="flex gap-sm">
-            <button class="btn btn-secondary" @click="resetForm">Reset</button>
+            <button class="btn btn-secondary" @click="resetForm">{{ t('settings_view.reset') }}</button>
             <button class="btn btn-primary" :disabled="saving" @click="handleSave">
-              {{ saving ? 'Saving...' : 'Save' }}
+              <Loader2 v-if="saving" :size="16" class="animate-spin" />
+              {{ saving ? t('settings_view.saving') : t('common.save') }}
             </button>
           </div>
         </div>
@@ -124,10 +125,13 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useConfigStore } from '@/stores/config'
+import { Loader2 } from '@lucide/vue'
 import type { Settings } from '@/types/models'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 
+const { t } = useI18n()
 const configStore = useConfigStore()
 
 const form = ref<Partial<Settings>>({})
@@ -147,7 +151,7 @@ async function handleSave() {
   saveError.value = false
   try {
     await configStore.update(form.value)
-    saveMessage.value = 'Settings saved successfully'
+    saveMessage.value = t('settings_view.saved_success')
   } catch (e: any) {
     saveMessage.value = e.message
     saveError.value = true

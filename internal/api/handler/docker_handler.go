@@ -119,7 +119,7 @@ func (h *DockerHandler) Build(c *gin.Context) {
 	var req struct {
 		Force bool `json:"force"`
 	}
-	_ = c.ShouldBindJSON(&req)
+	_ = c.ShouldBindJSON(&req) // optional: defaults to force=false
 
 	// Use a long timeout for engine builds (30 minutes) as they can take time from source
 	// and may be interrupted by request context timeout (usually 30s in many setups).

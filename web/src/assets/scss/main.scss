@@ -81,9 +81,14 @@ code {
 .mt-sm  { margin-top: $spacing-sm; }
 .mt-md  { margin-top: $spacing-md; }
 .mt-lg  { margin-top: $spacing-lg; }
+.mb-xs  { margin-bottom: $spacing-xs; }
 .mb-sm  { margin-bottom: $spacing-sm; }
 .mb-md  { margin-bottom: $spacing-md; }
 .mb-lg  { margin-bottom: $spacing-lg; }
+.ml-xs  { margin-left: $spacing-xs; }
+.ml-sm  { margin-left: $spacing-sm; }
+.mr-xs  { margin-right: $spacing-xs; }
+.mr-sm  { margin-right: $spacing-sm; }
 .p-sm   { padding: $spacing-sm; }
 .p-md   { padding: $spacing-md; }
 .p-lg   { padding: $spacing-lg; }
@@ -94,6 +99,15 @@ code {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
 }
 
 // ─── Cards ─────────────────────────────────────────────────────────
@@ -463,6 +477,36 @@ code {
   input {
     cursor: pointer;
   }
+}
+
+// ─── Traffic Stats Grid ──────────────────────────────────────────────
+
+.traffic-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: $spacing-md;
+}
+
+.traffic-item {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-xs;
+  padding: $spacing-md;
+  background: $color-gray-50;
+  border-radius: $border-radius;
+}
+
+.traffic-label {
+  font-size: $font-size-sm;
+  color: $text-secondary;
+  display: flex;
+  align-items: center;
+  gap: $spacing-xs;
+}
+
+.traffic-value {
+  font-size: $font-size-xl;
+  font-weight: $font-weight-semibold;
 }
 
 // ─── Additional Utility Classes ─────────────────────────────────────

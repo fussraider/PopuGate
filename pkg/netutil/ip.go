@@ -7,15 +7,22 @@ import (
 	"time"
 )
 
+// defaultServices is the list of IP discovery services used by GetPublicIP.
+var defaultServices = []string{
+	"https://api.ipify.org",
+	"https://ifconfig.me/ip",
+	"https://icanhazip.com",
+	"https://ident.me",
+}
+
 // GetPublicIP attempts to discover the public IP of the server.
 func GetPublicIP() (string, error) {
-	services := []string{
-		"https://api.ipify.org",
-		"https://ifconfig.me/ip",
-		"https://icanhazip.com",
-		"https://ident.me",
-	}
+	return GetPublicIPFromServices(defaultServices)
+}
 
+// GetPublicIPFromServices attempts to discover the public IP by querying the
+// given service URLs in order. It returns the IP from the first successful response.
+func GetPublicIPFromServices(services []string) (string, error) {
 	client := &http.Client{
 		Timeout: 5 * time.Second,
 	}
@@ -25,13 +32,14 @@ func GetPublicIP() (string, error) {
 		if err != nil {
 			continue
 		}
-		defer resp.Body.Close()
+
+		body, readErr := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if readErr != nil {
+			continue
+		}
 
 		if resp.StatusCode == http.StatusOK {
-			body, err := io.ReadAll(resp.Body)
-			if err != nil {
-				continue
-			}
 			ip := strings.TrimSpace(string(body))
 			if ip != "" {
 				return ip, nil
@@ -39,5 +47,5 @@ func GetPublicIP() (string, error) {
 		}
 	}
 
-	return "", io.EOF // Or a more descriptive error
+	return "", io.EOF
 }

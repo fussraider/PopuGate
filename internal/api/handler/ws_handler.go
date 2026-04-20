@@ -38,7 +38,7 @@ func (h *WSHandler) Handle(c *gin.Context) {
 	for range ticker.C {
 		live, err := h.traffic.GetLiveMetrics(c.Request.Context())
 		if err != nil {
-			_ = conn.WriteJSON(gin.H{"error": err.Error()})
+			_ = conn.WriteJSON(gin.H{"error": err.Error()}) // best-effort: client may disconnect
 			continue
 		}
 		if err := conn.WriteJSON(live); err != nil {

@@ -2,7 +2,7 @@
   <div>
     <!-- Role & Status -->
     <div class="card mb-lg">
-      <h3 class="mb-md">Replication</h3>
+      <h3 class="mb-md">{{ t('replication.title') }}</h3>
       <div class="status-row mb-md">
         <StatusBadge :variant="statusBadgeVariant">
           {{ replicationStore.status?.role || 'standalone' }}
@@ -11,50 +11,65 @@
 
       <div class="form-row mb-md">
         <div class="form-group">
-          <label class="form-label">Role</label>
+          <label class="form-label">{{ t('replication.role') }}</label>
           <select v-model="roleForm.role" class="select">
-            <option value="standalone">Standalone</option>
-            <option value="master">Master</option>
-            <option value="slave">Slave</option>
+            <option value="standalone">{{ t('replication.standalone') }}</option>
+            <option value="master">{{ t('replication.master') }}</option>
+            <option value="slave">{{ t('replication.slave') }}</option>
           </select>
         </div>
         <div class="form-group">
-          <label class="form-label">Sync Interval (seconds)</label>
+          <label class="form-label">{{ t('replication.sync_interval') }}</label>
           <input v-model.number="roleForm.interval" class="input" type="number" min="10" />
         </div>
       </div>
-      <button class="btn btn-primary" @click="handleSetupRole">Apply</button>
+      <button class="btn btn-primary" :disabled="replicationStore.settingUp" @click="handleSetupRole">
+        <Loader2 v-if="replicationStore.settingUp" :size="16" class="animate-spin" />
+        {{ t('replication.apply') }}
+      </button>
     </div>
 
     <!-- SSH Key -->
     <div class="card mb-lg">
-      <h3 class="mb-md">SSH Public Key</h3>
+      <h3 class="mb-md">{{ t('replication.ssh_title') }}</h3>
       <div class="flex gap-sm items-center mb-sm">
-        <button class="btn btn-secondary btn-sm" @click="handleSSHKeygen">Generate Key</button>
-        <button v-if="publicKey" class="btn btn-ghost btn-sm" @click="copyKey">Copy</button>
+        <button class="btn btn-secondary btn-sm" :disabled="replicationStore.generatingKey" @click="handleSSHKeygen">
+          <Loader2 v-if="replicationStore.generatingKey" :size="14" class="animate-spin" />
+          {{ t('replication.generate_key') }}
+        </button>
+        <button v-if="publicKey" class="btn btn-ghost btn-sm" @click="copyKey">{{ t('replication.copy') }}</button>
       </div>
       <code v-if="publicKey" class="ssh-key">{{ publicKey }}</code>
-      <span v-else class="text-muted">No key generated yet.</span>
+      <span v-else class="text-muted">{{ t('replication.no_key') }}</span>
     </div>
 
     <!-- Slaves -->
     <div class="card mb-lg">
       <div class="flex justify-between items-center mb-md">
-        <h3>Slaves</h3>
-        <button class="btn btn-primary btn-sm" @click="openAddSlave">+ Add Slave</button>
+        <h3>{{ t('replication.slaves_title') }}</h3>
+        <button class="btn btn-primary btn-sm" @click="openAddSlave">+ {{ t('replication.add_slave') }}</button>
       </div>
 
-      <div v-if="!(replicationStore.slaves && replicationStore.slaves.length)" class="text-muted text-sm">No slaves configured.</div>
+      <div v-if="!(replicationStore.slaves && replicationStore.slaves.length)" class="text-muted text-sm">{{ t('replication.no_slaves') }}</div>
 
       <div v-else class="table-wrapper">
         <table class="table">
-          <thead><tr><th>Host</th><th>Port</th><th>Label</th><th>Last Sync</th><th>Status</th><th>Actions</th></tr></thead>
+          <thead>
+            <tr>
+              <th>{{ t('replication.table.host') }}</th>
+              <th>{{ t('replication.table.port') }}</th>
+              <th>{{ t('replication.table.label') }}</th>
+              <th>{{ t('replication.table.last_sync') }}</th>
+              <th>{{ t('replication.table.status') }}</th>
+              <th>{{ t('replication.table.actions') }}</th>
+            </tr>
+          </thead>
           <tbody>
             <tr v-for="sl in replicationStore.slaves" :key="sl.host">
               <td><code>{{ sl.host }}</code></td>
               <td>{{ sl.port }}</td>
               <td>{{ sl.label || '—' }}</td>
-              <td>{{ sl.last_sync ? new Date(sl.last_sync * 1000).toLocaleString() : 'Never' }}</td>
+              <td>{{ sl.last_sync ? new Date(sl.last_sync * 1000).toLocaleString() : t('replication.never') }}</td>
               <td>
                 <StatusBadge :variant="sl.status === 'ok' ? 'success' : 'danger'">
                   {{ sl.status || 'unknown' }}
@@ -62,10 +77,16 @@
               </td>
               <td>
                 <div class="actions-cell">
-                  <button class="btn btn-ghost btn-sm" title="Test" @click="testSlave(sl.host)">🧪</button>
-                  <button class="btn btn-ghost btn-sm" title="Sync" :disabled="replicationStore.syncing"
-                          @click="replicationStore.sync(sl.host)">🔄</button>
-                  <button class="btn btn-ghost btn-sm" title="Remove" @click="confirmRemove(sl.host)">🗑</button>
+                  <button class="btn btn-ghost btn-sm" :title="t('replication.test')" @click="testSlave(sl.host)">
+                    <FlaskConical :size="16" />
+                  </button>
+                  <button class="btn btn-ghost btn-sm" :title="t('replication.sync')" :disabled="replicationStore.syncing"
+                          @click="replicationStore.sync(sl.host)">
+                    <RefreshCw :size="16" :class="{ 'animate-spin': replicationStore.syncing }" />
+                  </button>
+                  <button class="btn btn-ghost btn-sm" :title="t('replication.remove')" @click="confirmRemove(sl.host)">
+                    <Trash2 :size="16" class="text-danger" />
+                  </button>
                 </div>
               </td>
             </tr>
@@ -76,50 +97,53 @@
 
     <!-- Test Results -->
     <div v-if="testResult" class="card mb-lg">
-      <h3 class="mb-md">Test Result</h3>
+      <h3 class="mb-md">{{ t('replication.test_result') }}</h3>
       <div class="alert" :class="testResult.ssh_ok ? 'alert-success' : 'alert-danger'">
-        SSH: {{ testResult.ssh_ok ? 'OK' : 'Failed' }}<br />
+        {{ t('replication.ssh_ok') }}: {{ testResult.ssh_ok ? 'OK' : 'Failed' }}<br />
         <span v-if="testResult.docker_status">Docker: {{ testResult.docker_status }}</span>
         <span v-if="testResult.error">{{ testResult.error }}</span>
       </div>
     </div>
 
     <!-- Add Slave Modal -->
-    <Modal v-model="addSlaveModal" title="Add Slave">
+    <Modal v-model="addSlaveModal" :title="t('replication.add_slave_title')">
       <form @submit.prevent="handleAddSlave">
         <div class="form-group mb-md">
-          <label class="form-label">Host</label>
-          <input v-model="slaveForm.host" class="input" required placeholder="192.168.1.2" />
+          <label class="form-label">{{ t('replication.table.host') }}</label>
+          <input v-model="slaveForm.host" class="input" required :placeholder="t('replication.host_placeholder')" />
         </div>
         <div class="form-row mb-md">
           <div class="form-group">
-            <label class="form-label">Port</label>
+            <label class="form-label">{{ t('replication.table.port') }}</label>
             <input v-model.number="slaveForm.port" class="input" type="number" value="22" />
           </div>
           <div class="form-group">
-            <label class="form-label">Label</label>
-            <input v-model="slaveForm.label" class="input" placeholder="slave1" />
+            <label class="form-label">{{ t('replication.table.label') }}</label>
+            <input v-model="slaveForm.label" class="input" :placeholder="t('replication.slave_placeholder')" />
           </div>
         </div>
         <div class="modal-footer" style="padding:0;border:none;">
-          <button type="button" class="btn btn-secondary" @click="addSlaveModal = false">Cancel</button>
-          <button type="submit" class="btn btn-primary">Add</button>
+          <button type="button" class="btn btn-secondary" @click="addSlaveModal = false">{{ t('common.cancel') }}</button>
+          <button type="submit" class="btn btn-primary">{{ t('common.add') }}</button>
         </div>
       </form>
     </Modal>
 
-    <ConfirmDialog v-model="confirmModal" title="Remove Slave"
-                   :message="`Remove slave '${removeTarget}'?`" confirm-text="Remove" @confirm="handleRemove" />
+    <ConfirmDialog v-model="confirmModal" :title="t('replication.remove_slave_title')"
+                   :message="t('replication.confirm_remove', { label: removeTarget })" :confirm-text="t('replication.remove')" @confirm="handleRemove" />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useReplicationStore } from '@/stores/replication'
 import Modal from '@/components/common/Modal.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
+import { FlaskConical, RefreshCw, Trash2, Loader2 } from '@lucide/vue'
 
+const { t } = useI18n()
 const replicationStore = useReplicationStore()
 
 const roleForm = ref({ role: 'standalone', interval: 60 })

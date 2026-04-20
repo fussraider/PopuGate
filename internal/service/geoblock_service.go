@@ -12,6 +12,7 @@ import (
 
 	"github.com/fussraider/PopuGate/internal/model"
 	"github.com/fussraider/PopuGate/internal/store"
+	"github.com/fussraider/PopuGate/pkg/logger"
 	"github.com/fussraider/PopuGate/pkg/netutil"
 )
 
@@ -56,7 +57,9 @@ func (s *GeoblockService) Apply(ctx context.Context) error {
 	}
 
 	// Remove existing rules first
-	_ = s.iptables.RemoveGeoBlockRules()
+	if err := s.iptables.RemoveGeoBlockRules(); err != nil {
+		logger.WithScope("geoblock").Warnf("remove existing rules: %v", err)
+	}
 
 	// Collect all ports: primary + instances
 	ports := []string{fmt.Sprintf("%d", settings.ProxyPort)}
@@ -120,7 +123,9 @@ func (s *GeoblockService) Clear(ctx context.Context) error {
 		for _, code := range strings.Split(settings.BlocklistCountries, ",") {
 			code = strings.TrimSpace(strings.ToLower(code))
 			if code != "" {
-				_ = s.iptables.DestroyIPSet(netutil.SetNameForCountry(code))
+				if err := s.iptables.DestroyIPSet(netutil.SetNameForCountry(code)); err != nil {
+					logger.WithScope("geoblock").Warnf("destroy ipset %s: %v", code, err)
+				}
 			}
 		}
 	}
@@ -160,12 +165,18 @@ func (s *GeoblockService) getCountryCIDRs(ctx context.Context, code string) ([]s
 	cidrs := parseCIDRs(string(data))
 
 	// Cache to disk
-	os.MkdirAll(geoCacheDir(), 0755)
+	if err := os.MkdirAll(geoCacheDir(), 0755); err != nil {
+		logger.WithScope("geoblock").Warnf("create cache dir: %v", err)
+	}
 	cachePath := filepath.Join(geoCacheDir(), code+".zone")
-	os.WriteFile(cachePath, data, 0644)
+	if err := os.WriteFile(cachePath, data, 0644); err != nil {
+		logger.WithScope("geoblock").Warnf("write cache %s: %v", code, err)
+	}
 
 	// Update cache record
-	_ = s.cache.SetCache(ctx, code, cachePath)
+	if err := s.cache.SetCache(ctx, code, cachePath); err != nil {
+		logger.WithScope("geoblock").Warnf("cache %s: %v", code, err)
+	}
 
 	return cidrs, nil
 }

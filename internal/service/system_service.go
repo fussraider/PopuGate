@@ -6,6 +6,8 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
+
+	"github.com/fussraider/PopuGate/pkg/logger"
 )
 
 // OSType represents the details of the host OS.
@@ -132,7 +134,9 @@ WantedBy=multi-user.target
 	}
 
 	// Enable the service (best-effort)
-	_ = exec.Command("systemctl", "enable", "popugate").Run()
+	if err := exec.Command("systemctl", "enable", "popugate").Run(); err != nil {
+		logger.WithScope("system").Warnf("enable service: %v", err)
+	}
 
 	return nil
 }
@@ -142,10 +146,16 @@ func UninstallSystemdService() error {
 	if _, err := exec.LookPath("systemctl"); err != nil {
 		return fmt.Errorf("systemd is not supported on this system")
 	}
-	_ = exec.Command("systemctl", "stop", "popugate").Run()
-	_ = exec.Command("systemctl", "disable", "popugate").Run()
+	if err := exec.Command("systemctl", "stop", "popugate").Run(); err != nil {
+		logger.WithScope("system").Warnf("stop service: %v", err)
+	}
+	if err := exec.Command("systemctl", "disable", "popugate").Run(); err != nil {
+		logger.WithScope("system").Warnf("disable service: %v", err)
+	}
 	os.Remove("/etc/systemd/system/popugate.service")
-	_ = exec.Command("systemctl", "daemon-reload").Run()
+	if err := exec.Command("systemctl", "daemon-reload").Run(); err != nil {
+		logger.WithScope("system").Warnf("daemon-reload: %v", err)
+	}
 	return nil
 }
 

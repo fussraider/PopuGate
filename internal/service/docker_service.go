@@ -12,6 +12,7 @@ import (
 
 	"github.com/fussraider/PopuGate/internal/model"
 	"github.com/fussraider/PopuGate/pkg/dockerutil"
+	"github.com/fussraider/PopuGate/pkg/logger"
 )
 
 // DockerService handles Docker installation and engine image management.
@@ -81,15 +82,20 @@ func (s *DockerService) pullAndTag(ctx context.Context, pullRef, taggedImage, la
 	if err != nil {
 		return nil, fmt.Errorf("pull %s: %w", pullRef, err)
 	}
-	_, _ = io.ReadAll(reader)
+	if _, err := io.ReadAll(reader); err != nil {
+		reader.Close()
+		return nil, fmt.Errorf("read pull output: %w", err)
+	}
 	reader.Close()
 
 	// Tag as local version
-	if err := s.dockerTag(pullRef, taggedImage); err != nil {
+	if err := s.dockerTag(ctx, pullRef, taggedImage); err != nil {
 		return nil, fmt.Errorf("tag %s: %w", taggedImage, err)
 	}
-	// Tag as :latest
-	_ = s.dockerTag(taggedImage, latestImage)
+	// Tag as :latest (best-effort)
+	if err := s.dockerTag(ctx, taggedImage, latestImage); err != nil {
+		logger.WithScope("docker").Warnf("tag %s as latest: %v", taggedImage, err)
+	}
 
 	s.writeVersionFile(version)
 	return &BuildResult{Version: version, Message: "pulled from registry"}, nil
@@ -142,18 +148,24 @@ ENTRYPOINT ["telemt"]
 		return fmt.Errorf("source build failed: %w", err)
 	}
 
-	_ = s.dockerTag(taggedImage, latestImage)
+	if err := s.dockerTag(ctx, taggedImage, latestImage); err != nil {
+		logger.WithScope("docker").Warnf("tag %s as latest: %v", taggedImage, err)
+	}
 	return nil
 }
 
-func (s *DockerService) dockerTag(source, target string) error {
-	cmd := exec.Command("docker", "tag", source, target)
+func (s *DockerService) dockerTag(ctx context.Context, source, target string) error {
+	cmd := exec.CommandContext(ctx, "docker", "tag", source, target)
 	return cmd.Run()
 }
 
 func (s *DockerService) writeVersionFile(version string) {
-	_ = os.MkdirAll(model.InstallDir, 0755)
-	_ = os.WriteFile(filepath.Join(model.InstallDir, ".telemt_version"), []byte(version), 0644)
+	if err := os.MkdirAll(model.InstallDir, 0755); err != nil {
+		logger.WithScope("docker").Warnf("create install dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(model.InstallDir, ".telemt_version"), []byte(version), 0644); err != nil {
+		logger.WithScope("docker").Warnf("write version file: %v", err)
+	}
 }
 
 // GetInstalledVersion returns the currently installed telemt version string.

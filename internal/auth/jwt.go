@@ -7,6 +7,11 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
+const (
+	accessTokenTTL  = 1 * time.Hour
+	refreshTokenTTL = 7 * 24 * time.Hour
+)
+
 // GenerateTokenPair creates access and refresh JWT tokens.
 func GenerateTokenPair(jwtSecret, username string) (accessToken, refreshToken string, err error) {
 	now := time.Now()
@@ -15,7 +20,7 @@ func GenerateTokenPair(jwtSecret, username string) (accessToken, refreshToken st
 		"sub": username,
 		"jti": GenerateJTI(),
 		"iat": now.Unix(),
-		"exp": now.Add(1 * time.Hour).Unix(),
+		"exp": now.Add(accessTokenTTL).Unix(),
 	}
 	accessToken, err = jwt.NewWithClaims(jwt.SigningMethodHS256, accessClaims).SignedString([]byte(jwtSecret))
 	if err != nil {
@@ -26,7 +31,7 @@ func GenerateTokenPair(jwtSecret, username string) (accessToken, refreshToken st
 		"sub": username,
 		"jti": GenerateJTI(),
 		"iat": now.Unix(),
-		"exp": now.Add(7 * 24 * time.Hour).Unix(),
+		"exp": now.Add(refreshTokenTTL).Unix(),
 		"type": "refresh",
 	}
 	refreshToken, err = jwt.NewWithClaims(jwt.SigningMethodHS256, refreshClaims).SignedString([]byte(jwtSecret))

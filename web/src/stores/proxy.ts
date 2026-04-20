@@ -4,10 +4,13 @@ import { proxyApi, healthApi } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
 import type { ProxyStatus, HealthStatus } from '@/types/models'
 
+export type ProxyAction = 'start' | 'stop' | 'restart' | 'reload'
+
 export const useProxyStore = defineStore('proxy', () => {
   const status = ref<ProxyStatus | null>(null)
   const health = ref<HealthStatus | null>(null)
   const loading = ref(false)
+  const activeAction = ref<ProxyAction | null>(null)
   const logs = ref('')
   const isFollowing = ref(false)
   const maxLogs = ref(200)
@@ -72,43 +75,55 @@ export const useProxyStore = defineStore('proxy', () => {
 
   async function start() {
     loading.value = true
+    activeAction.value = 'start'
     try {
       await proxyApi.start()
-      await Promise.all([loadStatus(), loadHealth()])
+      await refreshState()
     } finally {
       loading.value = false
+      activeAction.value = null
     }
   }
 
   async function stop() {
     loading.value = true
+    activeAction.value = 'stop'
     try {
       await proxyApi.stop()
-      await Promise.all([loadStatus(), loadHealth()])
+      await refreshState()
     } finally {
       loading.value = false
+      activeAction.value = null
     }
   }
 
   async function restart() {
     loading.value = true
+    activeAction.value = 'restart'
     try {
       await proxyApi.restart()
-      await Promise.all([loadStatus(), loadHealth()])
+      await refreshState()
     } finally {
       loading.value = false
+      activeAction.value = null
     }
   }
 
   async function reload() {
     loading.value = true
+    activeAction.value = 'reload'
     try {
       await proxyApi.reload()
-      await Promise.all([loadStatus(), loadHealth()])
+      await refreshState()
     } finally {
       loading.value = false
+      activeAction.value = null
     }
   }
 
-  return { status, health, loading, logs, isFollowing, maxLogs, loadStatus, loadHealth, loadLogs, start, stop, restart, reload, startLogsFollow, stopLogsFollow }
+  async function refreshState() {
+    await Promise.all([loadStatus(), loadHealth()])
+  }
+
+  return { status, health, loading, activeAction, logs, isFollowing, maxLogs, loadStatus, loadHealth, loadLogs, start, stop, restart, reload, refreshState, startLogsFollow, stopLogsFollow }
 })

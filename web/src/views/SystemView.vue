@@ -2,44 +2,44 @@
   <div class="system-view">
     <!-- OS Information -->
     <div class="card mb-lg">
-      <h3 class="mb-md">Operating System</h3>
+      <h3 class="mb-md">{{ t('system.title') }}</h3>
       <div v-if="systemStore.os">
         <InfoGrid>
-          <InfoItem label="OS Family">
+          <InfoItem :label="t('system.os_family')">
             <span>{{ systemStore.os.family }}</span>
           </InfoItem>
-          <InfoItem label="Version">
+          <InfoItem :label="t('system.version')">
             <span>{{ systemStore.os.version }}</span>
           </InfoItem>
-          <InfoItem label="Architecture">
+          <InfoItem :label="t('system.arch')">
             <span>{{ systemStore.os.arch }}</span>
           </InfoItem>
         </InfoGrid>
       </div>
-      <div v-else class="text-muted">Loading OS information...</div>
+      <div v-else class="text-muted">{{ t('system.loading') }}</div>
     </div>
 
     <!-- Systemd Service Management -->
     <div class="card">
       <div class="flex justify-between items-center mb-md">
-        <h3>Systemd Service</h3>
+        <h3>{{ t('system.service_title') }}</h3>
         <StatusBadge :variant="serviceStatusVariant">
-          {{ systemStore.service?.active || 'Not Installed' }}
+          {{ systemStore.service?.active || t('system.not_installed') }}
         </StatusBadge>
       </div>
 
       <div v-if="systemStore.service" class="service-details mb-lg">
         <InfoGrid>
-          <InfoItem label="Status">
+          <InfoItem :label="t('system.status')">
             <span>{{ systemStore.service.active }}</span>
           </InfoItem>
-          <InfoItem label="Enabled">
-            <span>{{ systemStore.service.enabled ? 'Yes' : 'No' }}</span>
+          <InfoItem :label="t('system.enabled')">
+            <span>{{ systemStore.service.enabled ? t('system.yes') : t('system.no') }}</span>
           </InfoItem>
-          <InfoItem v-if="systemStore.service.pid" label="Main PID">
+          <InfoItem v-if="systemStore.service.pid" :label="t('system.main_pid')">
             <span>{{ systemStore.service.pid }}</span>
           </InfoItem>
-          <InfoItem v-if="systemStore.service.uptime" label="Uptime">
+          <InfoItem v-if="systemStore.service.uptime" :label="t('system.uptime')">
             <span>{{ systemStore.service.uptime }}</span>
           </InfoItem>
         </InfoGrid>
@@ -52,7 +52,8 @@
             :disabled="systemStore.loading"
             @click="handleInstall"
           >
-            {{ systemStore.loading ? 'Installing...' : 'Install Service' }}
+            <Loader2 v-if="systemStore.loading" :size="16" class="animate-spin" />
+            {{ systemStore.loading ? t('system.installing') : t('system.install') }}
           </button>
         </template>
 
@@ -62,7 +63,8 @@
             :disabled="systemStore.loading"
             @click="handleRestart"
           >
-            {{ systemStore.loading ? 'Restarting...' : 'Restart Service' }}
+            <Loader2 v-if="systemStore.loading" :size="16" class="animate-spin" />
+            {{ systemStore.loading ? t('system.restarting') : t('system.restart') }}
           </button>
 
           <button
@@ -70,7 +72,8 @@
             :disabled="systemStore.loading"
             @click="handleReload"
           >
-            {{ systemStore.loading ? 'Reloading...' : 'Reload Config' }}
+            <Loader2 v-if="systemStore.loading" :size="16" class="animate-spin" />
+            {{ systemStore.loading ? t('system.reloading') : t('system.reload') }}
           </button>
 
           <button
@@ -78,16 +81,17 @@
             :disabled="systemStore.loading"
             @click="handleUninstall"
           >
-            {{ systemStore.loading ? 'Uninstalling...' : 'Uninstall Service' }}
+            <Loader2 v-if="systemStore.loading" :size="16" class="animate-spin" />
+            {{ systemStore.loading ? t('system.uninstalling') : t('system.uninstall') }}
           </button>
         </template>
       </div>
 
       <div v-if="systemStore.service?.supported" class="mt-lg text-muted text-sm">
-        <p><strong>Note:</strong> Installing the service allows PopuGate to start automatically on boot and restart if it crashes. This action requires root privileges on the server.</p>
+        <p><strong>{{ t('common.description') }}:</strong> {{ t('system.note') }}</p>
       </div>
       <div v-else-if="systemStore.service" class="mt-lg text-warning text-sm">
-        <p><strong>Note:</strong> Systemd management is not supported on this operating system. You should manage the application process manually or using other tools available for your OS.</p>
+        <p><strong>{{ t('common.description') }}:</strong> {{ t('system.unsupported') }}</p>
       </div>
     </div>
   </div>
@@ -95,12 +99,15 @@
 
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useSystemStore } from '@/stores/system'
 import { useToastStore } from '@/stores/toast'
+import { Loader2 } from '@lucide/vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import InfoGrid from '@/components/common/InfoGrid.vue'
 import InfoItem from '@/components/common/InfoItem.vue'
 
+const { t } = useI18n()
 const systemStore = useSystemStore()
 const toast = useToastStore()
 
@@ -115,17 +122,17 @@ const serviceStatusVariant = computed(() => {
 async function handleInstall() {
   try {
     await systemStore.installService()
-    toast.success('Systemd service installed and enabled')
+    toast.success(t('system.installed_success'))
   } catch (e: any) {
     toast.error(e.response?.data?.error || e.message)
   }
 }
 
 async function handleUninstall() {
-  if (!confirm('Are you sure you want to uninstall the systemd service?')) return
+  if (!confirm(t('system.uninstall_confirm'))) return
   try {
     await systemStore.uninstallService()
-    toast.success('Systemd service uninstalled')
+    toast.success(t('system.uninstalled_success'))
   } catch (e: any) {
     toast.error(e.response?.data?.error || e.message)
   }
@@ -134,8 +141,7 @@ async function handleUninstall() {
 async function handleRestart() {
   try {
     await systemStore.restartService()
-    toast.success('Service restart signal sent')
-    setTimeout(() => systemStore.loadServiceStatus(), 2000)
+    toast.success(t('system.restart_success'))
   } catch (e: any) {
     toast.error(e.response?.data?.error || e.message)
   }
@@ -144,7 +150,7 @@ async function handleRestart() {
 async function handleReload() {
   try {
     await systemStore.reloadService()
-    toast.success('Service configuration reloaded')
+    toast.success(t('system.reload_success'))
   } catch (e: any) {
     toast.error(e.response?.data?.error || e.message)
   }

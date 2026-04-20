@@ -42,7 +42,7 @@ func (s *SecretStore) List(ctx context.Context) ([]model.Secret, error) {
 			&sec.ExpiresAt, &sec.Notes, &sec.TrafficIn, &sec.TrafficOut); err != nil {
 			return nil, fmt.Errorf("scan secret: %w", err)
 		}
-		sec.Enabled = enabled == 1
+		sec.Enabled = intToBool(enabled)
 		secrets = append(secrets, sec)
 	}
 	return secrets, nil
@@ -68,7 +68,7 @@ func (s *SecretStore) GetByLabel(ctx context.Context, label string) (*model.Secr
 	if err != nil {
 		return nil, fmt.Errorf("get secret %s: %w", label, err)
 	}
-	sec.Enabled = enabled == 1
+	sec.Enabled = intToBool(enabled)
 	return &sec, nil
 }
 

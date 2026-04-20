@@ -51,13 +51,16 @@ func (h *BotHandler) Setup(c *gin.Context) {
 	}
 	h.mu.Unlock()
 
-	_ = h.settings.Save(c.Request.Context(), map[string]string{
+	if err := h.settings.Save(c.Request.Context(), map[string]string{
 		"telegram_bot_token":    req.BotToken,
 		"telegram_chat_id":      req.ChatID,
 		"telegram_enabled":      "true",
 		"telegram_interval":     fmt.Sprintf("%d", req.Interval),
 		"telegram_server_label": req.Label,
-	})
+	}); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("save settings: %v", err)})
+		return
+	}
 
 	// Start the bot with new config
 	h.startBot(c.Request.Context(), req.BotToken, req.ChatID)
@@ -115,7 +118,10 @@ func (h *BotHandler) Toggle(c *gin.Context) {
 	if *req.Enabled {
 		val = "true"
 	}
-	_ = h.settings.Save(c.Request.Context(), map[string]string{"telegram_enabled": val})
+	if err := h.settings.Save(c.Request.Context(), map[string]string{"telegram_enabled": val}); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("save settings: %v", err)})
+		return
+	}
 
 	if *req.Enabled {
 		settings, _ := h.settings.Load(c.Request.Context())
@@ -148,9 +154,12 @@ func (h *BotHandler) DetectChatID(c *gin.Context) {
 	}
 
 	// Auto-save the detected chat ID
-	_ = h.settings.Save(c.Request.Context(), map[string]string{
+	if err := h.settings.Save(c.Request.Context(), map[string]string{
 		"telegram_chat_id": chatID,
-	})
+	}); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("save chat_id: %v", err)})
+		return
+	}
 
 	c.JSON(http.StatusOK, gin.H{"ok": true, "chat_id": chatID})
 }

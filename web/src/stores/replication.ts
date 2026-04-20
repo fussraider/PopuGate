@@ -7,6 +7,8 @@ export const useReplicationStore = defineStore('replication', () => {
   const slaves = ref<Slave[]>([])
   const loading = ref(false)
   const syncing = ref(false)
+  const settingUp = ref(false)
+  const generatingKey = ref(false)
   const status = ref<any>(null)
   const syncResults = ref<SyncResult[]>([])
 
@@ -26,7 +28,13 @@ export const useReplicationStore = defineStore('replication', () => {
   }
 
   async function setup(role: string, syncInterval?: number) {
-    await replicationApi.setup({ role, sync_interval: syncInterval })
+    settingUp.value = true
+    try {
+      await replicationApi.setup({ role, sync_interval: syncInterval })
+      await loadStatus()
+    } finally {
+      settingUp.value = false
+    }
   }
 
   async function addSlave(host: string, port: number, label: string) {
@@ -55,9 +63,14 @@ export const useReplicationStore = defineStore('replication', () => {
   }
 
   async function sshKeygen(): Promise<string> {
-    const res = await replicationApi.sshKeygen()
-    return res.public_key || res.key || ''
+    generatingKey.value = true
+    try {
+      const res = await replicationApi.sshKeygen()
+      return res.public_key || res.key || ''
+    } finally {
+      generatingKey.value = false
+    }
   }
 
-  return { slaves, loading, syncing, status, syncResults, loadStatus, loadSlaves, setup, addSlave, removeSlave, sync, test, sshKeygen }
+  return { slaves, loading, syncing, settingUp, generatingKey, status, syncResults, loadStatus, loadSlaves, setup, addSlave, removeSlave, sync, test, sshKeygen }
 })

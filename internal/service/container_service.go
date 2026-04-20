@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/fussraider/PopuGate/internal/model"
@@ -80,23 +81,35 @@ func (s *ContainerService) Start(ctx context.Context) error {
 // Stop stops all proxy instances.
 func (s *ContainerService) Stop(ctx context.Context) error {
 	// Flush traffic before stopping
-	_ = s.flushTraffic(ctx)
+	if err := s.flushTraffic(ctx); err != nil {
+		statusLog.Warnf("traffic flush before stop: %v", err)
+	}
 
 	// Write stop flag to prevent auto-recovery from restarting
-	_ = os.WriteFile(stopFlagPath, []byte(fmt.Sprintf("%d", time.Now().Unix())), 0644)
+	if err := os.WriteFile(stopFlagPath, []byte(fmt.Sprintf("%d", time.Now().Unix())), 0644); err != nil {
+		statusLog.Warnf("write stop flag: %v", err)
+	}
 
-	// Stop instances in parallel
-	insts, _ := s.instances.List(ctx)
+	// Stop instances in parallel, but wait for all to complete
+	insts, err := s.instances.List(ctx)
+	if err != nil {
+		statusLog.Warnf("list instances for stop: %v", err)
+	}
+	var wg sync.WaitGroup
 	for _, inst := range insts {
 		if inst.Enabled {
+			wg.Add(1)
 			go func(name string) {
-				// Use a background context with a timeout to not block the main Stop flow
+				defer wg.Done()
 				stopCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 				defer cancel()
-				_ = s.docker.StopInstance(stopCtx, name, 10)
+				if err := s.docker.StopInstance(stopCtx, name, 10); err != nil {
+					statusLog.Warnf("stop instance %s: %v", name, err)
+				}
 			}(inst.ContainerName())
 		}
 	}
+	wg.Wait()
 
 	return nil
 }
@@ -146,7 +159,9 @@ func (s *ContainerService) Reload(ctx context.Context) error {
 		if err := s.generateConfig(ctx, &instanceSettings, inst.ConfigPath()); err != nil {
 			continue
 		}
-		_ = s.docker.KillSignalInstance(ctx, inst.ContainerName(), "SIGHUP")
+		if err := s.docker.KillSignalInstance(ctx, inst.ContainerName(), "SIGHUP"); err != nil {
+			statusLog.Warnf("SIGHUP instance %s: %v", inst.ContainerName(), err)
+		}
 	}
 
 	return nil

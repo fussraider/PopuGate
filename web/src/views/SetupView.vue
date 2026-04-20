@@ -1,44 +1,44 @@
 <template>
   <div>
     <div class="setup-header text-center mb-lg">
-      <div class="setup-logo">⚡</div>
-      <h1>Welcome to PopuGate</h1>
-      <p class="text-muted">Create your admin password to get started</p>
+      <div class="setup-logo"><Zap :size="48" :stroke-width="1.5" /></div>
+      <h1>{{ t('setup.welcome') }}</h1>
+      <p class="text-muted">{{ t('setup.subtitle') }}</p>
     </div>
 
     <form @submit.prevent="handleSetup">
       <div class="form-group mb-md">
-        <label class="form-label">Admin Password</label>
+        <label class="form-label">{{ t('setup.admin_password') }}</label>
         <input
           v-model="password"
           class="input"
           type="password"
-          placeholder="Min. 6 characters"
+          :placeholder="t('setup.placeholder')"
           required
           minlength="6"
           autofocus
         />
-        <p class="form-hint">This will be your admin password for all future logins</p>
+        <p class="form-hint">{{ t('setup.hint') }}</p>
       </div>
 
       <div class="form-group mb-lg">
-        <label class="form-label">Confirm Password</label>
+        <label class="form-label">{{ t('setup.confirm_password') }}</label>
         <input
           v-model="confirm"
           class="input"
           type="password"
-          placeholder="Re-enter password"
+          :placeholder="t('setup.confirm_placeholder')"
           required
           minlength="6"
         />
       </div>
 
       <div v-if="error" class="alert alert-danger mb-md">{{ error }}</div>
-      <div v-if="success" class="alert alert-success mb-md">✓ Password set! Redirecting...</div>
+      <div v-if="success" class="alert alert-success mb-md"><Check :size="16" /> {{ t('setup.success') }}</div>
 
       <button class="btn btn-primary btn-lg w-full" type="submit" :disabled="loading || !isValid">
-        <span v-if="loading" class="spinner" />
-        {{ loading ? 'Setting up...' : 'Complete Setup' }}
+        <Loader2 v-if="loading" :size="16" class="animate-spin" />
+        {{ loading ? t('setup.setting_up') : t('setup.complete') }}
       </button>
     </form>
   </div>
@@ -47,8 +47,11 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
+import { Zap, Check, Loader2 } from '@lucide/vue'
 
+const { t } = useI18n()
 const router = useRouter()
 const auth = useAuthStore()
 
@@ -67,8 +70,8 @@ async function handleSetup() {
   error.value = ''
   if (!isValid.value) {
     error.value = password.value !== confirm.value
-      ? 'Passwords do not match'
-      : 'Password must be at least 6 characters'
+      ? t('setup.mismatch')
+      : t('setup.too_short')
     return
   }
 
@@ -78,7 +81,7 @@ async function handleSetup() {
     success.value = true
     setTimeout(() => router.push('/'), 800)
   } catch (e: any) {
-    error.value = e.response?.data?.error || e.message || 'Setup failed'
+    error.value = e.response?.data?.error || e.message || t('setup.failed')
   } finally {
     loading.value = false
   }
@@ -93,8 +96,10 @@ async function handleSetup() {
 }
 
 .setup-logo {
-  font-size: 3rem;
+  display: flex;
+  justify-content: center;
   margin-bottom: $spacing-sm;
+  color: $color-primary;
 }
 
 .form-label {

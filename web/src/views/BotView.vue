@@ -1,54 +1,56 @@
 <template>
   <div>
     <div class="card mb-lg">
-      <h3 class="mb-md">Telegram Bot</h3>
+      <h3 class="mb-md">{{ t('bot.title') }}</h3>
 
       <div class="status-row mb-md">
         <StatusBadge :variant="botStore.enabled ? 'success' : 'neutral'">
-          {{ botStore.enabled ? (botStore.running ? 'Running' : 'Configured') : 'Disabled' }}
+          {{ botStore.enabled ? (botStore.running ? t('dashboard.running') : t('bot.configured')) : t('secrets.disabled') }}
         </StatusBadge>
       </div>
 
       <div class="form-group mb-md">
-        <label class="form-label">Bot Token</label>
+        <label class="form-label">{{ t('bot.token') }}</label>
         <input v-model="form.token" class="input" placeholder="123456:ABC-DEF..." type="password" />
       </div>
       <div class="form-group mb-md">
-        <label class="form-label">Chat ID</label>
+        <label class="form-label">{{ t('bot.chat_id') }}</label>
         <div class="input-group">
           <input v-model="form.chatId" class="input" placeholder="-1001234567890" />
-          <button class="btn btn-secondary btn-sm" @click="handleDetectChatId">Detect</button>
+          <button class="btn btn-secondary btn-sm" @click="handleDetectChatId">{{ t('bot.detect') }}</button>
         </div>
       </div>
       <div class="form-row mb-md">
         <div class="form-group">
-          <label class="form-label">Report Interval (hours)</label>
+          <label class="form-label">{{ t('bot.interval') }}</label>
           <input v-model.number="form.interval" class="input" type="number" min="1" />
         </div>
         <div class="form-group">
-          <label class="form-label">Server Label</label>
+          <label class="form-label">{{ t('bot.server_label') }}</label>
           <input v-model="form.label" class="input" placeholder="My Server" />
         </div>
       </div>
 
       <div class="flex gap-sm">
         <button class="btn btn-primary" :disabled="botStore.loading" @click="handleSetup">
-          {{ botStore.enabled ? 'Update' : 'Setup' }}
+          <Loader2 v-if="botStore.loading" :size="16" class="animate-spin" />
+          {{ botStore.enabled ? t('bot.update') : t('bot.setup') }}
         </button>
         <button class="btn btn-secondary" :disabled="botStore.loading" @click="botStore.test()">
-          Send Test Message
+          <Loader2 v-if="botStore.loading" :size="16" class="animate-spin" />
+          {{ t('bot.test') }}
         </button>
-        <button v-if="botStore.enabled" class="btn btn-warning" @click="botStore.toggle(false)">Disable</button>
-        <button v-else class="btn btn-success" @click="botStore.toggle(true)">Enable</button>
+        <button v-if="botStore.enabled" class="btn btn-warning" :disabled="botStore.loading" @click="botStore.toggle(false)">{{ t('secrets.disable') }}</button>
+        <button v-else class="btn btn-success" :disabled="botStore.loading" @click="botStore.toggle(true)">{{ t('secrets.enable') }}</button>
       </div>
 
       <div v-if="botStore.message" class="alert alert-info mt-md">{{ botStore.message }}</div>
     </div>
 
     <div class="card">
-      <h3 class="mb-md">Available Commands</h3>
+      <h3 class="mb-md">{{ t('bot.commands') }}</h3>
       <div class="commands-list">
-        <div v-for="cmd in commands" :key="cmd.cmd" class="command-item">
+        <div v-for="cmd in localizedCommands" :key="cmd.cmd" class="command-item">
           <code>{{ cmd.cmd }}</code>
           <span class="text-muted">{{ cmd.desc }}</span>
         </div>
@@ -58,32 +60,35 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useBotStore, useConfigStore } from '@/stores'
+import { Loader2 } from '@lucide/vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 
+const { t } = useI18n()
 const botStore = useBotStore()
 const configStore = useConfigStore()
 
 const form = ref({ token: '', chatId: '', interval: 6, label: 'PopuGate' })
 
-const commands = [
-  { cmd: '/mp_status', desc: 'Proxy status' },
-  { cmd: '/mp_secrets', desc: 'List secrets' },
-  { cmd: '/mp_link [label]', desc: 'Proxy links + QR' },
-  { cmd: '/mp_add <label>', desc: 'Add secret' },
-  { cmd: '/mp_remove <label>', desc: 'Remove secret' },
-  { cmd: '/mp_rotate <label>', desc: 'Rotate secret' },
-  { cmd: '/mp_restart', desc: 'Restart proxy' },
-  { cmd: '/mp_enable <label>', desc: 'Enable secret' },
-  { cmd: '/mp_disable <label>', desc: 'Disable secret' },
-  { cmd: '/mp_health', desc: 'Health check' },
-  { cmd: '/mp_traffic', desc: 'Traffic report' },
-  { cmd: '/mp_update', desc: 'Version info' },
-  { cmd: '/mp_limits', desc: 'User limits' },
-  { cmd: '/mp_setlimit', desc: 'Set limits' },
-  { cmd: '/mp_upstreams', desc: 'List upstreams' },
-]
+const localizedCommands = computed(() => [
+  { cmd: '/mp_status', desc: t('bot.proxy_status') },
+  { cmd: '/mp_secrets', desc: t('bot.list_secrets') },
+  { cmd: '/mp_link [label]', desc: t('bot.proxy_links') },
+  { cmd: '/mp_add <label>', desc: t('bot.add_secret') },
+  { cmd: '/mp_remove <label>', desc: t('bot.remove_secret') },
+  { cmd: '/mp_rotate <label>', desc: t('bot.rotate_secret') },
+  { cmd: '/mp_restart', desc: t('bot.restart_proxy') },
+  { cmd: '/mp_enable <label>', desc: t('bot.enable_secret') },
+  { cmd: '/mp_disable <label>', desc: t('bot.disable_secret') },
+  { cmd: '/mp_health', desc: t('bot.health_check') },
+  { cmd: '/mp_traffic', desc: t('bot.traffic_report') },
+  { cmd: '/mp_update', desc: t('bot.version_info') },
+  { cmd: '/mp_limits', desc: t('bot.user_limits') },
+  { cmd: '/mp_setlimit', desc: t('bot.set_limits') },
+  { cmd: '/mp_upstreams', desc: t('bot.list_upstreams') },
+])
 
 async function handleSetup() {
   await botStore.setup(form.value.token, form.value.chatId, form.value.interval, form.value.label)

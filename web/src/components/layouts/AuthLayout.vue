@@ -1,6 +1,9 @@
 <template>
   <div class="auth-layout">
     <div class="auth-card">
+      <div class="auth-header">
+        <LanguageSwitcher />
+      </div>
       <router-view />
     </div>
   </div>
@@ -9,6 +12,7 @@
 
 <script setup lang="ts">
 import Toast from '@/components/common/Toast.vue'
+import LanguageSwitcher from '@/components/common/LanguageSwitcher.vue'
 </script>
 
 <style scoped lang="scss">
@@ -30,5 +34,11 @@ import Toast from '@/components/common/Toast.vue'
   padding: $spacing-2xl;
   width: 100%;
   max-width: 420px;
+}
+
+.auth-header {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: $spacing-lg;
 }
 </style>

@@ -1,41 +1,41 @@
 <template>
   <div>
     <div class="card mb-lg">
-      <h3 class="mb-md">Check for Updates</h3>
+      <h3 class="mb-md">{{ t('updates.check') }}</h3>
 
       <div class="status-row mb-md">
-        <span>Current: <code>v{{ updateStore.status?.current || '—' }}</code></span>
-        <span>Latest: <code>v{{ updateStore.status?.latest || '—' }}</code></span>
+        <span>{{ t('updates.current') }}: <code>v{{ updateStore.status?.current || '—' }}</code></span>
+        <span>{{ t('updates.latest') }}: <code>v{{ updateStore.status?.latest || '—' }}</code></span>
         <StatusBadge v-if="updateStore.status" :variant="updateStore.status.update_available ? 'warning' : 'success'">
-          {{ updateStore.status.update_available ? 'Update Available' : 'Up to Date' }}
+          {{ updateStore.status.update_available ? t('updates.available') : t('updates.up_to_date') }}
         </StatusBadge>
       </div>
 
       <div class="flex gap-sm">
         <button class="btn btn-primary" :disabled="updateStore.loading" @click="updateStore.check()">
-          {{ updateStore.loading ? 'Checking...' : 'Check' }}
+          <Loader2 v-if="updateStore.loading" :size="16" class="animate-spin" />
+          {{ updateStore.loading ? t('updates.checking') : t('updates.check_btn') }}
         </button>
         <button v-if="updateStore.status?.update_available" class="btn btn-warning"
                 :disabled="updateStore.applying" @click="handleApply">
-          {{ updateStore.applying ? 'Applying...' : 'Apply Update' }}
+          <Loader2 v-if="updateStore.applying" :size="16" class="animate-spin" />
+          {{ updateStore.applying ? t('updates.applying') : t('updates.apply') }}
         </button>
       </div>
 
       <div v-if="updateStore.error" class="alert alert-danger mt-md">{{ updateStore.error }}</div>
       <div v-if="updateStore.result" class="alert alert-success mt-md">
-        Updated from v{{ updateStore.result.previous_version }} to v{{ updateStore.result.new_version }}.
-        Restart the service to apply changes.
+        {{ t('updates.success', { old: updateStore.result.previous_version, new: updateStore.result.new_version }) }}
       </div>
     </div>
 
     <div class="card">
-      <h3 class="mb-md">Auto-Update</h3>
+      <h3 class="mb-md">{{ t('updates.auto_update') }}</h3>
       <p class="text-muted text-sm mb-md">
-        PopuGate checks for updates periodically via the scheduler. You can also manually check and apply updates here.
-        When applying an update, the binary is downloaded and the previous version is backed up.
+        {{ t('updates.maintenance_desc') }}
       </p>
       <div class="alert alert-info">
-        After applying an update, restart the service for changes to take effect.
+        {{ t('updates.apply_tip') }}
       </div>
     </div>
   </div>
@@ -43,13 +43,16 @@
 
 <script setup lang="ts">
 import { onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useUpdateStore } from '@/stores/update'
+import { Loader2 } from '@lucide/vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 
+const { t } = useI18n()
 const updateStore = useUpdateStore()
 
 async function handleApply() {
-  if (confirm('Apply the update? The service will need to be restarted.')) {
+  if (confirm(t('updates.confirm_apply'))) {
     await updateStore.apply()
   }
 }

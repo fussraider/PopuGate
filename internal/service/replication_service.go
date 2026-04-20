@@ -12,6 +12,7 @@ import (
 
 	"github.com/fussraider/PopuGate/internal/model"
 	"github.com/fussraider/PopuGate/internal/store"
+	"github.com/fussraider/PopuGate/pkg/logger"
 	"github.com/fussraider/PopuGate/pkg/sshutil"
 )
 
@@ -56,12 +57,16 @@ func (s *ReplicationService) SyncAll(ctx context.Context) []sshutil.SyncResult {
 		if result.Error != "" {
 			status = "error"
 		}
-		_ = s.slaves.UpdateStatus(ctx, sl.Host, status, time.Now().Unix())
+		if err := s.slaves.UpdateStatus(ctx, sl.Host, status, time.Now().Unix()); err != nil {
+			logger.WithScope("replication").Warnf("update status for %s: %v", sl.Host, err)
+		}
 
 		// Restart remote container if files changed
 		if result.FilesSent > 0 && settings.ReplicationRestartOnChange {
 			cfg := s.buildSyncConfig(settings, sl)
-			_ = sshutil.RestartRemote(ctx, cfg, model.ContainerName)
+			if err := sshutil.RestartRemote(ctx, cfg, model.ContainerName); err != nil {
+				logger.WithScope("replication").Warnf("restart remote %s: %v", sl.Host, err)
+			}
 		}
 	}
 
@@ -85,7 +90,9 @@ func (s *ReplicationService) SyncSlave(ctx context.Context, host string) (*sshut
 	if result.Error != "" {
 		status = "error"
 	}
-	_ = s.slaves.UpdateStatus(ctx, host, status, time.Now().Unix())
+	if err := s.slaves.UpdateStatus(ctx, host, status, time.Now().Unix()); err != nil {
+		logger.WithScope("replication").Warnf("update status for %s: %v", host, err)
+	}
 
 	return &result, nil
 }

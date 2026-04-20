@@ -11,6 +11,8 @@ import (
 
 var log = logger.WithScope("scheduler")
 
+const defaultTaskTimeout = 30 * time.Second
+
 // Scheduler runs periodic tasks.
 type Scheduler struct {
 	cron *cron.Cron
@@ -39,7 +41,7 @@ func (s *Scheduler) Start(tasks []Task) {
 		}
 		task := t // capture
 		_, err := s.cron.AddFunc(task.Schedule, func() {
-			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), defaultTaskTimeout)
 			defer cancel()
 
 			if err := task.Fn(ctx); err != nil {

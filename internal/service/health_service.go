@@ -21,6 +21,7 @@ type HealthService struct {
 	settings     *store.SettingsStore
 	instances    *store.InstanceStore
 	containerSvc *ContainerService
+	client       *http.Client
 }
 
 // NewHealthService creates a new HealthService.
@@ -29,6 +30,7 @@ func NewHealthService(docker *dockerutil.DockerClient, settings *store.SettingsS
 		docker:    docker,
 		settings:  settings,
 		instances: instances,
+		client:    &http.Client{Timeout: 2 * time.Second},
 	}
 }
 
@@ -167,8 +169,7 @@ func (h *HealthService) isMetricsResponding(port int) bool {
 	if _, err := os.Stat("/.dockerenv"); err == nil {
 		addr = "host.docker.internal"
 	}
-	client := &http.Client{Timeout: 2 * time.Second}
-	resp, err := client.Get(fmt.Sprintf("http://%s:%d/metrics", addr, port))
+	resp, err := h.client.Get(fmt.Sprintf("http://%s:%d/metrics", addr, port))
 	if err != nil {
 		return false
 	}

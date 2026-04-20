@@ -7,10 +7,10 @@
     <aside :class="['sidebar', { open: sidebarOpen }]">
       <div class="sidebar-header">
         <router-link to="/" class="logo" @click="sidebarOpen = false">
-          <span class="logo-icon">⚡</span>
+          <img src="@/assets/images/icons/icon-180x180.png" alt="PopuGate" class="logo-img" />
           <span class="logo-text">PopuGate</span>
         </router-link>
-        <button class="sidebar-close" @click="sidebarOpen = false">&times;</button>
+        <button class="sidebar-close" @click="sidebarOpen = false"><X :size="20" /></button>
       </div>
       <nav class="sidebar-nav">
         <router-link
@@ -22,7 +22,7 @@
           exact-active-class="active"
           @click="sidebarOpen = false"
         >
-          <span class="nav-icon">{{ item.icon }}</span>
+          <component :is="item.icon" class="nav-icon" :size="18" />
           <span class="nav-label">{{ item.label }}</span>
         </router-link>
       </nav>
@@ -34,12 +34,13 @@
     <!-- Main Content -->
     <div class="main-content">
       <header class="topbar">
-        <button class="hamburger" @click="sidebarOpen = true">☰</button>
+        <button class="hamburger" @click="sidebarOpen = true"><Menu :size="22" /></button>
         <div class="topbar-title">
           <h2>{{ pageTitle }}</h2>
         </div>
         <div class="topbar-actions">
-          <button class="btn btn-ghost btn-sm" @click="handleLogout">Logout</button>
+          <LanguageSwitcher />
+          <button class="btn btn-ghost btn-sm" @click="handleLogout"><LogOut :size="16" /> {{ t('common.logout') }}</button>
         </div>
       </header>
       <main class="content">
@@ -58,8 +59,17 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import Toast from '@/components/common/Toast.vue'
+import LanguageSwitcher from '@/components/common/LanguageSwitcher.vue'
+import {
+  LayoutDashboard, KeyRound, GitBranch, Server, Play,
+  Container, Globe, TrendingUp, Bot, RefreshCw, Package,
+  Save, Settings, Monitor, Menu, LogOut, X,
+} from '@lucide/vue'
+
+const { t } = useI18n()
 
 // Version info injected at build time by Vite
 declare const __APP_VERSION__: string
@@ -73,30 +83,30 @@ const auth = useAuthStore()
 
 const sidebarOpen = ref(false)
 
-const navItems = [
-  { path: '/',            icon: '📊', label: 'Dashboard'   },
-  { path: '/secrets',     icon: '🔑', label: 'Secrets'     },
-  { path: '/upstreams',   icon: '🔀', label: 'Upstreams'   },
-  { path: '/instances',   icon: '🖥',  label: 'Instances'   },
-  { path: '/proxy',       icon: '▶️',  label: 'Proxy'       },
-  { path: '/docker',      icon: '🐳', label: 'Docker'      },
-  { path: '/geoblock',    icon: '🌍', label: 'Geoblock'    },
-  { path: '/traffic',     icon: '📈', label: 'Traffic'     },
-  { path: '/bot',         icon: '🤖', label: 'Bot'         },
-  { path: '/replication', icon: '🔄', label: 'Replication' },
-  { path: '/updates',     icon: '📦', label: 'Updates'     },
-  { path: '/backups',     icon: '💾', label: 'Backups'     },
-  { path: '/settings',    icon: '⚙️',  label: 'Settings'    },
-  { path: '/system',      icon: '🖥️',  label: 'System'      },
-]
+const navItems = computed(() => [
+  { path: '/',            icon: LayoutDashboard, label: t('common.dashboard')   },
+  { path: '/secrets',     icon: KeyRound,        label: t('common.secrets')     },
+  { path: '/upstreams',   icon: GitBranch,       label: t('common.upstreams')   },
+  { path: '/instances',   icon: Server,           label: t('common.instances')   },
+  { path: '/proxy',       icon: Play,             label: t('common.proxy')       },
+  { path: '/docker',      icon: Container,        label: t('common.docker')      },
+  { path: '/geoblock',    icon: Globe,            label: t('common.geoblock')    },
+  { path: '/traffic',     icon: TrendingUp,       label: t('common.traffic')     },
+  { path: '/bot',         icon: Bot,              label: t('common.bot')         },
+  { path: '/replication', icon: RefreshCw,        label: t('common.replication') },
+  { path: '/updates',     icon: Package,          label: t('common.updates')     },
+  { path: '/backups',     icon: Save,             label: t('common.backups')     },
+  { path: '/settings',    icon: Settings,         label: t('common.settings')    },
+  { path: '/system',      icon: Monitor,          label: t('common.system')      },
+])
 
 // pageTitle берётся из navItems — единственный источник правды
 const pageTitle = computed(() => {
-  const current = navItems.find((item) => {
+  const current = navItems.value.find((item) => {
     if (item.path === '/') return route.path === '/'
     return route.path.startsWith(item.path)
   })
-  return current?.label ?? 'Dashboard'
+  return current?.label ?? t('common.dashboard')
 })
 
 async function handleLogout() {
@@ -161,13 +171,19 @@ async function handleLogout() {
   font-size: $font-size-lg;
 }
 
+.logo-img {
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+}
+
 .sidebar-close {
   display: none;
   background: none;
   border: none;
   color: $text-inverse;
-  font-size: 1.5rem;
   cursor: pointer;
+  padding: $spacing-xs;
 
   @media (max-width: 768px) { display: block; }
 }
@@ -200,7 +216,7 @@ async function handleLogout() {
   }
 }
 
-.nav-icon { font-size: 1.1rem; width: 24px; text-align: center; }
+.nav-icon { flex-shrink: 0; }
 .nav-label { white-space: nowrap; }
 
 .sidebar-footer {
@@ -253,7 +269,6 @@ async function handleLogout() {
   display: none;
   background: none;
   border: none;
-  font-size: 1.5rem;
   cursor: pointer;
   padding: $spacing-sm;
 

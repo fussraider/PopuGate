@@ -214,6 +214,12 @@ func (b *Bot) handleUpdate(ctx context.Context, update TelegramUpdate) {
 	}
 	text := strings.TrimSpace(update.Message.Text)
 
+	if !strings.HasPrefix(text, "/mp_") {
+		return
+	}
+
+	log.Debugf("command from %s: %s", update.Message.From.Username, text)
+
 	// Strip @botname suffix from commands
 	if idx := strings.Index(text, "@"); idx > 0 && strings.HasPrefix(text, "/mp_") {
 		text = text[:idx]

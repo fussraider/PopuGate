@@ -2,20 +2,20 @@
   <div>
     <!-- Global Traffic -->
     <div class="card mb-lg">
-      <h3 class="mb-md">Global Traffic</h3>
-      <div v-if="trafficStore.loading" class="text-muted">Loading...</div>
+      <h3 class="mb-md">{{ t('traffic.title') }}</h3>
+      <div v-if="trafficStore.loading" class="text-muted">{{ t('common.loading') }}</div>
       <template v-else-if="trafficStore.global">
         <div class="traffic-stats">
           <div class="traffic-item">
-            <span class="traffic-label">↓ Download</span>
+            <span class="traffic-label">↓ {{ t('traffic.download') }}</span>
             <span class="traffic-value">{{ formatBytes(trafficStore.global.bytes_in) }}</span>
           </div>
           <div class="traffic-item">
-            <span class="traffic-label">↑ Upload</span>
+            <span class="traffic-label">↑ {{ t('traffic.upload') }}</span>
             <span class="traffic-value">{{ formatBytes(trafficStore.global.bytes_out) }}</span>
           </div>
           <div class="traffic-item">
-            <span class="traffic-label">Total</span>
+            <span class="traffic-label">{{ t('traffic.total') }}</span>
             <span class="traffic-value">{{ formatBytes(trafficStore.global.bytes_in + trafficStore.global.bytes_out) }}</span>
           </div>
         </div>
@@ -25,22 +25,23 @@
     <!-- Live Metrics -->
     <div class="card mb-lg">
       <div class="flex justify-between items-center mb-md">
-        <h3>Live Metrics</h3>
+        <h3>{{ t('traffic.live_metrics') }}</h3>
         <div v-if="proxyRunning" class="flex items-center gap-md">
-          <ToggleSwitch v-model="autoRefresh" label="Auto-refresh" />
+          <ToggleSwitch v-model="autoRefresh" :label="t('traffic.auto_refresh')" />
           <button class="btn btn-secondary btn-sm" :disabled="trafficStore.liveLoading" @click="trafficStore.loadLive()">
-            {{ trafficStore.liveLoading ? 'Loading...' : 'Refresh' }}
+            <Loader2 v-if="trafficStore.liveLoading" :size="14" class="animate-spin" />
+            {{ trafficStore.liveLoading ? t('common.loading') : t('traffic.refresh') }}
           </button>
         </div>
       </div>
 
       <!-- Proxy not running -->
-      <EmptyState v-if="!proxyRunning" icon="▪" message="Proxy engine is not running. Start the proxy to see live metrics." />
+      <EmptyState v-if="!proxyRunning" :icon="Activity" :message="t('traffic.proxy_not_running')" />
 
       <!-- Proxy running but metrics not available (engine starting up) -->
       <div v-else-if="trafficStore.liveError && !trafficStore.live" class="empty-state">
-        <div class="empty-icon status-waiting">⏳</div>
-        <p class="text-muted">Engine is starting up, waiting for metrics...</p>
+        <div class="empty-icon"><Loader2 :size="48" :stroke-width="1.2" class="animate-spin" /></div>
+        <p class="text-muted">{{ t('traffic.engine_starting') }}</p>
       </div>
 
       <!-- Proxy running, metrics loaded -->
@@ -48,15 +49,30 @@
         <!-- Connections -->
         <div class="traffic-stats mb-lg">
           <div class="traffic-item">
-            <span class="traffic-label">Active Connections</span>
+            <div class="traffic-label">
+              {{ t('traffic.active_conns') }}
+              <Tooltip :text="t('traffic.active_conns_tip')">
+                <Info :size="12" class="ml-xs" />
+              </Tooltip>
+            </div>
             <span class="traffic-value">{{ trafficStore.live.connections }}</span>
           </div>
           <div class="traffic-item">
-            <span class="traffic-label">Total Connections</span>
+            <div class="traffic-label">
+              {{ t('traffic.total_conns') }}
+              <Tooltip :text="t('traffic.total_conns_tip')">
+                <Info :size="12" class="ml-xs" />
+              </Tooltip>
+            </div>
             <span class="traffic-value">{{ formatInt(trafficStore.live.connections_total) }}</span>
           </div>
           <div class="traffic-item">
-            <span class="traffic-label">Bad Connections</span>
+            <div class="traffic-label">
+              {{ t('traffic.bad_conns') }}
+              <Tooltip :text="t('traffic.bad_conns_tip')">
+                <Info :size="12" class="ml-xs" />
+              </Tooltip>
+            </div>
             <span class="traffic-value">{{ formatInt(trafficStore.live.connections_bad_total) }}</span>
           </div>
         </div>
@@ -64,19 +80,39 @@
         <!-- Connection Breakdown -->
         <div class="traffic-stats mb-lg">
           <div class="traffic-item">
-            <span class="traffic-label">ME Connections</span>
+            <div class="traffic-label">
+              {{ t('traffic.me_conns') }}
+              <Tooltip :text="t('traffic.me_conns_tip')">
+                <Info :size="12" class="ml-xs" />
+              </Tooltip>
+            </div>
             <span class="traffic-value">{{ trafficStore.live.connections_me_current }}</span>
           </div>
           <div class="traffic-item">
-            <span class="traffic-label">Direct Connections</span>
+            <div class="traffic-label">
+              {{ t('traffic.direct_conns') }}
+              <Tooltip :text="t('traffic.direct_conns_tip')">
+                <Info :size="12" class="ml-xs" />
+              </Tooltip>
+            </div>
             <span class="traffic-value">{{ trafficStore.live.connections_direct_current }}</span>
           </div>
           <div class="traffic-item">
-            <span class="traffic-label">ME Writers Active</span>
+            <div class="traffic-label">
+              {{ t('traffic.me_writers_active') }}
+              <Tooltip :text="t('traffic.me_writers_active_tip')">
+                <Info :size="12" class="ml-xs" />
+              </Tooltip>
+            </div>
             <span class="traffic-value">{{ trafficStore.live.me_writers_active }}</span>
           </div>
           <div class="traffic-item">
-            <span class="traffic-label">ME Writers Warm</span>
+            <div class="traffic-label">
+              {{ t('traffic.me_writers_warm') }}
+              <Tooltip :text="t('traffic.me_writers_warm_tip')">
+                <Info :size="12" class="ml-xs" />
+              </Tooltip>
+            </div>
             <span class="traffic-value">{{ trafficStore.live.me_writers_warm }}</span>
           </div>
         </div>
@@ -84,19 +120,39 @@
         <!-- Upstream Health -->
         <div class="traffic-stats mb-lg">
           <div class="traffic-item">
-            <span class="traffic-label">Upstream Attempts</span>
+            <div class="traffic-label">
+              {{ t('traffic.upstream_attempts') }}
+              <Tooltip :text="t('traffic.upstream_attempts_tip')">
+                <Info :size="12" class="ml-xs" />
+              </Tooltip>
+            </div>
             <span class="traffic-value">{{ formatInt(trafficStore.live.upstream_attempt_total) }}</span>
           </div>
           <div class="traffic-item">
-            <span class="traffic-label">Upstream Success</span>
+            <div class="traffic-label">
+              {{ t('traffic.upstream_success') }}
+              <Tooltip :text="t('traffic.upstream_success_tip')">
+                <Info :size="12" class="ml-xs" />
+              </Tooltip>
+            </div>
             <span class="traffic-value">{{ formatInt(trafficStore.live.upstream_success_total) }}</span>
           </div>
           <div class="traffic-item">
-            <span class="traffic-label">Upstream Failures</span>
+            <div class="traffic-label">
+              {{ t('traffic.upstream_failures') }}
+              <Tooltip :text="t('traffic.upstream_failures_tip')">
+                <Info :size="12" class="ml-xs" />
+              </Tooltip>
+            </div>
             <span class="traffic-value">{{ formatInt(trafficStore.live.upstream_fail_total) }}</span>
           </div>
           <div class="traffic-item">
-            <span class="traffic-label">Upstream Success Rate</span>
+            <div class="traffic-label">
+              {{ t('traffic.upstream_success_rate') }}
+              <Tooltip :text="t('traffic.upstream_success_rate_tip')">
+                <Info :size="12" class="ml-xs" />
+              </Tooltip>
+            </div>
             <span class="traffic-value">{{ upstreamSuccessRate }}%</span>
           </div>
         </div>
@@ -106,10 +162,10 @@
           <table class="table">
             <thead>
               <tr>
-                <th>User</th>
-                <th>From Client</th>
-                <th>To Client</th>
-                <th>Active</th>
+                <th>{{ t('traffic.user_table.user') }}</th>
+                <th>{{ t('traffic.user_table.in') }}</th>
+                <th>{{ t('traffic.user_table.out') }}</th>
+                <th>{{ t('dashboard.connections') }}</th>
                 <th>Unique IPs</th>
               </tr>
             </thead>
@@ -124,24 +180,24 @@
             </tbody>
           </table>
         </div>
-        <div v-else class="text-muted text-sm">No active user metrics available.</div>
+        <div v-else class="text-muted text-sm">{{ t('traffic.no_user_metrics') }}</div>
       </template>
 
       <!-- Proxy running, auto-refresh off, no data yet -->
-      <div v-else class="text-muted text-sm">Click "Refresh" or enable auto-refresh to load live metrics.</div>
+      <div v-else class="text-muted text-sm">{{ t('traffic.no_traffic') }}</div>
     </div>
 
     <!-- Per-User Traffic -->
     <div class="card">
-      <h3 class="mb-md">Per-User Traffic</h3>
+      <h3 class="mb-md">{{ t('traffic.per_user_traffic') }}</h3>
       <div v-if="trafficStore.users && trafficStore.users.length" class="table-wrapper">
         <table class="table">
           <thead>
             <tr>
-              <th>User</th>
-              <th>↓ In</th>
-              <th>↑ Out</th>
-              <th>Total</th>
+              <th>{{ t('traffic.user_table.user') }}</th>
+              <th>{{ t('traffic.user_table.in') }}</th>
+              <th>{{ t('traffic.user_table.out') }}</th>
+              <th>{{ t('traffic.user_table.total') }}</th>
             </tr>
           </thead>
           <tbody>
@@ -154,19 +210,23 @@
           </tbody>
         </table>
       </div>
-      <EmptyState v-else icon="📈" message="No traffic data yet. Start the proxy and wait for traffic to flow." />
+      <EmptyState v-else :icon="BarChart3" :message="t('traffic.no_traffic')" />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, watch, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useTrafficStore } from '@/stores/traffic'
 import { useProxyStore } from '@/stores/proxy'
 import { formatBytes } from '@/utils/format'
 import ToggleSwitch from '@/components/common/ToggleSwitch.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
+import Tooltip from '@/components/common/Tooltip.vue'
+import { Activity, Loader2, BarChart3, Info } from '@lucide/vue'
 
+const { t } = useI18n()
 const trafficStore = useTrafficStore()
 const proxyStore = useProxyStore()
 
@@ -218,24 +278,3 @@ onUnmounted(() => {
   trafficStore.stopAutoRefresh()
 })
 </script>
-
-<style scoped lang="scss">
-@use '@/assets/scss/variables' as *;
-
-.traffic-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: $spacing-md; }
-.traffic-item { display: flex; flex-direction: column; gap: $spacing-xs; }
-.traffic-label { font-size: $font-size-xs; color: $text-muted; text-transform: uppercase; }
-.traffic-value { font-size: $font-size-xl; font-weight: $font-weight-bold; }
-
-.status-waiting {
-  color: #{$text-secondary};
-  font-size: 2.5rem;
-  line-height: 1;
-  animation: pulse 1.5s ease-in-out infinite;
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
-}
-</style>

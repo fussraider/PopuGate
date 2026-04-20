@@ -132,10 +132,10 @@ export const instancesApi = {
 // ─── Proxy Control ─────────────────────────────────────────────
 
 export const proxyApi = {
-  start: () => api.post('/proxy/start'),
-  stop: () => api.post('/proxy/stop'),
-  restart: () => api.post('/proxy/restart'),
-  reload: () => api.post('/proxy/reload'),
+  start: () => api.post('/proxy/start', {}, { timeout: 300000 }),
+  stop: () => api.post('/proxy/stop', {}, { timeout: 300000 }),
+  restart: () => api.post('/proxy/restart', {}, { timeout: 300000 }),
+  reload: () => api.post('/proxy/reload', {}, { timeout: 120000 }),
   status: () => api.get<ProxyStatus>('/proxy/status').then((r) => r.data),
   logs: (tail = '100', follow = false) =>
     api.get<string>(`/proxy/logs?tail=${tail}&follow=${follow}`).then((r) => r.data),
@@ -144,11 +144,11 @@ export const proxyApi = {
 // ─── Docker / Engine ───────────────────────────────────────────
 
 export const dockerApi = {
-  install: () => api.post('/docker/install'),
+  install: () => api.post('/docker/install', {}, { timeout: 600000 }),
   status: () => api.get<DockerStatus>('/docker/status').then((r) => r.data),
   engineStatus: () => api.get<EngineStatus>('/engine/status').then((r) => r.data),
   build: (force = false) =>
-    api.post<BuildResult>('/engine/build', { force }).then((r) => r.data),
+    api.post<BuildResult>('/engine/build', { force }, { timeout: 1800000 }).then((r) => r.data),
 }
 
 // ─── Geoblock ──────────────────────────────────────────────────
@@ -167,7 +167,7 @@ export const geoblockApi = {
 export const trafficApi = {
   get: () =>
     api.get<{ global: GlobalTraffic; users: UserTraffic[] }>('/traffic').then((r) => r.data),
-  getLive: () => api.get<LiveMetrics>('/traffic/live').then((r) => r.data),
+  getLive: () => api.get<LiveMetrics>('/traffic/live', { _silent: true } as any).then((r) => r.data),
   getUser: (label: string) =>
     api.get<UserTraffic>(`/traffic/${label}`).then((r) => r.data),
 }
@@ -193,7 +193,7 @@ export const replicationApi = {
   status: () => api.get('/replication/status').then((r) => r.data),
 
   setup: (data: { role: string; sync_interval?: number }) =>
-    api.post('/replication/setup', data),
+    api.post('/replication/setup', data, { timeout: 120000 }),
 
   addSlave: (host: string, port: number, label: string) =>
     api.post<Slave>('/replication/slaves', { host, port, label }).then((r) => r.data),
@@ -202,29 +202,29 @@ export const replicationApi = {
 
   listSlaves: () => api.get<Slave[]>('/replication/slaves').then((r) => r.data),
 
-  sync: (host: string) => api.post<SyncResult>('/replication/sync', { host }).then((r) => r.data),
+  sync: (host: string) => api.post<SyncResult>('/replication/sync', { host }, { timeout: 300000 }).then((r) => r.data),
 
   test: (host: string) =>
-    api.post<SlaveTestResult>('/replication/test', { host }).then((r) => r.data),
+    api.post<SlaveTestResult>('/replication/test', { host }, { timeout: 120000 }).then((r) => r.data),
 
-  sshKeygen: () => api.post('/replication/ssh-keygen').then((r) => r.data),
+  sshKeygen: () => api.post('/replication/ssh-keygen', {}, { timeout: 120000 }).then((r) => r.data),
 }
 
 // ─── Update ────────────────────────────────────────────────────
 
 export const updateApi = {
   check: () => api.get<UpdateStatus>('/update/check').then((r) => r.data),
-  apply: () => api.post<UpdateResult>('/update/apply').then((r) => r.data),
+  apply: () => api.post<UpdateResult>('/update/apply', {}, { timeout: 300000 }).then((r) => r.data),
 }
 
 // ─── Backup ────────────────────────────────────────────────────
 
 export const backupApi = {
   list: () => api.get<BackupInfo[]>('/backups').then((r) => r.data),
-  create: (label?: string) => api.post('/backups', { label }),
-  restore: (filename: string) => api.post('/backups/restore', { filename }),
+  create: (label?: string) => api.post('/backups', { label }, { timeout: 300000 }),
+  restore: (filename: string) => api.post('/backups/restore', { filename }, { timeout: 300000 }),
   download: (filename: string) =>
-    api.get(`/backups/download/${filename}`, { responseType: 'blob' }).then((r) => r.data),
+    api.get(`/backups/download/${filename}`, { responseType: 'blob', timeout: 300000 }).then((r) => r.data),
   delete: (filename: string) => api.delete(`/backups/${filename}`),
 }
 
@@ -232,12 +232,12 @@ export const backupApi = {
 
 export const systemApi = {
   getOS: () => api.get<OSType>('/system/os').then((r) => r.data),
-  installService: () => api.post('/system/service/install'),
-  uninstallService: () => api.delete('/system/service/uninstall'),
+  installService: () => api.post('/system/service/install', {}, { timeout: 300000 }),
+  uninstallService: () => api.delete('/system/service/uninstall', { timeout: 120000 }),
   serviceStatus: () =>
     api.get<ServiceStatus>('/system/service/status').then((r) => r.data),
-  restartService: () => api.post('/system/service/restart'),
-  reloadService: () => api.post('/system/service/reload'),
+  restartService: () => api.post('/system/service/restart', {}, { timeout: 120000 }),
+  reloadService: () => api.post('/system/service/reload', {}, { timeout: 120000 }),
 }
 
 // ─── Health ────────────────────────────────────────────────────

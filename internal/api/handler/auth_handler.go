@@ -142,7 +142,7 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 		if claims, ok := token.Claims.(jwt.MapClaims); ok {
 			if jti, ok := claims["jti"].(string); ok {
 				if exp, ok := claims["exp"].(float64); ok {
-					_ = h.blocklist.Add(ctx, jti, int64(exp))
+					_ = h.blocklist.Add(ctx, jti, int64(exp)) // best-effort: log error in future
 				}
 			}
 		}

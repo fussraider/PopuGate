@@ -29,7 +29,9 @@ type BackupStore struct {
 // NewBackupStore creates a new BackupStore.
 func NewBackupStore(baseDir string) *BackupStore {
 	dir := filepath.Join(baseDir, "backups")
-	_ = os.MkdirAll(dir, 0755)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return &BackupStore{baseDir: baseDir, backupsDir: dir}
+	}
 	return &BackupStore{
 		baseDir:    baseDir,
 		backupsDir: dir,

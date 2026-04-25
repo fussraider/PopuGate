@@ -6,6 +6,8 @@ import type {
   Secret,
   SecretWithLink,
   Upstream,
+  NetInterface,
+  UpstreamTestResult,
   Instance,
   Slave,
   SlaveTestResult,
@@ -108,6 +110,9 @@ export const secretsApi = {
 export const upstreamsApi = {
   list: () => api.get<Upstream[]>('/upstreams').then((r) => r.data),
 
+  interfaces: () =>
+    api.get<NetInterface[]>('/upstreams/interfaces').then((r) => r.data),
+
   add: (data: Omit<Upstream, 'id'>) => api.post<Upstream>('/upstreams', data).then((r) => r.data),
 
   remove: (name: string) => api.delete(`/upstreams/${name}`),
@@ -116,6 +121,9 @@ export const upstreamsApi = {
     api.put(`/upstreams/${name}/toggle`, { enabled }),
 
   test: (name: string) => api.post(`/upstreams/${name}/test`),
+
+  testConfig: (data: { type: string; address?: string; username?: string; password?: string; iface?: string }) =>
+    api.post<UpstreamTestResult>('/upstreams/test', data).then((r) => r.data),
 }
 
 // ─── Instances ─────────────────────────────────────────────────

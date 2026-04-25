@@ -96,9 +96,10 @@ func GetLevel() Level {
 
 func write(l Level, scope string, format string, args ...any) {
 	mu.Lock()
-	defer mu.Unlock()
+	currentLevel := level
+	mu.Unlock()
 
-	if l < level {
+	if l < currentLevel {
 		return
 	}
 
@@ -110,6 +111,7 @@ func write(l Level, scope string, format string, args ...any) {
 		out = os.Stderr
 	}
 
+	mu.Lock()
 	if noColor {
 		if scope != "" {
 			fmt.Fprintf(out, "%-5s %s [%s] %s\n", l.String(), ts, scope, msg)
@@ -125,9 +127,10 @@ func write(l Level, scope string, format string, args ...any) {
 			fmt.Fprintf(out, "%s %s%s %s\n", emoji, clr, ts, msg)
 		}
 	}
+	mu.Unlock()
 
 	if l == LevelFatal {
-		os.Exit(1)
+		panic(msg)
 	}
 }
 

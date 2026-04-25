@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -58,23 +59,23 @@ type TimeoutsConfig struct {
 }
 
 type CensorshipConfig struct {
-	TLSDomain       string `toml:"tls_domain"`
+	TLSDomain        string `toml:"tls_domain"`
 	UnknownSNIAction string `toml:"unknown_sni_action"`
-	Mask            bool   `toml:"mask"`
-	MaskPort        int    `toml:"mask_port"`
-	MaskHost        string `toml:"mask_host,omitempty"`
-	FakeCertLen     int    `toml:"fake_cert_len"`
+	Mask             bool   `toml:"mask"`
+	MaskPort         int    `toml:"mask_port"`
+	MaskHost         string `toml:"mask_host,omitempty"`
+	FakeCertLen      int    `toml:"fake_cert_len"`
 }
 
 type AccessConfig struct {
-	ReplayCheckLen  int               `toml:"replay_check_len"`
-	ReplayWindowSecs int              `toml:"replay_window_secs"`
-	IgnoreTimeSkew  bool              `toml:"ignore_time_skew"`
-	Users           map[string]string `toml:"users"`
-	UserMaxTCPConns map[string]int    `toml:"user_max_tcp_conns,omitempty"`
-	UserMaxUniqueIPs map[string]int   `toml:"user_max_unique_ips,omitempty"`
-	UserDataQuota   map[string]int64  `toml:"user_data_quota,omitempty"`
-	UserExpirations map[string]string `toml:"user_expirations,omitempty"`
+	ReplayCheckLen   int               `toml:"replay_check_len"`
+	ReplayWindowSecs int               `toml:"replay_window_secs"`
+	IgnoreTimeSkew   bool              `toml:"ignore_time_skew"`
+	Users            map[string]string `toml:"users"`
+	UserMaxTCPConns  map[string]int    `toml:"user_max_tcp_conns,omitempty"`
+	UserMaxUniqueIPs map[string]int    `toml:"user_max_unique_ips,omitempty"`
+	UserDataQuota    map[string]int64  `toml:"user_data_quota,omitempty"`
+	UserExpirations  map[string]string `toml:"user_expirations,omitempty"`
 }
 
 type UpstreamConfig struct {
@@ -97,11 +98,11 @@ type ConfigParams struct {
 
 // SecretEntry represents a secret for TOML generation.
 type SecretEntry struct {
-	Label     string
-	SecretKey string
-	Enabled   bool
-	MaxConns  int
-	MaxIPs    int
+	Label      string
+	SecretKey  string
+	Enabled    bool
+	MaxConns   int
+	MaxIPs     int
 	QuotaBytes int64
 	ExpiresAt  string
 }
@@ -338,40 +339,40 @@ func renderTOML(cfg *TelemtConfig) string {
 
 	// [access.users]
 	b.WriteString("[access.users]\n")
-	for label, key := range cfg.Access.Users {
-		b.WriteString(fmt.Sprintf("%s = %q\n", label, key))
+	for _, label := range sortedKeys(cfg.Access.Users) {
+		b.WriteString(fmt.Sprintf("%s = %q\n", label, cfg.Access.Users[label]))
 	}
 	b.WriteString("\n")
 
 	// Per-user limits
 	if len(cfg.Access.UserMaxTCPConns) > 0 {
 		b.WriteString("[access.user_max_tcp_conns]\n")
-		for label, v := range cfg.Access.UserMaxTCPConns {
-			b.WriteString(fmt.Sprintf("%s = %d\n", label, v))
+		for _, label := range sortedKeysInt(cfg.Access.UserMaxTCPConns) {
+			b.WriteString(fmt.Sprintf("%s = %d\n", label, cfg.Access.UserMaxTCPConns[label]))
 		}
 		b.WriteString("\n")
 	}
 
 	if len(cfg.Access.UserMaxUniqueIPs) > 0 {
 		b.WriteString("[access.user_max_unique_ips]\n")
-		for label, v := range cfg.Access.UserMaxUniqueIPs {
-			b.WriteString(fmt.Sprintf("%s = %d\n", label, v))
+		for _, label := range sortedKeysInt(cfg.Access.UserMaxUniqueIPs) {
+			b.WriteString(fmt.Sprintf("%s = %d\n", label, cfg.Access.UserMaxUniqueIPs[label]))
 		}
 		b.WriteString("\n")
 	}
 
 	if len(cfg.Access.UserDataQuota) > 0 {
 		b.WriteString("[access.user_data_quota]\n")
-		for label, v := range cfg.Access.UserDataQuota {
-			b.WriteString(fmt.Sprintf("%s = %d\n", label, v))
+		for _, label := range sortedKeysInt64(cfg.Access.UserDataQuota) {
+			b.WriteString(fmt.Sprintf("%s = %d\n", label, cfg.Access.UserDataQuota[label]))
 		}
 		b.WriteString("\n")
 	}
 
 	if len(cfg.Access.UserExpirations) > 0 {
 		b.WriteString("[access.user_expirations]\n")
-		for label, v := range cfg.Access.UserExpirations {
-			b.WriteString(fmt.Sprintf("%s = %q\n", label, v))
+		for _, label := range sortedKeysStr(cfg.Access.UserExpirations) {
+			b.WriteString(fmt.Sprintf("%s = %q\n", label, cfg.Access.UserExpirations[label]))
 		}
 		b.WriteString("\n")
 	}
@@ -433,4 +434,40 @@ func parseCIDRList(s string) []string {
 		}
 	}
 	return result
+}
+
+func sortedKeys(m map[string]string) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func sortedKeysInt(m map[string]int) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func sortedKeysInt64(m map[string]int64) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func sortedKeysStr(m map[string]string) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }

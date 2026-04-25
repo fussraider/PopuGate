@@ -30,8 +30,14 @@ func GenerateEd25519Key(privateKeyPath string) (string, error) {
 	if err := os.MkdirAll(filepath.Dir(privateKeyPath), 0700); err != nil {
 		return "", fmt.Errorf("create key directory: %w", err)
 	}
-	if err := os.WriteFile(privateKeyPath, privPEM, 0600); err != nil {
+	// Atomic write: temp file then rename
+	tmpPath := privateKeyPath + ".tmp"
+	if err := os.WriteFile(tmpPath, privPEM, 0600); err != nil {
 		return "", fmt.Errorf("write private key: %w", err)
+	}
+	if err := os.Rename(tmpPath, privateKeyPath); err != nil {
+		os.Remove(tmpPath)
+		return "", fmt.Errorf("rename private key: %w", err)
 	}
 
 	// Public key
@@ -41,8 +47,14 @@ func GenerateEd25519Key(privateKeyPath string) (string, error) {
 	}
 	pubStr := string(ssh.MarshalAuthorizedKey(pubKey))
 
-	if err := os.WriteFile(privateKeyPath+".pub", []byte(pubStr), 0644); err != nil {
+	pubPath := privateKeyPath + ".pub"
+	tmpPubPath := pubPath + ".tmp"
+	if err := os.WriteFile(tmpPubPath, []byte(pubStr), 0644); err != nil {
 		return "", fmt.Errorf("write public key: %w", err)
+	}
+	if err := os.Rename(tmpPubPath, pubPath); err != nil {
+		os.Remove(tmpPubPath)
+		return "", fmt.Errorf("rename public key: %w", err)
 	}
 
 	return pubStr, nil

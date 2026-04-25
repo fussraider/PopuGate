@@ -29,7 +29,7 @@ func NewDockerHandler(docker *dockerutil.DockerClient, dockerSvc *service.Docker
 func (h *DockerHandler) Install(c *gin.Context) {
 	ctx := c.Request.Context()
 	if err := dockerutil.EnsureDockerInstalled(ctx); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})
@@ -128,7 +128,7 @@ func (h *DockerHandler) Build(c *gin.Context) {
 
 	result, err := h.dockerSvc.BuildEngine(ctx, req.Force)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
 	c.JSON(http.StatusOK, result)

@@ -124,7 +124,7 @@ func (s *ReplicationService) TestSSH(ctx context.Context, host string) (*model.S
 		if err == nil {
 			var buf bytes.Buffer
 			session.Stdout = &buf
-			if err := session.Run(fmt.Sprintf("docker ps --filter name=%s --format '{{.Status}}'", model.ContainerName)); err == nil {
+			if err := session.Run(fmt.Sprintf("docker ps --filter name=%s --format '{{.Status}}'", shellescape(model.ContainerName))); err == nil {
 				result.DockerStatus = strings.TrimSpace(buf.String())
 			}
 			session.Close()
@@ -156,5 +156,11 @@ func (s *ReplicationService) buildSyncConfig(settings *model.Settings, sl model.
 		SourceDir:      model.InstallDir,
 		Exclude:        strings.Split(settings.ReplicationExclude, ","),
 		DeleteExtra:    settings.ReplicationDeleteExtra,
+		KnownHostsPath: filepath.Join(model.InstallDir, ".ssh", "known_hosts"),
 	}
+}
+
+// shellescape wraps a string in single quotes for safe shell interpolation.
+func shellescape(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
 }

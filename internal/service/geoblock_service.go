@@ -75,6 +75,9 @@ func (s *GeoblockService) Apply(ctx context.Context) error {
 		if code == "" {
 			continue
 		}
+		if !IsValidCountryCode(code) {
+			return fmt.Errorf("invalid country code: %q", code)
+		}
 
 		cidrs, err := s.getCountryCIDRs(ctx, code)
 		if err != nil {
@@ -157,7 +160,7 @@ func (s *GeoblockService) getCountryCIDRs(ctx context.Context, code string) ([]s
 		return nil, fmt.Errorf("download %s: HTTP %d", code, resp.StatusCode)
 	}
 
-	data, err := io.ReadAll(resp.Body)
+	data, err := io.ReadAll(io.LimitReader(resp.Body, 10*1024*1024)) // 10MB max
 	if err != nil {
 		return nil, err
 	}

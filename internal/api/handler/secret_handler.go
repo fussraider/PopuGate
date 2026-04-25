@@ -27,7 +27,7 @@ func NewSecretHandler(secrets *service.SecretService, settings *store.SettingsSt
 func (h *SecretHandler) List(c *gin.Context) {
 	secrets, err := h.secrets.List(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
 	c.JSON(http.StatusOK, secrets)
@@ -60,7 +60,7 @@ func (h *SecretHandler) Get(c *gin.Context) {
 	label := c.Param("label")
 	sec, err := h.secrets.Get(c.Request.Context(), label)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
 	if sec == nil {
@@ -160,7 +160,7 @@ func (h *SecretHandler) GetLimits(c *gin.Context) {
 	label := c.Param("label")
 	sec, err := h.secrets.Get(c.Request.Context(), label)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
 	if sec == nil {
@@ -181,7 +181,7 @@ func (h *SecretHandler) GetLink(c *gin.Context) {
 	label := c.Param("label")
 	settings, err := h.settings.Load(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
 
@@ -209,7 +209,7 @@ func (h *SecretHandler) GetQR(c *gin.Context) {
 	label := c.Param("label")
 	settings, err := h.settings.Load(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
 
@@ -262,7 +262,7 @@ func (h *SecretHandler) UpdateNotes(c *gin.Context) {
 func (h *SecretHandler) ResetTraffic(c *gin.Context) {
 	label := c.Param("label")
 	if err := h.secrets.ResetTraffic(c.Request.Context(), label); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})
@@ -271,7 +271,7 @@ func (h *SecretHandler) ResetTraffic(c *gin.Context) {
 // ResetAllTraffic handles POST /api/v1/secrets/reset-traffic
 func (h *SecretHandler) ResetAllTraffic(c *gin.Context) {
 	if err := h.secrets.ResetAllTraffic(c.Request.Context()); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})
@@ -283,7 +283,10 @@ func parseHumanBytes(s string) int64 {
 	}
 	var amount int64
 	var unit string
-	fmt.Sscanf(s, "%d%s", &amount, &unit)
+	n, _ := fmt.Sscanf(s, "%d%s", &amount, &unit)
+	if n < 1 || amount < 0 {
+		return -1
+	}
 	switch unit {
 	case "G", "g":
 		return amount * 1024 * 1024 * 1024
@@ -291,6 +294,8 @@ func parseHumanBytes(s string) int64 {
 		return amount * 1024 * 1024
 	case "K", "k":
 		return amount * 1024
+	case "":
+		return amount
 	}
-	return amount
+	return -1 // unknown unit
 }

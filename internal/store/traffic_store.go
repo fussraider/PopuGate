@@ -69,6 +69,9 @@ func (s *TrafficStore) ListUserTraffic(ctx context.Context) ([]model.UserTraffic
 		}
 		stats = append(stats, u)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate user traffic: %w", err)
+	}
 	return stats, nil
 }
 
@@ -96,6 +99,29 @@ func (s *TrafficStore) GetUserSnapshot(ctx context.Context, label string) (snapI
 		return 0, 0, nil
 	}
 	return
+}
+
+// GetAllUserSnapshots returns all user snapshots in a single query.
+func (s *TrafficStore) GetAllUserSnapshots(ctx context.Context) (map[string][2]int64, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT label, snap_in, snap_out FROM traffic_user`)
+	if err != nil {
+		return nil, fmt.Errorf("get user snapshots: %w", err)
+	}
+	defer rows.Close()
+
+	result := make(map[string][2]int64)
+	for rows.Next() {
+		var label string
+		var snapIn, snapOut int64
+		if err := rows.Scan(&label, &snapIn, &snapOut); err != nil {
+			return nil, fmt.Errorf("scan user snapshot: %w", err)
+		}
+		result[label] = [2]int64{snapIn, snapOut}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate user snapshots: %w", err)
+	}
+	return result, nil
 }
 
 // UpdateUserTraffic adds deltas to a user's traffic and updates the snapshot.

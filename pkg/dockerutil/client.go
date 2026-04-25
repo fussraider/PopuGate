@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
@@ -18,8 +19,9 @@ import (
 
 // DockerClient wraps the Docker Engine SDK.
 type DockerClient struct {
-	cli      *client.Client
-	hostPath string // Cached host path for data volume
+	cli          *client.Client
+	hostPath     string
+	hostPathOnce sync.Once
 }
 
 // NewDockerClient creates a new Docker client from environment.
@@ -287,9 +289,9 @@ func (d *DockerClient) IsInstanceRunning(ctx context.Context, name string) (bool
 // ResolveHostPath translates a container-local path to a host-relative path
 // if running inside a container with the data volume mounted.
 func (d *DockerClient) ResolveHostPath(path string) string {
-	if d.hostPath == "" {
+	d.hostPathOnce.Do(func() {
 		d.detectHostPath(context.Background())
-	}
+	})
 	if d.hostPath == "" {
 		return path
 	}

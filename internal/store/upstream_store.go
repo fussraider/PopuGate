@@ -40,6 +40,9 @@ func (s *UpstreamStore) List(ctx context.Context) ([]model.Upstream, error) {
 		u.Enabled = intToBool(enabled)
 		upstreams = append(upstreams, u)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate upstreams: %w", err)
+	}
 	return upstreams, nil
 }
 

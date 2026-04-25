@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -93,6 +94,7 @@ func runServer(cmd *cobra.Command, args []string) {
 
 	// Get JWT secret (auto-generated on first run)
 	jwtSecret, err := settingsStore.GetJWTSecret(context.Background())
+	_ = jwtSecret
 	if err != nil {
 		logger.Fatalf("Failed to get JWT secret: %v", err)
 	}
@@ -185,9 +187,10 @@ func runServer(cmd *cobra.Command, args []string) {
 	}
 
 	// Setup router
+	cachedJWTProvider := api.NewCachedJWTSecretProvider(settingsStore, 5*time.Minute)
 	router := api.SetupRouter(api.RouterConfig{
 		Debug:        isDebug,
-		JWTSecret:    jwtSecret,
+		JWTSecret:    cachedJWTProvider,
 		Settings:     settingsStore,
 		Secrets:      secretStore,
 		Upstreams:    upstreamStore,
@@ -210,7 +213,7 @@ func runServer(cmd *cobra.Command, args []string) {
 	})
 
 	// Start scheduler
-	sched := setupScheduler(trafficSvc, healthSvc, replSvc, blocklistStore, settingsStore, secretStore, activeBot, updateSvc)
+	sched := setupScheduler(trafficSvc, healthSvc, replSvc, blocklistStore, settingsStore, secretStore, &activeBot, updateSvc)
 	defer sched.Stop()
 
 	// HTTP server
@@ -274,7 +277,7 @@ func setupScheduler(
 	blocklist *store.TokenBlocklistStore,
 	settings *store.SettingsStore,
 	secrets *store.SecretStore,
-	activeBot *bot.Bot,
+	activeBot **bot.Bot,
 	updateSvc *service.UpdateService,
 ) *scheduler.Scheduler {
 	sched := scheduler.New()
@@ -324,10 +327,11 @@ func setupScheduler(
 			}
 		case "telegram-report":
 			tasks[i].Fn = func(ctx context.Context) error {
-				if activeBot == nil || !activeBot.IsRunning() {
+				botPtr := *activeBot
+				if botPtr == nil || !botPtr.IsRunning() {
 					return nil
 				}
-				return sendPeriodicReport(ctx, activeBot, settings, secrets, trafficSvc)
+				return sendPeriodicReport(ctx, botPtr, settings, secrets, trafficSvc)
 			}
 		case "update-check":
 			if updateSvc != nil {
@@ -387,18 +391,7 @@ func sendPeriodicReport(ctx context.Context, b *bot.Bot, settings *store.Setting
 		}
 	}
 
-	return b.SendMessage(ctx, joinLines(lines))
-}
-
-func joinLines(lines []string) string {
-	var result string
-	for i, l := range lines {
-		if i > 0 {
-			result += "\n"
-		}
-		result += l
-	}
-	return result
+	return b.SendMessage(ctx, strings.Join(lines, "\n"))
 }
 
 func printBanner() {

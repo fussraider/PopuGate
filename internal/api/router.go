@@ -1,6 +1,8 @@
 package api
 
 import (
+	"net/http"
+
 	"github.com/gin-gonic/gin"
 
 	"github.com/fussraider/PopuGate/internal/api/handler"
@@ -9,12 +11,13 @@ import (
 	"github.com/fussraider/PopuGate/internal/store"
 	"github.com/fussraider/PopuGate/pkg/dockerutil"
 	"github.com/fussraider/PopuGate/pkg/logger"
+	"golang.org/x/time/rate"
 )
 
 // RouterConfig holds dependencies for router setup.
 type RouterConfig struct {
 	Debug     bool
-	JWTSecret string
+	JWTSecret JWTSecretProvider
 	Settings  *store.SettingsStore
 	Secrets   *store.SecretStore
 	Upstreams *store.UpstreamStore
@@ -49,6 +52,12 @@ func SetupRouter(cfg RouterConfig) *gin.Engine {
 	r := gin.New()
 	r.Use(logger.GinLogger(), gin.Recovery())
 
+	// Limit request body size to 2MB
+	r.Use(func(c *gin.Context) {
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 2<<20)
+		c.Next()
+	})
+
 	// CORS
 	origins := cfg.CORSOrigins
 	if len(origins) == 0 {
@@ -61,9 +70,11 @@ func SetupRouter(cfg RouterConfig) *gin.Engine {
 	healthHandler.SetHealthService(cfg.HealthSvc)
 	r.GET("/api/v1/health", healthHandler.Check)
 
-	// Auth endpoints (no auth)
+	// Auth endpoints (no auth, rate-limited)
+	authLimiter := NewIPRateLimiter(rate.Every(0), 10) // 10 requests per second per IP
 	authHandler := handler.NewAuthHandler(cfg.Settings, cfg.Blocklist)
 	auth := r.Group("/api/v1/auth")
+	auth.Use(RateLimitMiddleware(authLimiter))
 	{
 		auth.POST("/setup", authHandler.Setup)
 		auth.POST("/login", authHandler.Login)
@@ -101,6 +112,8 @@ func SetupRouter(cfg RouterConfig) *gin.Engine {
 		// Upstreams
 		upstreamHandler := handler.NewUpstreamHandler(cfg.UpstreamSvc)
 		protected.GET("/upstreams", upstreamHandler.List)
+		protected.GET("/upstreams/interfaces", upstreamHandler.Interfaces)
+		protected.POST("/upstreams/test", upstreamHandler.TestConfig)
 		protected.POST("/upstreams", upstreamHandler.Add)
 		protected.DELETE("/upstreams/:name", upstreamHandler.Remove)
 		protected.PUT("/upstreams/:name/toggle", upstreamHandler.Toggle)

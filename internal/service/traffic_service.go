@@ -29,10 +29,11 @@ type TrafficService struct {
 	secrets   *store.SecretStore
 	quota     *store.QuotaAlertStore
 
-	mu       sync.Mutex
-	lastLive *model.LiveMetrics
-	lastTime time.Time
-	client   *http.Client
+	mu         sync.Mutex
+	lastLive   *model.LiveMetrics
+	lastTime   time.Time
+	client     *http.Client
+	dockerAddr string // cached dockerenv detection result
 }
 
 // NewTrafficService creates a new TrafficService.
@@ -43,6 +44,12 @@ func NewTrafficService(traffic *store.TrafficStore, settings *store.SettingsStor
 		docker:    docker,
 		instances: instances,
 		client:    &http.Client{Timeout: 2 * time.Second},
+		dockerAddr: func() string {
+			if _, err := os.Stat("/.dockerenv"); err == nil {
+				return "host.docker.internal"
+			}
+			return "127.0.0.1"
+		}(),
 	}
 }
 
@@ -78,21 +85,17 @@ func (s *TrafficService) GetUserTraffic(ctx context.Context, label string) (*mod
 // GetLiveMetrics fetches and caches live Prometheus metrics from all instances.
 func (s *TrafficService) GetLiveMetrics(ctx context.Context) (*model.LiveMetrics, error) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	// Return cached if fresh (< 2 seconds)
 	if s.lastLive != nil && time.Since(s.lastTime) < 2*time.Second {
-		return s.lastLive, nil
+		cached := s.lastLive
+		s.mu.Unlock()
+		return cached, nil
 	}
+	s.mu.Unlock()
 
 	instances, err := s.instances.List(ctx)
 	if err != nil {
 		return nil, err
-	}
-
-	addr := "127.0.0.1"
-	if _, err := os.Stat("/.dockerenv"); err == nil {
-		addr = "host.docker.internal"
 	}
 
 	combined := &model.LiveMetrics{
@@ -106,7 +109,7 @@ func (s *TrafficService) GetLiveMetrics(ctx context.Context) (*model.LiveMetrics
 			continue
 		}
 
-		url := fmt.Sprintf("http://%s:%d/metrics", addr, inst.MetricsPort)
+		url := fmt.Sprintf("http://%s:%d/metrics", s.dockerAddr, inst.MetricsPort)
 		resp, err := s.client.Get(url)
 		if err != nil {
 			trafficLog.Warnf("failed to fetch metrics from %s: %v", url, err)
@@ -148,8 +151,11 @@ func (s *TrafficService) GetLiveMetrics(ctx context.Context) (*model.LiveMetrics
 		return nil, fmt.Errorf("no metrics collected from any active instance")
 	}
 
+	s.mu.Lock()
 	s.lastLive = combined
 	s.lastTime = time.Now()
+	s.mu.Unlock()
+
 	return combined, nil
 }
 
@@ -161,7 +167,11 @@ func (s *TrafficService) Flush(ctx context.Context) error {
 	}
 
 	// Get previous global snapshot
-	globalSnap, _ := s.traffic.GetGlobal(ctx)
+	globalSnap, err := s.traffic.GetGlobal(ctx)
+	if err != nil || globalSnap == nil {
+		// First flush or DB error — start from zero
+		globalSnap = &model.TrafficSnapshot{}
+	}
 
 	// Aggregate global totals from per-user metrics
 	var totalFromClient, totalToClient float64
@@ -189,10 +199,12 @@ func (s *TrafficService) Flush(ctx context.Context) error {
 		SnapOut:  int64(totalToClient),
 	}
 
-	// Per-user deltas
+	// Per-user deltas — batch fetch all snapshots (M-20)
+	userSnapshots, _ := s.traffic.GetAllUserSnapshots(ctx)
 	userDeltas := make(map[string]model.TrafficSnapshot)
 	for user, um := range live.UserMetrics {
-		prevSnapIn, prevSnapOut, _ := s.traffic.GetUserSnapshot(ctx, user)
+		prev := userSnapshots[user]
+		prevSnapIn, prevSnapOut := prev[0], prev[1]
 
 		deltaIn := int64(um.OctetsFromClient) - prevSnapIn
 		deltaOut := int64(um.OctetsToClient) - prevSnapOut
@@ -266,16 +278,16 @@ func (s *TrafficService) CheckQuotas(ctx context.Context) {
 					quotaLog.Warnf("cannot auto-disable %s (last active secret), quota exceeded %d%%", sec.Label, pct)
 				}
 				if err := s.quota.MarkAlerted(ctx, sec.Label, 100); err != nil {
-						quotaLog.Warnf("mark alert for %s: %v", sec.Label, err)
-					}
+					quotaLog.Warnf("mark alert for %s: %v", sec.Label, err)
 				}
-			} else if pct >= 80 {
-				alerted, _ := s.quota.WasAlerted(ctx, sec.Label, 80)
-				if !alerted {
-					quotaLog.Warnf("warning: secret %s at %d%% of quota", sec.Label, pct)
-					if err := s.quota.MarkAlerted(ctx, sec.Label, 80); err != nil {
-						quotaLog.Warnf("mark alert for %s: %v", sec.Label, err)
-					}
+			}
+		} else if pct >= 80 {
+			alerted, _ := s.quota.WasAlerted(ctx, sec.Label, 80)
+			if !alerted {
+				quotaLog.Warnf("warning: secret %s at %d%% of quota", sec.Label, pct)
+				if err := s.quota.MarkAlerted(ctx, sec.Label, 80); err != nil {
+					quotaLog.Warnf("mark alert for %s: %v", sec.Label, err)
+				}
 			}
 		}
 	}

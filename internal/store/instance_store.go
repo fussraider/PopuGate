@@ -45,6 +45,9 @@ func (s *InstanceStore) List(ctx context.Context) ([]model.Instance, error) {
 		inst.Enabled = intToBool(enabled)
 		instances = append(instances, inst)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate instances: %w", err)
+	}
 	return instances, nil
 }
 

@@ -4,13 +4,15 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
-	"golang.org/x/crypto/ssh"
 	"github.com/pkg/sftp"
+	"golang.org/x/crypto/ssh"
+	"golang.org/x/crypto/ssh/knownhosts"
 )
 
 // SyncResult holds the result of a sync operation.
@@ -24,13 +26,14 @@ type SyncResult struct {
 
 // SyncConfig holds configuration for a sync operation.
 type SyncConfig struct {
-	Host         string
-	Port         int
-	User         string
+	Host           string
+	Port           int
+	User           string
 	PrivateKeyPath string
-	SourceDir    string
-	Exclude      []string
-	DeleteExtra  bool
+	SourceDir      string
+	Exclude        []string
+	DeleteExtra    bool
+	KnownHostsPath string // path to known_hosts file (required)
 }
 
 // Sync performs an SFTP sync from source to remote.
@@ -81,8 +84,8 @@ func Sync(ctx context.Context, cfg SyncConfig) (*SyncResult, error) {
 		}
 
 		if info.IsDir() {
-			// Create remote directory
-			remotePath := filepath.Join("/", relPath)
+			// Create remote directory (use forward slashes for SFTP)
+			remotePath := "/" + relPath
 			_ = sftpClient.Mkdir(remotePath)
 			return nil
 		}
@@ -114,6 +117,10 @@ func Sync(ctx context.Context, cfg SyncConfig) (*SyncResult, error) {
 
 // RestartRemote runs docker restart on the remote host via SSH.
 func RestartRemote(ctx context.Context, cfg SyncConfig, containerName string) error {
+	if !isSafeContainerName(containerName) {
+		return fmt.Errorf("invalid container name: %s", containerName)
+	}
+
 	sshClient, err := DialSSH(cfg)
 	if err != nil {
 		return err
@@ -157,6 +164,11 @@ func DialSSH(cfg SyncConfig) (*ssh.Client, error) {
 		return nil, fmt.Errorf("parse private key: %w", err)
 	}
 
+	hostKeyCallback, err := hostKeyCallbackFor(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("host key setup: %w", err)
+	}
+
 	config := &ssh.ClientConfig{
 		User: cfg.User,
 		Auth: []ssh.AuthMethod{ssh.PublicKeys(signer)},
@@ -164,11 +176,56 @@ func DialSSH(cfg SyncConfig) (*ssh.Client, error) {
 			KeyExchanges: []string{"curve25519-sha256"},
 		},
 		Timeout:         10 * time.Second,
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		HostKeyCallback: hostKeyCallback,
 	}
 
 	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
 	return ssh.Dial("tcp", addr, config)
+}
+
+// hostKeyCallbackFor returns a HostKeyCallback based on the SyncConfig.
+// KnownHostsPath is required. If the file exists, it verifies against it.
+// If the file doesn't exist, it auto-accepts and saves the host key on first connection (TOFU).
+// If KnownHostsPath is empty, returns an error — insecure host key verification is not allowed.
+func hostKeyCallbackFor(cfg SyncConfig) (ssh.HostKeyCallback, error) {
+	if cfg.KnownHostsPath == "" {
+		return nil, fmt.Errorf("KnownHostsPath is required: SSH host key verification cannot be disabled")
+	}
+
+	// If known_hosts file exists, use strict verification
+	if _, err := os.Stat(cfg.KnownHostsPath); err == nil {
+		cb, err := knownhosts.New(cfg.KnownHostsPath)
+		if err != nil {
+			return nil, fmt.Errorf("parse known_hosts: %w", err)
+		}
+		return cb, nil
+	}
+
+	// First connection: auto-accept and save host key (Trust On First Use)
+	return func(hostname string, remote net.Addr, key ssh.PublicKey) error {
+		// Save the host key for future connections
+		if err := saveHostKey(cfg.KnownHostsPath, hostname, key); err != nil {
+			return fmt.Errorf("save host key: %w", err)
+		}
+		return nil
+	}, nil
+}
+
+// saveHostKey appends a host key to the known_hosts file.
+func saveHostKey(path, hostname string, key ssh.PublicKey) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		return err
+	}
+
+	line := knownhosts.Line([]string{hostname}, key)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	_, err = fmt.Fprintf(f, "%s\n", line)
+	return err
 }
 
 func needsUpload(sftpClient *sftp.Client, localPath, relPath string, info os.FileInfo) bool {
@@ -204,7 +261,7 @@ func uploadFile(sftpClient *sftp.Client, localPath, relPath string) error {
 func deleteExtraFiles(sftpClient *sftp.Client, sourceDir string, excludeSet map[string]bool) (int, error) {
 	// Walk remote and remove files not present locally
 	var deleted int
-	walker := sftpClient.Walk("/")
+	walker := sftpClient.Walk(sourceDir)
 	for walker.Step() {
 		if err := walker.Err(); err != nil {
 			continue
@@ -216,17 +273,38 @@ func deleteExtraFiles(sftpClient *sftp.Client, sourceDir string, excludeSet map[
 			continue
 		}
 
-		for exc := range excludeSet {
-			if strings.Contains(relPath, exc) {
-				continue
-			}
+		if isExcluded(relPath, excludeSet) {
+			continue
 		}
 
-		localPath := filepath.Join(sourceDir, relPath)
+		localPath := sourceDir + string(os.PathSeparator) + relPath
 		if _, err := os.Stat(localPath); os.IsNotExist(err) {
 			_ = sftpClient.Remove(path)
 			deleted++
 		}
 	}
 	return deleted, nil
+}
+
+// isExcluded checks whether relPath matches any exclusion pattern.
+func isExcluded(relPath string, excludeSet map[string]bool) bool {
+	for exc := range excludeSet {
+		if strings.Contains(relPath, exc) {
+			return true
+		}
+	}
+	return false
+}
+
+// isSafeContainerName validates that a container name only contains safe characters.
+func isSafeContainerName(name string) bool {
+	if name == "" {
+		return false
+	}
+	for _, r := range name {
+		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' || r == '-') {
+			return false
+		}
+	}
+	return true
 }

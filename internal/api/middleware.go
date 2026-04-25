@@ -9,8 +9,13 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
+// JWTSecretProvider loads the current JWT secret from the database.
+type JWTSecretProvider interface {
+	GetJWTSecret(ctx context.Context) (string, error)
+}
+
 // AuthMiddleware validates JWT tokens on protected routes.
-func AuthMiddleware(jwtSecret string, blocklist BlocklistChecker) gin.HandlerFunc {
+func AuthMiddleware(secretProvider JWTSecretProvider, blocklist BlocklistChecker) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		tokenStr := ""
 		authHeader := c.GetHeader("Authorization")
@@ -28,6 +33,12 @@ func AuthMiddleware(jwtSecret string, blocklist BlocklistChecker) gin.HandlerFun
 
 		if tokenStr == "" {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Authorization required"})
+			return
+		}
+
+		jwtSecret, err := secretProvider.GetJWTSecret(c.Request.Context())
+		if err != nil {
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 			return
 		}
 
@@ -53,6 +64,7 @@ func AuthMiddleware(jwtSecret string, blocklist BlocklistChecker) gin.HandlerFun
 			}
 			c.Set("username", claims["sub"])
 			c.Set("jti", claims["jti"])
+			c.Set("exp", claims["exp"])
 		}
 
 		c.Next()
@@ -70,12 +82,20 @@ func CORSMiddleware(allowedOrigins []string) gin.HandlerFunc {
 				break
 			}
 		}
-		if allowed {
-			c.Header("Access-Control-Allow-Origin", origin)
-			c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-			c.Header("Access-Control-Allow-Headers", "Authorization, Content-Type")
-			c.Header("Access-Control-Max-Age", "86400")
+
+		if !allowed {
+			if c.Request.Method == "OPTIONS" {
+				c.AbortWithStatus(http.StatusForbidden)
+				return
+			}
+			c.Next()
+			return
 		}
+
+		c.Header("Access-Control-Allow-Origin", origin)
+		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		c.Header("Access-Control-Allow-Headers", "Authorization, Content-Type")
+		c.Header("Access-Control-Max-Age", "86400")
 
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(http.StatusNoContent)

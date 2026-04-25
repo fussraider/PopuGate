@@ -279,12 +279,11 @@ func (s *ContainerService) startInstances(ctx context.Context, settings *model.S
 		return err
 	}
 
+	// Generate configs sequentially first (safe: writes to different files)
 	for _, inst := range insts {
 		if !inst.Enabled {
 			continue
 		}
-
-		// Generate per-instance config
 		instanceSettings := *settings
 		instanceSettings.ProxyPort = inst.Port
 		instanceSettings.ProxyMetricsPort = inst.MetricsPort
@@ -292,23 +291,46 @@ func (s *ContainerService) startInstances(ctx context.Context, settings *model.S
 		if err := s.generateConfig(ctx, &instanceSettings, inst.ConfigPath()); err != nil {
 			return fmt.Errorf("generate config for instance %d: %w", inst.Port, err)
 		}
-
-		_, err := s.docker.RunInstance(ctx, dockerutil.InstanceRunOptions{
-			RunOptions: dockerutil.RunOptions{
-				Image:      model.DockerImageBase + ":latest",
-				ConfigPath: inst.ConfigPath(),
-				CPUs:       settings.ProxyCPUs,
-				Memory:     settings.ProxyMemory,
-			},
-			Name: inst.ContainerName(),
-			Port: inst.Port,
-		})
-		if err != nil {
-			return fmt.Errorf("start instance %d: %w", inst.Port, err)
-		}
 	}
 
-	return nil
+	// Start containers in parallel
+	var (
+		wg    sync.WaitGroup
+		mu    sync.Mutex
+		first error
+	)
+
+	for _, inst := range insts {
+		if !inst.Enabled {
+			continue
+		}
+
+		wg.Add(1)
+		go func(inst model.Instance) {
+			defer wg.Done()
+
+			_, err := s.docker.RunInstance(ctx, dockerutil.InstanceRunOptions{
+				RunOptions: dockerutil.RunOptions{
+					Image:      model.DockerImageBase + ":latest",
+					ConfigPath: inst.ConfigPath(),
+					CPUs:       settings.ProxyCPUs,
+					Memory:     settings.ProxyMemory,
+				},
+				Name: inst.ContainerName(),
+				Port: inst.Port,
+			})
+			if err != nil {
+				mu.Lock()
+				if first == nil {
+					first = fmt.Errorf("start instance %d: %w", inst.Port, err)
+				}
+				mu.Unlock()
+			}
+		}(inst)
+	}
+	wg.Wait()
+
+	return first
 }
 
 func (s *ContainerService) flushTraffic(ctx context.Context) error {

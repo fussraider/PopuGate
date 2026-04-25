@@ -203,7 +203,8 @@
     "remove_title": "Remove Instance",
     "confirm_remove": "Remove instance on port {port}?",
     "added_success": "Instance on port {port} added",
-    "removed_success": "Instance on port {port} removed"
+    "removed_success": "Instance on port {port} removed",
+    "cannot_delete_last": "Cannot delete the last instance"
   },
   "traffic": {
     "title": "Global Traffic",
@@ -292,7 +293,10 @@
     "added_success": "Upstream \"{name}\" added",
     "removed_success": "Upstream \"{name}\" removed",
     "test_success": "Upstream \"{name}\" is reachable",
-    "test_failed": "Upstream \"{name}\" unreachable: {error}"
+    "test_failed": "Upstream \"{name}\" unreachable: {error}",
+    "test_config": "Test",
+    "test_ok": "Connection OK",
+    "test_fail": "Connection failed"
   },
   "system": {
     "title": "Operating System",

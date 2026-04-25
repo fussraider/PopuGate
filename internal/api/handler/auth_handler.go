@@ -1,7 +1,9 @@
 package handler
 
 import (
+	"fmt"
 	"net/http"
+	"sync"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
@@ -15,6 +17,8 @@ import (
 type AuthHandler struct {
 	settings  *store.SettingsStore
 	blocklist *store.TokenBlocklistStore
+	setupOnce sync.Once
+	setupDone bool
 }
 
 // NewAuthHandler creates a new AuthHandler.
@@ -97,6 +101,10 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 	}
 
 	token, err := jwt.Parse(req.RefreshToken, func(token *jwt.Token) (interface{}, error) {
+		// Validate signing algorithm (H-08: algorithm confusion protection)
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, jwt.ErrSignatureInvalid
+		}
 		return []byte(jwtSecret), nil
 	})
 	if err != nil || !token.Valid {
@@ -108,6 +116,22 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 	if !ok || claims["type"] != "refresh" {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "not a refresh token"})
 		return
+	}
+
+	// Blocklist old refresh token JTI to prevent replay (H-03)
+	if oldJTI, ok := claims["jti"].(string); ok {
+		// Check if already blocklisted - prevents concurrent reuse
+		blocked, _ := h.blocklist.IsBlocked(ctx, oldJTI)
+		if blocked {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "refresh token already used"})
+			return
+		}
+		if exp, ok := claims["exp"].(float64); ok {
+			if err := h.blocklist.Add(ctx, oldJTI, int64(exp)); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+				return
+			}
+		}
 	}
 
 	username, _ := claims["sub"].(string)
@@ -126,23 +150,41 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 
 // Logout handles POST /api/v1/auth/logout
 func (h *AuthHandler) Logout(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	// Blocklist the access token from the Authorization header
+	if accessJTI, exists := c.Get("jti"); exists {
+		if jti, ok := accessJTI.(string); ok {
+			// Use the token's actual expiry so the blocklist entry auto-expires
+			exp := int64(0)
+			if accessExp, exists := c.Get("exp"); exists {
+				if e, ok := accessExp.(float64); ok {
+					exp = int64(e)
+				}
+			}
+			_ = h.blocklist.Add(ctx, jti, exp)
+		}
+	}
+
+	// Also blocklist the refresh token from the request body
 	var req refreshRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusOK, gin.H{"ok": true})
 		return
 	}
 
-	ctx := c.Request.Context()
-	// Parse the refresh token to get its JTI and expiry
 	jwtSecret, _ := h.settings.GetJWTSecret(ctx)
 	token, err := jwt.Parse(req.RefreshToken, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, jwt.ErrSignatureInvalid
+		}
 		return []byte(jwtSecret), nil
 	})
 	if err == nil && token.Valid {
 		if claims, ok := token.Claims.(jwt.MapClaims); ok {
 			if jti, ok := claims["jti"].(string); ok {
 				if exp, ok := claims["exp"].(float64); ok {
-					_ = h.blocklist.Add(ctx, jti, int64(exp)) // best-effort: log error in future
+					_ = h.blocklist.Add(ctx, jti, int64(exp))
 				}
 			}
 		}
@@ -153,62 +195,89 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 
 type passwordRequest struct {
 	Current string `json:"current" binding:"required"`
-	New     string `json:"new" binding:"required,min=6"`
+	New     string `json:"new" binding:"required,min=8"`
 }
 
 type setupRequest struct {
-	Password string `json:"password" binding:"required,min=6"`
+	Password string `json:"password" binding:"required,min=8"`
 }
 
 // Setup handles POST /api/v1/auth/setup (no auth, one-time only)
 func (h *AuthHandler) Setup(c *gin.Context) {
-	var req setupRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "password required (min 6 characters)"})
-		return
-	}
-
-	ctx := c.Request.Context()
-	hash, err := h.settings.GetAuthPasswordHash(ctx)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
-		return
-	}
-
-	if hash != "" {
+	// Fast check without lock
+	if h.setupDone {
 		c.JSON(http.StatusConflict, gin.H{"error": "setup already completed"})
 		return
 	}
 
-	newHash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "hashing failed"})
+	var req setupRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "password required (min 8 characters)"})
 		return
 	}
 
-	if err := h.settings.SetAuthPasswordHash(ctx, string(newHash)); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "save failed"})
-		return
-	}
+	ctx := c.Request.Context()
 
-	// Generate and return JWT tokens immediately
-	jwtSecret, err := h.settings.GetJWTSecret(ctx)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
-		return
+	// Use sync.Once to prevent TOCTOU race (M-13)
+	var result struct {
+		tokens loginResponse
+		err    error
 	}
+	h.setupOnce.Do(func() {
+		// Double-check inside Once
+		hash, err := h.settings.GetAuthPasswordHash(ctx)
+		if err != nil {
+			result.err = err
+			return
+		}
+		if hash != "" {
+			h.setupDone = true
+			result.err = fmt.Errorf("setup already completed")
+			return
+		}
 
-	accessToken, refreshToken, err := auth.GenerateTokenPair(jwtSecret, "admin")
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "token generation failed"})
-		return
-	}
+		newHash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+		if err != nil {
+			result.err = err
+			return
+		}
 
-	c.JSON(http.StatusOK, loginResponse{
-		AccessToken:  accessToken,
-		RefreshToken: refreshToken,
-		ExpiresIn:    3600,
+		if err := h.settings.SetAuthPasswordHash(ctx, string(newHash)); err != nil {
+			result.err = err
+			return
+		}
+
+		// Generate and return JWT tokens immediately
+		jwtSecret, err := h.settings.GetJWTSecret(ctx)
+		if err != nil {
+			result.err = err
+			return
+		}
+
+		accessToken, refreshToken, err := auth.GenerateTokenPair(jwtSecret, "admin")
+		if err != nil {
+			result.err = err
+			return
+		}
+
+		h.setupDone = true
+		result.tokens = loginResponse{
+			AccessToken:  accessToken,
+			RefreshToken: refreshToken,
+			ExpiresIn:    3600,
+		}
 	})
+
+	if result.err != nil {
+		if result.err.Error() == "setup already completed" {
+			c.JSON(http.StatusConflict, gin.H{"error": result.err.Error()})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "setup failed"})
+		}
+		return
+	}
+
+	c.JSON(http.StatusOK, result.tokens)
 }
 
 // ChangePassword handles PUT /api/v1/auth/password

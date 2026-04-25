@@ -31,7 +31,10 @@
               </StatusBadge>
             </td>
             <td>
-              <button class="btn btn-ghost btn-sm btn-danger-text" @click="confirmRemove(inst.port)">
+              <button class="btn btn-ghost btn-sm btn-danger-text"
+                      :disabled="store.instances.length <= 1"
+                      :title="store.instances.length <= 1 ? t('instances.cannot_delete_last') : ''"
+                      @click="confirmRemove(inst.port)">
                 <Trash2 :size="16" />
               </button>
             </td>
@@ -107,8 +110,8 @@ async function handleRemove() {
     await store.remove(removeTarget.value)
     confirmModal.value = false
     toast.success(t('instances.removed_success', { port: removeTarget.value }))
-  } catch (e: any) {
-    toast.error(e.response?.data?.error ?? e.message)
+  } catch {
+    confirmModal.value = false
   }
 }
 

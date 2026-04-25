@@ -2,7 +2,6 @@ package handler
 
 import (
 	"net/http"
-	"fmt"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -26,7 +25,7 @@ func NewGeoblockHandler(settings *store.SettingsStore, geoSvc *service.GeoblockS
 func (h *GeoblockHandler) Get(c *gin.Context) {
 	settings, err := h.settings.Load(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
@@ -47,6 +46,11 @@ func (h *GeoblockHandler) Add(c *gin.Context) {
 		return
 	}
 
+	if !service.IsValidCountryCode(req.Country) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid country code, must be ISO 3166-1 alpha-2"})
+		return
+	}
+
 	ctx := c.Request.Context()
 	settings, _ := h.settings.Load(ctx)
 	countries := settings.BlocklistCountries
@@ -56,14 +60,14 @@ func (h *GeoblockHandler) Add(c *gin.Context) {
 	countries += req.Country
 
 	if err := h.settings.Save(ctx, map[string]string{"blocklist_countries": countries}); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("save settings: %v", err)})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
 
 	// Apply rules
 	if h.geoSvc != nil {
 		if err := h.geoSvc.Apply(ctx); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 			return
 		}
 	}
@@ -88,14 +92,14 @@ func (h *GeoblockHandler) Remove(c *gin.Context) {
 		}
 	}
 	if err := h.settings.Save(ctx, map[string]string{"blocklist_countries": stringsJoinComma(remaining)}); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("save settings: %v", err)})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
 
 	// Re-apply rules
 	if h.geoSvc != nil {
 		if err := h.geoSvc.Apply(ctx); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 			return
 		}
 	}
@@ -109,13 +113,13 @@ func (h *GeoblockHandler) Clear(c *gin.Context) {
 
 	if h.geoSvc != nil {
 		if err := h.geoSvc.Clear(ctx); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 			return
 		}
 	}
 
 	if err := h.settings.Save(ctx, map[string]string{"blocklist_countries": ""}); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("save settings: %v", err)})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})
@@ -140,14 +144,14 @@ func (h *GeoblockHandler) SetMode(c *gin.Context) {
 
 	ctx := c.Request.Context()
 	if err := h.settings.Save(ctx, map[string]string{"geoblock_mode": req.Mode}); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("save settings: %v", err)})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
 
 	// Re-apply rules with new mode
 	if h.geoSvc != nil {
 		if err := h.geoSvc.Apply(ctx); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 			return
 		}
 	}

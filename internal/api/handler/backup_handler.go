@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -23,9 +24,9 @@ func NewBackupHandler(backups *store.BackupStore) *BackupHandler {
 
 // List handles GET /api/v1/backups
 func (h *BackupHandler) List(c *gin.Context) {
-	backups, err := h.backups.List()
+	backups, err := h.backups.List(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
 	c.JSON(http.StatusOK, backups)
@@ -33,9 +34,9 @@ func (h *BackupHandler) List(c *gin.Context) {
 
 // Create handles POST /api/v1/backups
 func (h *BackupHandler) Create(c *gin.Context) {
-	backup, err := h.backups.Create()
+	backup, err := h.backups.Create(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("backup failed: %v", err)})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
 
@@ -57,12 +58,21 @@ func (h *BackupHandler) Restore(c *gin.Context) {
 		return
 	}
 
-	if err := h.backups.Restore(req.Filename); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("restore failed: %v", err)})
+	// Prevent path traversal
+	if strings.Contains(req.Filename, "/") || strings.Contains(req.Filename, "..") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid filename"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"ok": true})
+	if err := h.backups.Restore(c.Request.Context(), req.Filename); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "restore failed"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"ok":      true,
+		"warning": "Database and configuration files were overwritten. Restart the proxy engine to apply changes.",
+	})
 }
 
 // Delete handles DELETE /api/v1/backups/:filename
@@ -74,8 +84,8 @@ func (h *BackupHandler) Delete(c *gin.Context) {
 		return
 	}
 
-	if err := h.backups.Delete(filename); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	if err := h.backups.Delete(c.Request.Context(), filename); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
 
@@ -99,7 +109,7 @@ func (h *BackupHandler) Download(c *gin.Context) {
 
 	c.Header("Content-Description", "File Transfer")
 	c.Header("Content-Transfer-Encoding", "binary")
-	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
+	c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, strings.ReplaceAll(filepath.Base(filename), `"`, `\"`)))
 	c.Header("Content-Type", "application/octet-stream")
 	c.File(path)
 }

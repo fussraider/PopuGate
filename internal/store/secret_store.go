@@ -45,6 +45,9 @@ func (s *SecretStore) List(ctx context.Context) ([]model.Secret, error) {
 		sec.Enabled = intToBool(enabled)
 		secrets = append(secrets, sec)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate secrets: %w", err)
+	}
 	return secrets, nil
 }
 
@@ -139,6 +142,9 @@ func (s *SecretStore) ListEnabledLabels(ctx context.Context) ([]string, error) {
 			return nil, err
 		}
 		labels = append(labels, l)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate labels: %w", err)
 	}
 	return labels, nil
 }

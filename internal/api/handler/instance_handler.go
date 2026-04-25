@@ -24,7 +24,7 @@ func NewInstanceHandler(instances *store.InstanceStore) *InstanceHandler {
 func (h *InstanceHandler) List(c *gin.Context) {
 	instances, err := h.instances.List(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
 	c.JSON(http.StatusOK, instances)
@@ -79,7 +79,7 @@ func (h *InstanceHandler) Remove(c *gin.Context) {
 
 	count, err := h.instances.Count(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
 	if count <= 1 {
@@ -88,7 +88,7 @@ func (h *InstanceHandler) Remove(c *gin.Context) {
 	}
 
 	if err := h.instances.Delete(c.Request.Context(), port); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})

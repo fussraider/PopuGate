@@ -203,7 +203,8 @@
     "remove_title": "Удалить инстанс",
     "confirm_remove": "Удалить инстанс на порту {port}?",
     "added_success": "Инстанс на порту {port} добавлен",
-    "removed_success": "Инстанс на порту {port} удален"
+    "removed_success": "Инстанс на порту {port} удален",
+    "cannot_delete_last": "Нельзя удалить последний инстанс"
   },
   "traffic": {
     "title": "Глобальный трафик",
@@ -292,7 +293,10 @@
     "added_success": "Апстрим \"{name}\" добавлен",
     "removed_success": "Апстрим \"{name}\" удален",
     "test_success": "Апстрим \"{name}\" доступен",
-    "test_failed": "Апстрим \"{name}\" недоступен: {error}"
+    "test_failed": "Апстрим \"{name}\" недоступен: {error}",
+    "test_config": "Проверить",
+    "test_ok": "Соединение успешно",
+    "test_fail": "Ошибка соединения"
   },
   "system": {
     "title": "Операционная система",

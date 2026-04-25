@@ -15,20 +15,26 @@ const defaultTaskTimeout = 30 * time.Second
 
 // Scheduler runs periodic tasks.
 type Scheduler struct {
-	cron *cron.Cron
+	cron   *cron.Cron
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
 // New creates a new Scheduler.
 func New() *Scheduler {
+	ctx, cancel := context.WithCancel(context.Background())
 	return &Scheduler{
-		cron: cron.New(cron.WithSeconds()),
+		cron:   cron.New(cron.WithSeconds()),
+		ctx:    ctx,
+		cancel: cancel,
 	}
 }
 
 // Task is a periodic task definition.
 type Task struct {
 	Name     string
-	Schedule string // cron expression
+	Schedule string        // cron expression
+	Timeout  time.Duration // per-task timeout (0 = defaultTaskTimeout)
 	Fn       func(ctx context.Context) error
 }
 
@@ -41,7 +47,11 @@ func (s *Scheduler) Start(tasks []Task) {
 		}
 		task := t // capture
 		_, err := s.cron.AddFunc(task.Schedule, func() {
-			ctx, cancel := context.WithTimeout(context.Background(), defaultTaskTimeout)
+			timeout := task.Timeout
+			if timeout == 0 {
+				timeout = defaultTaskTimeout
+			}
+			ctx, cancel := context.WithTimeout(s.ctx, timeout)
 			defer cancel()
 
 			if err := task.Fn(ctx); err != nil {
@@ -57,8 +67,9 @@ func (s *Scheduler) Start(tasks []Task) {
 	s.cron.Start()
 }
 
-// Stop gracefully stops the scheduler.
+// Stop gracefully stops the scheduler and cancels running task contexts.
 func (s *Scheduler) Stop() {
+	s.cancel()
 	ctx := s.cron.Stop()
 	<-ctx.Done()
 }
@@ -67,13 +78,13 @@ func (s *Scheduler) Stop() {
 // Each task's Fn should be set by the caller with access to services.
 func DefaultTasks() []Task {
 	return []Task{
-		{Name: "traffic-flush", Schedule: "0 */1 * * * *"},        // every minute
-		{Name: "quota-check", Schedule: "0 */5 * * * *"},          // every 5 min
-		{Name: "expiry-check", Schedule: "0 */5 * * * *"},         // every 5 min
-		{Name: "health-check", Schedule: "0 */5 * * * *"},         // every 5 min
-		{Name: "telegram-report", Schedule: "0 0 */6 * * *"},      // every 6 hours
-		{Name: "replication-sync", Schedule: "0 */1 * * * *"},     // every minute
-		{Name: "update-check", Schedule: "0 0 */6 * * *"},         // every 6 hours
-		{Name: "token-cleanup", Schedule: "0 0 */1 * * *"},        // every hour
+		{Name: "traffic-flush", Schedule: "0 */1 * * * *"},                              // every minute
+		{Name: "quota-check", Schedule: "0 */5 * * * *"},                                // every 5 min
+		{Name: "expiry-check", Schedule: "0 */5 * * * *"},                               // every 5 min
+		{Name: "health-check", Schedule: "0 */5 * * * *"},                               // every 5 min
+		{Name: "telegram-report", Schedule: "0 0 */6 * * *"},                            // every 6 hours
+		{Name: "replication-sync", Schedule: "0 */1 * * * *", Timeout: 3 * time.Minute}, // SSH transfers can be slow
+		{Name: "update-check", Schedule: "0 0 */6 * * *"},                               // every 6 hours
+		{Name: "token-cleanup", Schedule: "0 0 */1 * * *"},                              // every hour
 	}
 }

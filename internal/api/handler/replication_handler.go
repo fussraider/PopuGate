@@ -54,6 +54,11 @@ func (h *ReplicationHandler) Setup(c *gin.Context) {
 		return
 	}
 
+	if req.Role != "master" && req.Role != "slave" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "role must be 'master' or 'slave'"})
+		return
+	}
+
 	updates := map[string]string{
 		"replication_role":    req.Role,
 		"replication_enabled": "true",
@@ -66,7 +71,7 @@ func (h *ReplicationHandler) Setup(c *gin.Context) {
 	}
 
 	if err := h.settings.Save(c.Request.Context(), updates); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("save settings: %v", err)})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
 
@@ -114,7 +119,7 @@ func (h *ReplicationHandler) AddSlave(c *gin.Context) {
 func (h *ReplicationHandler) RemoveSlave(c *gin.Context) {
 	host := c.Param("host")
 	if err := h.slaves.Delete(c.Request.Context(), host); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})
@@ -124,7 +129,7 @@ func (h *ReplicationHandler) RemoveSlave(c *gin.Context) {
 func (h *ReplicationHandler) ListSlaves(c *gin.Context) {
 	slaves, err := h.slaves.List(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
 	c.JSON(http.StatusOK, slaves)
@@ -167,7 +172,7 @@ func (h *ReplicationHandler) Test(c *gin.Context) {
 
 	result, err := h.replSvc.TestSSH(c.Request.Context(), req.Host)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
 	c.JSON(http.StatusOK, result)
@@ -182,7 +187,7 @@ func (h *ReplicationHandler) SSHKeygen(c *gin.Context) {
 
 	publicKey, err := h.replSvc.GenerateSSHKey(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true, "public_key": publicKey})

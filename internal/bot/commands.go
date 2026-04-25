@@ -155,7 +155,7 @@ func (b *Bot) cmdLink(ctx context.Context, text string) string {
 func (b *Bot) cmdAdd(ctx context.Context, text string) string {
 	label := b.args(text)
 	if label == "" {
-		return "Usage: /mp_add <label>"
+		return "Usage: /add <label>"
 	}
 	if err := model.ValidateLabel(label); err != nil {
 		return fmt.Sprintf("Invalid label: %s", err.Error())
@@ -181,14 +181,14 @@ func (b *Bot) cmdAdd(ctx context.Context, text string) string {
 		return fmt.Sprintf("Failed to create secret: %s", err.Error())
 	}
 
-	return fmt.Sprintf("✅ Secret `%s` added. Use /mp_reload or restart proxy to apply.", label)
+	return fmt.Sprintf("✅ Secret `%s` added. Use /restart to apply.", label)
 }
 
 // cmdRemove removes a secret by label.
 func (b *Bot) cmdRemove(ctx context.Context, text string) string {
 	label := b.args(text)
 	if label == "" {
-		return "Usage: /mp_remove <label>"
+		return "Usage: /remove <label>"
 	}
 
 	existing, _ := b.deps.Secrets.GetByLabel(ctx, label)
@@ -200,14 +200,14 @@ func (b *Bot) cmdRemove(ctx context.Context, text string) string {
 		return fmt.Sprintf("Failed to remove: %s", err.Error())
 	}
 
-	return fmt.Sprintf("🗑 Secret `%s` removed. Use /mp_reload or restart proxy to apply.", label)
+	return fmt.Sprintf("🗑 Secret `%s` removed. Use /restart to apply.", label)
 }
 
 // cmdRotate rotates a secret's key.
 func (b *Bot) cmdRotate(ctx context.Context, text string) string {
 	label := b.args(text)
 	if label == "" {
-		return "Usage: /mp_rotate <label>"
+		return "Usage: /rotate <label>"
 	}
 
 	existing, err := b.deps.Secrets.GetByLabel(ctx, label)
@@ -225,7 +225,7 @@ func (b *Bot) cmdRotate(ctx context.Context, text string) string {
 		return fmt.Sprintf("Failed to rotate: %s", err.Error())
 	}
 
-	return fmt.Sprintf("🔄 Secret `%s` rotated. Use /mp_reload or restart proxy to apply.", label)
+	return fmt.Sprintf("🔄 Secret `%s` rotated. Use /restart to apply.", label)
 }
 
 // cmdRestart restarts the proxy.
@@ -243,7 +243,7 @@ func (b *Bot) cmdRestart(ctx context.Context) string {
 func (b *Bot) cmdEnable(ctx context.Context, text string) string {
 	label := b.args(text)
 	if label == "" {
-		return "Usage: /mp_enable <label>"
+		return "Usage: /enable <label>"
 	}
 
 	sec, err := b.deps.Secrets.GetByLabel(ctx, label)
@@ -260,14 +260,14 @@ func (b *Bot) cmdEnable(ctx context.Context, text string) string {
 		return fmt.Sprintf("Failed: %s", err.Error())
 	}
 
-	return fmt.Sprintf("✅ Secret `%s` enabled. Use /mp_reload or restart proxy to apply.", label)
+	return fmt.Sprintf("✅ Secret `%s` enabled. Use /restart to apply.", label)
 }
 
 // cmdDisable disables a secret.
 func (b *Bot) cmdDisable(ctx context.Context, text string) string {
 	label := b.args(text)
 	if label == "" {
-		return "Usage: /mp_disable <label>"
+		return "Usage: /disable <label>"
 	}
 
 	sec, err := b.deps.Secrets.GetByLabel(ctx, label)
@@ -290,7 +290,7 @@ func (b *Bot) cmdDisable(ctx context.Context, text string) string {
 		return fmt.Sprintf("Failed: %s", err.Error())
 	}
 
-	return fmt.Sprintf("❌ Secret `%s` disabled. Use /mp_reload or restart proxy to apply.", label)
+	return fmt.Sprintf("❌ Secret `%s` disabled. Use /restart to apply.", label)
 }
 
 // cmdHealth runs a quick health check.
@@ -407,16 +407,13 @@ func (b *Bot) cmdLimits(ctx context.Context) string {
 	return strings.Join(lines, "\n")
 }
 
-// cmdSetLimit sets limits for a user: /mp_setlimit <label> <conns> <ips> <quota> [expires]
+// cmdSetLimit sets limits for a user: /setlimit <label> <conns> <ips> <quota> [expires]
 func (b *Bot) cmdSetLimit(ctx context.Context, text string) string {
 	parts := strings.Fields(text)
 	if len(parts) < 5 {
-		return "Usage: /mp_setlimit <label> <max_conns> <max_ips> <quota_mb> [expires YYYY-MM-DD]"
+		return "Usage: /setlimit <label> <max_conns> <max_ips> <quota_mb> [expires YYYY-MM-DD]"
 	}
 	label := parts[1]
-	if len(parts) < 5 {
-		return "Usage: /mp_setlimit <label> <max_conns> <max_ips> <quota_mb> [expires YYYY-MM-DD]"
-	}
 
 	sec, err := b.deps.Secrets.GetByLabel(ctx, label)
 	if err != nil || sec == nil {
@@ -425,15 +422,21 @@ func (b *Bot) cmdSetLimit(ctx context.Context, text string) string {
 
 	// Parse conns
 	var conns int
-	fmt.Sscanf(parts[2], "%d", &conns)
+	if n, _ := fmt.Sscanf(parts[2], "%d", &conns); n != 1 {
+		return "Invalid max_conns value. Must be a number."
+	}
 
 	// Parse IPs
 	var ips int
-	fmt.Sscanf(parts[3], "%d", &ips)
+	if n, _ := fmt.Sscanf(parts[3], "%d", &ips); n != 1 {
+		return "Invalid max_ips value. Must be a number."
+	}
 
 	// Parse quota (in MB)
 	var quotaMB int64
-	fmt.Sscanf(parts[4], "%d", &quotaMB)
+	if n, _ := fmt.Sscanf(parts[4], "%d", &quotaMB); n != 1 {
+		return "Invalid quota_mb value. Must be a number."
+	}
 	quotaBytes := quotaMB * 1024 * 1024
 
 	sec.MaxConns = conns
@@ -481,21 +484,21 @@ func (b *Bot) cmdHelp() string {
 	return strings.Join([]string{
 		"📖 *PopuGate Bot Commands*",
 		"",
-		"/mp_status — Proxy status",
-		"/mp_secrets — List secrets",
-		"/mp_link [label] — Proxy links",
-		"/mp_add <label> — Add secret",
-		"/mp_remove <label> — Remove secret",
-		"/mp_rotate <label> — Rotate secret",
-		"/mp_restart — Restart proxy",
-		"/mp_enable <label> — Enable secret",
-		"/mp_disable <label> — Disable secret",
-		"/mp_health — Health check",
-		"/mp_traffic — Traffic report",
-		"/mp_update — Version info",
-		"/mp_limits — Show user limits",
-		"/mp_setlimit <label> <conns> <ips> <quota_mb> [date] — Set limits",
-		"/mp_upstreams — List upstreams",
-		"/mp_help — This message",
+		"/status — Proxy status",
+		"/secrets — List secrets",
+		"/link [label] — Proxy links",
+		"/add <label> — Add secret",
+		"/remove <label> — Remove secret",
+		"/rotate <label> — Rotate secret",
+		"/restart — Restart proxy",
+		"/enable <label> — Enable secret",
+		"/disable <label> — Disable secret",
+		"/health — Health check",
+		"/traffic — Traffic report",
+		"/update — Version info",
+		"/limits — Show user limits",
+		"/setlimit <label> <conns> <ips> <quota_mb> [date] — Set limits",
+		"/upstreams — List upstreams",
+		"/help — This message",
 	}, "\n")
 }

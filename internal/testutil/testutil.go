@@ -3,13 +3,16 @@ package testutil
 import (
 	"database/sql"
 	"embed"
+	"sort"
+	"strconv"
+	"strings"
 	"testing"
 
 	_ "modernc.org/sqlite"
 )
 
 //go:embed migrations/*.sql
-var migrationsFS embed.FS
+var embeddedMigrations embed.FS
 
 // OpenTestDB opens an in-memory SQLite database with migrations applied.
 // It bypasses the database.Open singleton, creating a fresh instance per test.
@@ -24,14 +27,71 @@ func OpenTestDB(t *testing.T) *sql.DB {
 
 	db.SetMaxOpenConns(1)
 
-	content, err := migrationsFS.ReadFile("migrations/001_init.sql")
-	if err != nil {
-		t.Fatalf("read migration: %v", err)
-	}
-
-	if _, err := db.Exec(string(content)); err != nil {
-		t.Fatalf("run migration: %v", err)
+	if err := applyMigrations(db); err != nil {
+		t.Fatalf("run migrations: %v", err)
 	}
 
 	return db
+}
+
+type migration struct {
+	version int
+	name    string
+	content string
+}
+
+func applyMigrations(db *sql.DB) error {
+	entries, err := embeddedMigrations.ReadDir("migrations")
+	if err != nil {
+		return err
+	}
+
+	var migrations []migration
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".sql") {
+			continue
+		}
+		parts := strings.SplitN(e.Name(), "_", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		version, err := strconv.Atoi(parts[0])
+		if err != nil {
+			continue
+		}
+		name := strings.TrimSuffix(parts[1], ".sql")
+		content, err := embeddedMigrations.ReadFile("migrations/" + e.Name())
+		if err != nil {
+			return err
+		}
+		migrations = append(migrations, migration{version, name, string(content)})
+	}
+
+	sort.Slice(migrations, func(i, j int) bool {
+		return migrations[i].version < migrations[j].version
+	})
+
+	// Create schema_version table
+	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS schema_version (
+		version    INTEGER PRIMARY KEY,
+		name       TEXT    NOT NULL,
+		applied_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+	)`); err != nil {
+		return err
+	}
+
+	for _, m := range migrations {
+		var count int
+		db.QueryRow("SELECT COUNT(*) FROM schema_version WHERE version = ?", m.version).Scan(&count)
+		if count > 0 {
+			continue
+		}
+
+		if _, err := db.Exec(m.content); err != nil {
+			return err
+		}
+		db.Exec("INSERT INTO schema_version (version, name) VALUES (?, ?)", m.version, m.name)
+	}
+
+	return nil
 }

@@ -3,6 +3,7 @@ package store
 import (
 	"archive/tar"
 	"compress/gzip"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -39,7 +40,13 @@ func NewBackupStore(baseDir string) *BackupStore {
 }
 
 // List returns all backup files, newest first.
-func (s *BackupStore) List() ([]Backup, error) {
+func (s *BackupStore) List(ctx context.Context) ([]Backup, error) {
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+	}
+
 	entries, err := os.ReadDir(s.backupsDir)
 	if err != nil {
 		return nil, fmt.Errorf("read backups dir: %w", err)
@@ -72,7 +79,13 @@ func (s *BackupStore) List() ([]Backup, error) {
 }
 
 // Create generates a new backup of the core application data.
-func (s *BackupStore) Create() (Backup, error) {
+func (s *BackupStore) Create(ctx context.Context) (Backup, error) {
+	select {
+	case <-ctx.Done():
+		return Backup{}, ctx.Err()
+	default:
+	}
+
 	filename := fmt.Sprintf("popugate-%s.tar.gz", time.Now().UTC().Format("20060102-150405"))
 	outputPath := filepath.Join(s.backupsDir, filename)
 
@@ -88,7 +101,10 @@ func (s *BackupStore) Create() (Backup, error) {
 		return Backup{}, err
 	}
 
-	info, _ := os.Stat(outputPath)
+	info, err := os.Stat(outputPath)
+	if err != nil {
+		return Backup{}, fmt.Errorf("stat backup file: %w", err)
+	}
 	return Backup{
 		Filename:  filename,
 		Size:      info.Size(),
@@ -97,7 +113,16 @@ func (s *BackupStore) Create() (Backup, error) {
 }
 
 // Restore restores data from the specified backup file.
-func (s *BackupStore) Restore(filename string) error {
+func (s *BackupStore) Restore(ctx context.Context, filename string) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
+	if !isSafeFilename(filename) {
+		return fmt.Errorf("invalid filename: %s", filename)
+	}
 	path := filepath.Join(s.backupsDir, filename)
 	if _, err := os.Stat(path); err != nil {
 		return fmt.Errorf("backup file not found: %s", filename)
@@ -106,9 +131,23 @@ func (s *BackupStore) Restore(filename string) error {
 }
 
 // Delete removes a backup file.
-func (s *BackupStore) Delete(filename string) error {
+func (s *BackupStore) Delete(ctx context.Context, filename string) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
+	if !isSafeFilename(filename) {
+		return fmt.Errorf("invalid filename: %s", filename)
+	}
 	path := filepath.Join(s.backupsDir, filename)
 	return os.Remove(path)
+}
+
+// isSafeFilename validates that filename does not contain path traversal sequences.
+func isSafeFilename(name string) bool {
+	return name == filepath.Base(name) && !strings.Contains(name, "..")
 }
 
 // GetPath returns the full path to a backup file.
@@ -163,9 +202,10 @@ func (s *BackupStore) createTarGz(outputPath string, includes []string) error {
 			if err != nil {
 				return err
 			}
-			defer fileIn.Close()
-
+			// Close file immediately after copy, not deferred — defer in a
+			// Walk callback keeps all file handles open until the walk ends.
 			_, err = io.Copy(tw, fileIn)
+			fileIn.Close()
 			return err
 		})
 		if err != nil {
@@ -199,6 +239,12 @@ func (s *BackupStore) extractTarGz(path string) error {
 		}
 
 		target := filepath.Join(s.baseDir, header.Name)
+
+		// Prevent tar-slip: ensure extracted path stays within baseDir
+		if !strings.HasPrefix(filepath.Clean(target), filepath.Clean(s.baseDir)+string(os.PathSeparator)) {
+			return fmt.Errorf("refusing to extract path outside base dir: %s", header.Name)
+		}
+
 		switch header.Typeflag {
 		case tar.TypeDir:
 			if err := os.MkdirAll(target, 0755); err != nil {

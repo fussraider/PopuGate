@@ -1,7 +1,8 @@
 package auth
 
 import (
-	"strings"
+	"crypto/rand"
+	"encoding/hex"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -28,17 +29,19 @@ func GenerateTokenPair(jwtSecret, username string) (accessToken, refreshToken st
 	}
 
 	refreshClaims := jwt.MapClaims{
-		"sub": username,
-		"jti": GenerateJTI(),
-		"iat": now.Unix(),
-		"exp": now.Add(refreshTokenTTL).Unix(),
+		"sub":  username,
+		"jti":  GenerateJTI(),
+		"iat":  now.Unix(),
+		"exp":  now.Add(refreshTokenTTL).Unix(),
 		"type": "refresh",
 	}
 	refreshToken, err = jwt.NewWithClaims(jwt.SigningMethodHS256, refreshClaims).SignedString([]byte(jwtSecret))
 	return
 }
 
-// GenerateJTI creates a unique token identifier.
+// GenerateJTI creates a cryptographically random unique token identifier.
 func GenerateJTI() string {
-	return strings.ReplaceAll(time.Now().Format("20060102150405.000000000"), ".", "") + "popugate"
+	b := make([]byte, 16)
+	_, _ = rand.Read(b)
+	return hex.EncodeToString(b)
 }

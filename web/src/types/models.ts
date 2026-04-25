@@ -68,6 +68,18 @@ export interface Upstream {
   enabled: boolean
 }
 
+export interface NetInterface {
+  name: string
+  addresses: string[]
+}
+
+export interface UpstreamTestResult {
+  ok: boolean
+  exit_ip?: string
+  latency_ms?: number
+  error?: string
+}
+
 export interface Instance {
   id: number
   port: number

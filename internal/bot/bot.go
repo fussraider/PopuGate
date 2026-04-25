@@ -6,9 +6,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/rand"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/fussraider/PopuGate/internal/store"
@@ -40,9 +43,20 @@ type Bot struct {
 	chatID  string
 	label   string
 	client  *http.Client
-	running bool
+	running atomic.Bool
 	cancel  context.CancelFunc
 	deps    *Dependencies
+}
+
+// telegramAPIURL builds a Telegram Bot API URL with the bot token.
+// The URL is safe for use in HTTP requests but must never be logged.
+func (b *Bot) telegramAPIURL(method string) string {
+	return fmt.Sprintf("https://api.telegram.org/bot%s/%s", b.token, method)
+}
+
+// telegramAPIURLWithQuery builds a Telegram Bot API URL with query parameters.
+func (b *Bot) telegramAPIURLWithQuery(method, query string) string {
+	return fmt.Sprintf("https://api.telegram.org/bot%s/%s?%s", b.token, method, query)
 }
 
 // New creates a new Telegram bot.
@@ -51,30 +65,51 @@ func New(token, chatID, label string, deps *Dependencies) *Bot {
 		token:  token,
 		chatID: chatID,
 		label:  label,
-		client: &http.Client{Timeout: 15 * time.Second},
+		client: &http.Client{Timeout: 35 * time.Second},
 		deps:   deps,
 	}
 }
 
-// Start begins the long-polling loop.
+// Start begins the long-polling loop with exponential backoff on errors.
 func (b *Bot) Start(ctx context.Context) {
 	ctx, b.cancel = context.WithCancel(ctx)
-	b.running = true
+	b.running.Store(true)
 
 	var offset int64
+	backoff := time.Second
+	const maxBackoff = 5 * time.Minute
+
 	for {
 		select {
 		case <-ctx.Done():
-			b.running = false
+			b.running.Store(false)
 			return
 		default:
 		}
 
 		updates, err := b.getUpdates(ctx, offset)
 		if err != nil {
-			time.Sleep(5 * time.Second)
+			// Exponential backoff with jitter
+			jitter := time.Duration(rand.Int63n(int64(backoff) / 2))
+			sleep := backoff + jitter
+			log.Warnf("getUpdates error, retrying in %v: %v", sleep, err)
+
+			select {
+			case <-ctx.Done():
+				b.running.Store(false)
+				return
+			case <-time.After(sleep):
+			}
+
+			backoff *= 2
+			if backoff > maxBackoff {
+				backoff = maxBackoff
+			}
 			continue
 		}
+
+		// Success — reset backoff
+		backoff = time.Second
 
 		for _, update := range updates {
 			offset = update.UpdateID + 1
@@ -90,21 +125,20 @@ func (b *Bot) Stop() {
 	if b.cancel != nil {
 		b.cancel()
 	}
-	b.running = false
 }
 
 // IsRunning returns whether the bot is active.
 func (b *Bot) IsRunning() bool {
-	return b.running
+	return b.running.Load()
 }
 
 // SendMessage sends a Markdown message to the configured chat.
 func (b *Bot) SendMessage(ctx context.Context, text string) error {
-	url := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", b.token)
+	apiURL := b.telegramAPIURL("sendMessage")
 	body := fmt.Sprintf(`chat_id=%s&text=%s&parse_mode=Markdown`,
 		b.chatID, escapeURL(text))
 
-	req, err := http.NewRequestWithContext(ctx, "POST", url, strings.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, "POST", apiURL, strings.NewReader(body))
 	if err != nil {
 		return err
 	}
@@ -124,7 +158,7 @@ func (b *Bot) SendMessage(ctx context.Context, text string) error {
 
 // SendPhoto sends a PNG photo with an optional caption to the configured chat.
 func (b *Bot) SendPhoto(ctx context.Context, pngData []byte, caption string) error {
-	apiURL := fmt.Sprintf("https://api.telegram.org/bot%s/sendPhoto", b.token)
+	apiURL := b.telegramAPIURL("sendPhoto")
 
 	var buf bytes.Buffer
 	w := multipart.NewWriter(&buf)
@@ -181,10 +215,9 @@ type TelegramMessage struct {
 }
 
 func (b *Bot) getUpdates(ctx context.Context, offset int64) ([]TelegramUpdate, error) {
-	url := fmt.Sprintf("https://api.telegram.org/bot%s/getUpdates?offset=%d&timeout=30",
-		b.token, offset)
+	apiURL := b.telegramAPIURLWithQuery("getUpdates", fmt.Sprintf("offset=%d&timeout=30", offset))
 
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -212,57 +245,69 @@ func (b *Bot) handleUpdate(ctx context.Context, update TelegramUpdate) {
 	if update.Message == nil {
 		return
 	}
+
+	// Only allow commands from the authorized chat user
+	if fmt.Sprintf("%d", update.Message.From.ID) != b.chatID {
+		log.Debugf("unauthorized command from user %d (%s), expected chatID %s",
+			update.Message.From.ID, update.Message.From.Username, b.chatID)
+		return
+	}
+
 	text := strings.TrimSpace(update.Message.Text)
 
-	if !strings.HasPrefix(text, "/mp_") {
+	if !strings.HasPrefix(text, "/") {
+		return
+	}
+
+	// Ignore commands from other bots/groups (e.g. /start, /help from general bots)
+	cmd := strings.SplitN(text, " ", 2)[0]
+	if !isKnownCommand(cmd) {
 		return
 	}
 
 	log.Debugf("command from %s: %s", update.Message.From.Username, text)
 
 	// Strip @botname suffix from commands
-	if idx := strings.Index(text, "@"); idx > 0 && strings.HasPrefix(text, "/mp_") {
+	if idx := strings.Index(text, "@"); idx > 0 && strings.HasPrefix(text, "/") {
 		text = text[:idx]
 	}
 
 	var response string
 	switch {
-	case text == "/mp_status":
+	case text == "/status":
 		response = b.cmdStatus(ctx)
-	case text == "/mp_secrets":
+	case text == "/secrets":
 		response = b.cmdSecrets(ctx)
-	case strings.HasPrefix(text, "/mp_link"):
+	case strings.HasPrefix(text, "/link"):
 		response = b.cmdLink(ctx, text)
-	case strings.HasPrefix(text, "/mp_add"):
+	case strings.HasPrefix(text, "/add"):
 		response = b.cmdAdd(ctx, text)
-	case strings.HasPrefix(text, "/mp_remove"):
+	case strings.HasPrefix(text, "/remove"):
 		response = b.cmdRemove(ctx, text)
-	case strings.HasPrefix(text, "/mp_rotate"):
+	case strings.HasPrefix(text, "/rotate"):
 		response = b.cmdRotate(ctx, text)
-	case text == "/mp_restart":
+	case text == "/restart":
 		response = b.cmdRestart(ctx)
-	case strings.HasPrefix(text, "/mp_enable"):
+	case strings.HasPrefix(text, "/enable"):
 		response = b.cmdEnable(ctx, text)
-	case strings.HasPrefix(text, "/mp_disable"):
+	case strings.HasPrefix(text, "/disable"):
 		response = b.cmdDisable(ctx, text)
-	case text == "/mp_health":
+	case text == "/health":
 		response = b.cmdHealth(ctx)
-	case text == "/mp_traffic":
+	case text == "/traffic":
 		response = b.cmdTraffic(ctx)
-	case text == "/mp_update":
+	case text == "/update":
 		response = b.cmdUpdate(ctx)
-	case text == "/mp_limits":
+	case text == "/limits":
 		response = b.cmdLimits(ctx)
-	case strings.HasPrefix(text, "/mp_setlimit"):
+	case strings.HasPrefix(text, "/setlimit"):
 		response = b.cmdSetLimit(ctx, text)
-	case text == "/mp_upstreams":
+	case text == "/upstreams":
 		response = b.cmdUpstreams(ctx)
-	case text == "/mp_help":
+	case text == "/help":
 		response = b.cmdHelp()
 	default:
-		if strings.HasPrefix(text, "/mp_") {
-			response = "Unknown command. Send /mp_help for available commands."
-		}
+		response = "Unknown command. Send /help for available commands."
 	}
 
 	if response != "" {
@@ -273,6 +318,17 @@ func (b *Bot) handleUpdate(ctx context.Context, update TelegramUpdate) {
 }
 
 // --- Command helpers ---
+
+// isKnownCommand checks if the command is one of ours.
+func isKnownCommand(cmd string) bool {
+	switch cmd {
+	case "/status", "/secrets", "/link", "/add", "/remove", "/rotate",
+		"/restart", "/enable", "/disable", "/health", "/traffic",
+		"/update", "/limits", "/setlimit", "/upstreams", "/help":
+		return true
+	}
+	return false
+}
 
 func (b *Bot) args(text string) string {
 	parts := strings.SplitN(text, " ", 2)
@@ -301,10 +357,5 @@ func formatBytes(n int64) string {
 }
 
 func escapeURL(s string) string {
-	s = strings.ReplaceAll(s, "\n", "%0A")
-	s = strings.ReplaceAll(s, "_", "%5F")
-	s = strings.ReplaceAll(s, "*", "%2A")
-	s = strings.ReplaceAll(s, "[", "%5B")
-	s = strings.ReplaceAll(s, "]", "%5D")
-	return s
+	return url.QueryEscape(s)
 }

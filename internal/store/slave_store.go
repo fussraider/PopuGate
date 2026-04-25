@@ -39,6 +39,9 @@ func (s *SlaveStore) List(ctx context.Context) ([]model.Slave, error) {
 		sl.Enabled = intToBool(enabled)
 		slaves = append(slaves, sl)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate slaves: %w", err)
+	}
 	return slaves, nil
 }
 

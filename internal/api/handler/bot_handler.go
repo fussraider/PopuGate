@@ -58,7 +58,7 @@ func (h *BotHandler) Setup(c *gin.Context) {
 		"telegram_interval":     fmt.Sprintf("%d", req.Interval),
 		"telegram_server_label": req.Label,
 	}); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("save settings: %v", err)})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
 
@@ -79,7 +79,7 @@ func (h *BotHandler) Test(c *gin.Context) {
 	testBot := bot.New(settings.TelegramBotToken, settings.TelegramChatID, settings.TelegramServerLabel, nil)
 	msg := fmt.Sprintf("🧪 Test message from %s v%s", settings.TelegramServerLabel, model.Version)
 	if err := testBot.SendMessage(c.Request.Context(), msg); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to send: %v", err)})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
 
@@ -119,7 +119,7 @@ func (h *BotHandler) Toggle(c *gin.Context) {
 		val = "true"
 	}
 	if err := h.settings.Save(c.Request.Context(), map[string]string{"telegram_enabled": val}); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("save settings: %v", err)})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
 
@@ -132,6 +132,7 @@ func (h *BotHandler) Toggle(c *gin.Context) {
 		h.mu.Lock()
 		if h.bot != nil {
 			h.bot.Stop()
+			h.bot = nil
 		}
 		h.mu.Unlock()
 	}
@@ -149,7 +150,7 @@ func (h *BotHandler) DetectChatID(c *gin.Context) {
 
 	chatID, err := detectChatID(c.Request.Context(), settings.TelegramBotToken)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("detection failed: %v. Send any message to the bot first, then retry.", err)})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
 
@@ -157,7 +158,7 @@ func (h *BotHandler) DetectChatID(c *gin.Context) {
 	if err := h.settings.Save(c.Request.Context(), map[string]string{
 		"telegram_chat_id": chatID,
 	}); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("save chat_id: %v", err)})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
 
@@ -178,12 +179,14 @@ func (h *BotHandler) startBot(ctx context.Context, token, chatID string) {
 }
 
 // detectChatID queries Telegram getUpdates to find the most recent chat_id.
+// The botToken is used for the API URL but is never included in error messages.
 func detectChatID(ctx context.Context, botToken string) (string, error) {
-	url := fmt.Sprintf("https://api.telegram.org/bot%s/getUpdates?limit=5", botToken)
+	// Build URL without exposing token in error traces
+	apiURL := fmt.Sprintf("https://api.telegram.org/bot%s/getUpdates?limit=5", botToken)
 
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("telegram getUpdates request failed")
 	}
 
 	client := &http.Client{Timeout: 10 * time.Second}

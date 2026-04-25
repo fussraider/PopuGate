@@ -73,21 +73,21 @@ const configStore = useConfigStore()
 const form = ref({ token: '', chatId: '', interval: 6, label: 'PopuGate' })
 
 const localizedCommands = computed(() => [
-  { cmd: '/mp_status', desc: t('bot.proxy_status') },
-  { cmd: '/mp_secrets', desc: t('bot.list_secrets') },
-  { cmd: '/mp_link [label]', desc: t('bot.proxy_links') },
-  { cmd: '/mp_add <label>', desc: t('bot.add_secret') },
-  { cmd: '/mp_remove <label>', desc: t('bot.remove_secret') },
-  { cmd: '/mp_rotate <label>', desc: t('bot.rotate_secret') },
-  { cmd: '/mp_restart', desc: t('bot.restart_proxy') },
-  { cmd: '/mp_enable <label>', desc: t('bot.enable_secret') },
-  { cmd: '/mp_disable <label>', desc: t('bot.disable_secret') },
-  { cmd: '/mp_health', desc: t('bot.health_check') },
-  { cmd: '/mp_traffic', desc: t('bot.traffic_report') },
-  { cmd: '/mp_update', desc: t('bot.version_info') },
-  { cmd: '/mp_limits', desc: t('bot.user_limits') },
-  { cmd: '/mp_setlimit', desc: t('bot.set_limits') },
-  { cmd: '/mp_upstreams', desc: t('bot.list_upstreams') },
+  { cmd: '/status', desc: t('bot.proxy_status') },
+  { cmd: '/secrets', desc: t('bot.list_secrets') },
+  { cmd: '/link [label]', desc: t('bot.proxy_links') },
+  { cmd: '/add <label>', desc: t('bot.add_secret') },
+  { cmd: '/remove <label>', desc: t('bot.remove_secret') },
+  { cmd: '/rotate <label>', desc: t('bot.rotate_secret') },
+  { cmd: '/restart', desc: t('bot.restart_proxy') },
+  { cmd: '/enable <label>', desc: t('bot.enable_secret') },
+  { cmd: '/disable <label>', desc: t('bot.disable_secret') },
+  { cmd: '/health', desc: t('bot.health_check') },
+  { cmd: '/traffic', desc: t('bot.traffic_report') },
+  { cmd: '/update', desc: t('bot.version_info') },
+  { cmd: '/limits', desc: t('bot.user_limits') },
+  { cmd: '/setlimit', desc: t('bot.set_limits') },
+  { cmd: '/upstreams', desc: t('bot.list_upstreams') },
 ])
 
 async function handleSetup() {

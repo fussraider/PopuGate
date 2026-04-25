@@ -24,7 +24,7 @@ func (h *SystemHandler) GetOS(c *gin.Context) {
 // InstallService handles POST /api/v1/system/service/install
 func (h *SystemHandler) InstallService(c *gin.Context) {
 	if err := service.InstallSystemdService(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true, "message": "systemd service installed and enabled"})
@@ -33,7 +33,7 @@ func (h *SystemHandler) InstallService(c *gin.Context) {
 // UninstallService handles DELETE /api/v1/system/service/uninstall
 func (h *SystemHandler) UninstallService(c *gin.Context) {
 	if err := service.UninstallSystemdService(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})
@@ -48,7 +48,7 @@ func (h *SystemHandler) ServiceStatus(c *gin.Context) {
 // RestartService handles POST /api/v1/system/service/restart
 func (h *SystemHandler) RestartService(c *gin.Context) {
 	if err := service.RestartService(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true, "message": "service restarting"})
@@ -57,7 +57,7 @@ func (h *SystemHandler) RestartService(c *gin.Context) {
 // ReloadService handles POST /api/v1/system/service/reload
 func (h *SystemHandler) ReloadService(c *gin.Context) {
 	if err := service.ReloadService(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true, "message": "service reload signaled"})

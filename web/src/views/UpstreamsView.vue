@@ -95,12 +95,31 @@
           </div>
           <div class="form-group">
             <label class="form-label">{{ t('upstreams.table.interface') }}</label>
-            <input v-model="form.iface" class="input" placeholder="eth0" />
+            <select v-model="form.iface" class="select">
+              <option value="">Auto</option>
+              <option v-for="nic in store.interfaces" :key="nic.name" :value="nic.name">
+                {{ nic.name }} <template v-if="nic.addresses.length">( {{ nic.addresses[0] }} )</template>
+              </option>
+            </select>
           </div>
         </div>
         <div class="modal-footer-inline">
           <button type="button" class="btn btn-secondary" @click="addModal = false">{{ t('common.cancel') }}</button>
+          <button type="button" class="btn btn-secondary" :disabled="store.testingConfig" @click="handleTestConfig">
+            <Loader2 v-if="store.testingConfig" :size="16" class="animate-spin" />
+            <FlaskConical v-else :size="16" />
+            {{ t('upstreams.test_config') }}
+          </button>
           <button type="submit" class="btn btn-primary">{{ t('common.add') }}</button>
+        </div>
+        <div v-if="store.testResult" class="test-result" :class="store.testResult.ok ? 'test-ok' : 'test-fail'">
+          <template v-if="store.testResult.ok">
+            {{ t('upstreams.test_ok') }} <template v-if="store.testResult.exit_ip">— {{ store.testResult.exit_ip }}</template>
+            <span v-if="store.testResult.latency_ms" class="test-latency">({{ store.testResult.latency_ms }}ms)</span>
+          </template>
+          <template v-else>
+            {{ t('upstreams.test_fail') }}: {{ store.testResult.error }}
+          </template>
         </div>
       </form>
     </Modal>
@@ -131,7 +150,22 @@ const toast = useToastStore()
 const addModal = ref(false)
 const form = ref({ name: '', type: 'direct' as string, address: '', username: '', password: '', weight: 1, iface: '' })
 
-function openAddModal() { form.value = { name: '', type: 'direct', address: '', username: '', password: '', weight: 1, iface: '' }; addModal.value = true }
+async function openAddModal() {
+  form.value = { name: '', type: 'direct', address: '', username: '', password: '', weight: 1, iface: '' }
+  store.testResult = null
+  addModal.value = true
+  try { await store.loadInterfaces() } catch { /* non-critical */ }
+}
+
+function handleTestConfig() {
+  store.testConfig({
+    type: form.value.type,
+    address: form.value.address,
+    username: form.value.username,
+    password: form.value.password,
+    iface: form.value.iface,
+  })
+}
 
 async function handleAdd() {
   try {

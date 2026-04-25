@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -10,8 +11,28 @@ import (
 	"github.com/fussraider/PopuGate/internal/service"
 )
 
+// allowedWSOrigins controls which origins can open WebSocket connections.
+// Set from router config via SetWSAllowedOrigins.
+var allowedWSOrigins []string
+
+// SetWSAllowedOrigins configures allowed WebSocket origins.
+func SetWSAllowedOrigins(origins []string) {
+	allowedWSOrigins = origins
+}
+
 var wsUpgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool { return true },
+	CheckOrigin: func(r *http.Request) bool {
+		if len(allowedWSOrigins) == 0 {
+			return true
+		}
+		origin := r.Header.Get("Origin")
+		for _, o := range allowedWSOrigins {
+			if o == "*" || o == origin {
+				return true
+			}
+		}
+		return strings.EqualFold(origin, r.Host)
+	},
 }
 
 // WSHandler handles WebSocket live metrics streaming.

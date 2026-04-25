@@ -7,20 +7,28 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/fussraider/PopuGate/internal/model"
 	"github.com/fussraider/PopuGate/internal/store"
+	"github.com/fussraider/PopuGate/pkg/logger"
 )
+
+var log = logger.WithScope("upstream")
 
 // UpstreamService handles upstream business logic.
 type UpstreamService struct {
 	upstreams *store.UpstreamStore
+	client    *http.Client
 }
 
 // NewUpstreamService creates a new UpstreamService.
 func NewUpstreamService(upstreams *store.UpstreamStore) *UpstreamService {
-	return &UpstreamService{upstreams: upstreams}
+	return &UpstreamService{
+		upstreams: upstreams,
+		client:    &http.Client{Timeout: 15 * time.Second},
+	}
 }
 
 // List returns all upstreams.
@@ -84,7 +92,24 @@ func (s *UpstreamService) Test(ctx context.Context, name string) (*model.Upstrea
 	if u == nil {
 		return nil, fmt.Errorf("upstream '%s' not found", name)
 	}
+	return s.testUpstream(ctx, u)
+}
 
+// TestConfig tests connectivity using raw upstream data (no DB lookup).
+func (s *UpstreamService) TestConfig(ctx context.Context, u *model.Upstream) (*model.UpstreamTestResult, error) {
+	switch u.Type {
+	case model.UpstreamDirect:
+		return s.testDirect(ctx)
+	case model.UpstreamSOCKS5:
+		return s.testSOCKS5(ctx, u)
+	case model.UpstreamSOCKS4:
+		return s.testSOCKS4(ctx, u)
+	default:
+		return nil, fmt.Errorf("unsupported upstream type: %s", u.Type)
+	}
+}
+
+func (s *UpstreamService) testUpstream(ctx context.Context, u *model.Upstream) (*model.UpstreamTestResult, error) {
 	switch u.Type {
 	case model.UpstreamDirect:
 		return s.testDirect(ctx)
@@ -98,17 +123,15 @@ func (s *UpstreamService) Test(ctx context.Context, name string) (*model.Upstrea
 }
 
 func (s *UpstreamService) testDirect(ctx context.Context) (*model.UpstreamTestResult, error) {
+	log.Debugf("testing direct connection")
 	start := time.Now()
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Get("https://api.ipify.org")
+	ip, err := s.detectIP(s.client)
 	latency := time.Since(start).Milliseconds()
 	if err != nil {
+		log.Debugf("direct test failed: %v", err)
 		return &model.UpstreamTestResult{OK: false, Error: err.Error()}, nil
 	}
-	defer resp.Body.Close()
-
-	body, _ := io.ReadAll(resp.Body)
-	ip := string(body)
+	log.Debugf("direct test ok: ip=%s latency=%dms", ip, latency)
 	return &model.UpstreamTestResult{
 		OK:        true,
 		ExitIP:    ip,
@@ -117,31 +140,45 @@ func (s *UpstreamService) testDirect(ctx context.Context) (*model.UpstreamTestRe
 }
 
 func (s *UpstreamService) testSOCKS5(ctx context.Context, u *model.Upstream) (*model.UpstreamTestResult, error) {
-	var proxyURL *url.URL
+	log.Debugf("testing SOCKS5 upstream: addr=%s user=%s iface=%s", u.Address, u.Username, u.Iface)
+
+	// Step 1: basic TCP reachability
+	start := time.Now()
+	conn, err := net.DialTimeout("tcp", u.Address, 10*time.Second)
+	if err != nil {
+		log.Debugf("TCP connect to %s failed: %v", u.Address, err)
+		return &model.UpstreamTestResult{OK: false, Error: fmt.Sprintf("TCP connect to %s failed: %v", u.Address, err)}, nil
+	}
+	conn.Close()
+	tcpMs := time.Since(start).Milliseconds()
+	log.Debugf("TCP connect to %s ok (%dms)", u.Address, tcpMs)
+
+	// Step 2: SOCKS5 handshake + HTTP request to detect exit IP
+	proxyURL := &url.URL{Scheme: "socks5h", Host: u.Address}
 	if u.Username != "" {
-		proxyURL, _ = url.Parse(fmt.Sprintf("socks5h://%s:%s@%s", u.Username, u.Password, u.Address))
-	} else {
-		proxyURL, _ = url.Parse(fmt.Sprintf("socks5h://%s", u.Address))
+		proxyURL.User = url.UserPassword(u.Username, u.Password)
 	}
 
 	transport := &http.Transport{
-		Proxy: http.ProxyURL(proxyURL),
-		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-			return (&net.Dialer{Timeout: 10 * time.Second}).DialContext(ctx, network, addr)
-		},
+		Proxy:                 http.ProxyURL(proxyURL),
+		DialContext:           (&net.Dialer{Timeout: 10 * time.Second}).DialContext,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ResponseHeaderTimeout: 10 * time.Second,
 	}
+	defer transport.CloseIdleConnections()
 	client := &http.Client{Transport: transport, Timeout: 15 * time.Second}
 
-	start := time.Now()
-	resp, err := client.Get("https://api.ipify.org")
+	start = time.Now()
+	ip, err := s.detectIP(client)
 	latency := time.Since(start).Milliseconds()
 	if err != nil {
-		return &model.UpstreamTestResult{OK: false, Error: err.Error()}, nil
+		log.Debugf("SOCKS5 HTTP request failed (TCP was ok %dms): %v", tcpMs, err)
+		return &model.UpstreamTestResult{
+			OK:    false,
+			Error: fmt.Sprintf("proxy reachable (TCP %dms) but HTTP request failed: %v", tcpMs, err),
+		}, nil
 	}
-	defer resp.Body.Close()
-
-	body, _ := io.ReadAll(resp.Body)
-	ip := string(body)
+	log.Debugf("SOCKS5 test ok: exit_ip=%s latency=%dms (tcp=%dms)", ip, latency, tcpMs)
 	return &model.UpstreamTestResult{
 		OK:        true,
 		ExitIP:    ip,
@@ -149,17 +186,50 @@ func (s *UpstreamService) testSOCKS5(ctx context.Context, u *model.Upstream) (*m
 	}, nil
 }
 
+// detectIP tries multiple IP detection services with fallback.
+func (s *UpstreamService) detectIP(client *http.Client) (string, error) {
+	endpoints := []string{
+		"https://api.ipify.org",
+		"https://checkip.amazonaws.com",
+		"https://icanhazip.com",
+	}
+	var lastErr error
+	for _, ep := range endpoints {
+		log.Debugf("trying IP detection service: %s", ep)
+		resp, err := client.Get(ep)
+		if err != nil {
+			log.Debugf("service %s failed: %v", ep, err)
+			lastErr = err
+			continue
+		}
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if resp.StatusCode == 200 && len(body) > 0 {
+			ip := strings.TrimSpace(string(body))
+			log.Debugf("service %s returned ip=%s (status %d)", ep, ip, resp.StatusCode)
+			return ip, nil
+		}
+		log.Debugf("service %s returned status %d, trying next", ep, resp.StatusCode)
+		lastErr = fmt.Errorf("%s returned %d", ep, resp.StatusCode)
+	}
+	log.Debugf("all IP detection services failed, last error: %v", lastErr)
+	return "", lastErr
+}
+
 func (s *UpstreamService) testSOCKS4(ctx context.Context, u *model.Upstream) (*model.UpstreamTestResult, error) {
-	// SOCKS4 testing via net.Dial with manual handshake
+	log.Debugf("testing SOCKS4 upstream: addr=%s", u.Address)
+	start := time.Now()
 	conn, err := net.DialTimeout("tcp", u.Address, 10*time.Second)
 	if err != nil {
+		log.Debugf("SOCKS4 TCP connect to %s failed: %v", u.Address, err)
 		return &model.UpstreamTestResult{OK: false, Error: err.Error()}, nil
 	}
 	defer conn.Close()
 
-	// Basic connectivity test passed
+	latency := time.Since(start).Milliseconds()
+	log.Debugf("SOCKS4 test ok: latency=%dms", latency)
 	return &model.UpstreamTestResult{
 		OK:        true,
-		LatencyMs: time.Since(time.Now()).Milliseconds(),
+		LatencyMs: latency,
 	}, nil
 }

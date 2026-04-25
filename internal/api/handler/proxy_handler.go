@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -35,7 +36,7 @@ func (h *ProxyHandler) SetDockerClient(d *dockerutil.DockerClient) {
 // Start handles POST /api/v1/proxy/start
 func (h *ProxyHandler) Start(c *gin.Context) {
 	if err := h.container.Start(c.Request.Context()); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
 
@@ -77,7 +78,7 @@ func (h *ProxyHandler) Start(c *gin.Context) {
 // Stop handles POST /api/v1/proxy/stop
 func (h *ProxyHandler) Stop(c *gin.Context) {
 	if err := h.container.Stop(c.Request.Context()); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})
@@ -86,7 +87,7 @@ func (h *ProxyHandler) Stop(c *gin.Context) {
 // Restart handles POST /api/v1/proxy/restart
 func (h *ProxyHandler) Restart(c *gin.Context) {
 	if err := h.container.Restart(c.Request.Context()); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})
@@ -95,7 +96,7 @@ func (h *ProxyHandler) Restart(c *gin.Context) {
 // Reload handles POST /api/v1/proxy/reload
 func (h *ProxyHandler) Reload(c *gin.Context) {
 	if err := h.container.Reload(c.Request.Context()); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})
@@ -105,7 +106,7 @@ func (h *ProxyHandler) Reload(c *gin.Context) {
 func (h *ProxyHandler) Status(c *gin.Context) {
 	status, err := h.container.Status(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
 	c.JSON(http.StatusOK, status)
@@ -134,13 +135,37 @@ func (h *ProxyHandler) Logs(c *gin.Context) {
 		if follow {
 			c.SSEvent("error", fmt.Sprintf("failed to get logs: %v", err))
 		} else {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		}
 		return
 	}
 	defer logs.Close()
 
 	scanner := bufio.NewScanner(logs)
+
+	// Heartbeat ticker for SSE to detect dead connections (L-P06)
+	var heartbeat *time.Ticker
+	var done chan struct{}
+	if follow {
+		heartbeat = time.NewTicker(15 * time.Second)
+		done = make(chan struct{})
+		defer func() {
+			heartbeat.Stop()
+			close(done)
+		}()
+		go func() {
+			for {
+				select {
+				case <-heartbeat.C:
+					c.SSEvent("heartbeat", time.Now().Unix())
+					c.Writer.Flush()
+				case <-done:
+					return
+				}
+			}
+		}()
+	}
+
 	for scanner.Scan() {
 		line := scanner.Text()
 		// Docker log format: first 8 bytes are header (usually), then payload

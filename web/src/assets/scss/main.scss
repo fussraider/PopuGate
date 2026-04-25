@@ -407,6 +407,34 @@ code {
   padding-top: $spacing-md;
 }
 
+// ─── Upstream Test Result ────────────────────────────────────────
+
+.test-result {
+  margin-top: $spacing-md;
+  padding: $spacing-sm $spacing-md;
+  border-radius: $border-radius;
+  font-size: $font-size-sm;
+  font-weight: $font-weight-medium;
+}
+
+.test-ok {
+  background: $color-success-bg;
+  color: #065f46;
+  border: 1px solid #a7f3d0;
+}
+
+.test-fail {
+  background: $color-danger-bg;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}
+
+.test-latency {
+  color: $text-secondary;
+  font-weight: $font-weight-normal;
+  margin-left: $spacing-xs;
+}
+
 
 
 .empty-state {

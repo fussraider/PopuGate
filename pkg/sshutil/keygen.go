@@ -59,3 +59,12 @@ func GenerateEd25519Key(privateKeyPath string) (string, error) {
 
 	return pubStr, nil
 }
+
+// ReadPublicKey reads the public key file from disk.
+func ReadPublicKey(privateKeyPath string) (string, error) {
+	pubBytes, err := os.ReadFile(privateKeyPath + ".pub")
+	if err != nil {
+		return "", fmt.Errorf("read public key: %w", err)
+	}
+	return string(pubBytes), nil
+}

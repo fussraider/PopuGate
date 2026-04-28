@@ -176,6 +176,7 @@ func SetupRouter(cfg RouterConfig) *gin.Engine {
 		protected.POST("/replication/sync", replHandler.Sync)
 		protected.POST("/replication/test", replHandler.Test)
 		protected.POST("/replication/ssh-keygen", replHandler.SSHKeygen)
+		protected.GET("/replication/ssh-key", replHandler.GetSSHKey)
 
 		// Update
 		updateHandler := handler.NewUpdateHandler(cfg.UpdateSvc)

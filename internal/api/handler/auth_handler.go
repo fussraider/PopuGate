@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"fmt"
 	"net/http"
 	"sync"
 
@@ -17,7 +16,7 @@ import (
 type AuthHandler struct {
 	settings  *store.SettingsStore
 	blocklist *store.TokenBlocklistStore
-	setupOnce sync.Once
+	setupMu   sync.Mutex
 	setupDone bool
 }
 
@@ -218,66 +217,57 @@ func (h *AuthHandler) Setup(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
-	// Use sync.Once to prevent TOCTOU race (M-13)
-	var result struct {
-		tokens loginResponse
-		err    error
-	}
-	h.setupOnce.Do(func() {
-		// Double-check inside Once
-		hash, err := h.settings.GetAuthPasswordHash(ctx)
-		if err != nil {
-			result.err = err
-			return
-		}
-		if hash != "" {
-			h.setupDone = true
-			result.err = fmt.Errorf("setup already completed")
-			return
-		}
+	h.setupMu.Lock()
+	defer h.setupMu.Unlock()
 
-		newHash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
-		if err != nil {
-			result.err = err
-			return
-		}
-
-		if err := h.settings.SetAuthPasswordHash(ctx, string(newHash)); err != nil {
-			result.err = err
-			return
-		}
-
-		// Generate and return JWT tokens immediately
-		jwtSecret, err := h.settings.GetJWTSecret(ctx)
-		if err != nil {
-			result.err = err
-			return
-		}
-
-		accessToken, refreshToken, err := auth.GenerateTokenPair(jwtSecret, "admin")
-		if err != nil {
-			result.err = err
-			return
-		}
-
-		h.setupDone = true
-		result.tokens = loginResponse{
-			AccessToken:  accessToken,
-			RefreshToken: refreshToken,
-			ExpiresIn:    3600,
-		}
-	})
-
-	if result.err != nil {
-		if result.err.Error() == "setup already completed" {
-			c.JSON(http.StatusConflict, gin.H{"error": result.err.Error()})
-		} else {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "setup failed"})
-		}
+	// Double-check after acquiring lock
+	if h.setupDone {
+		c.JSON(http.StatusConflict, gin.H{"error": "setup already completed"})
 		return
 	}
 
-	c.JSON(http.StatusOK, result.tokens)
+	// Check database state
+	hash, err := h.settings.GetAuthPasswordHash(ctx)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		return
+	}
+	if hash != "" {
+		h.setupDone = true
+		c.JSON(http.StatusConflict, gin.H{"error": "setup already completed"})
+		return
+	}
+
+	newHash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "setup failed"})
+		return
+	}
+
+	if err := h.settings.SetAuthPasswordHash(ctx, string(newHash)); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "setup failed"})
+		return
+	}
+
+	jwtSecret, err := h.settings.GetJWTSecret(ctx)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "setup failed"})
+		return
+	}
+
+	accessToken, refreshToken, err := auth.GenerateTokenPair(jwtSecret, "admin")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "token generation failed"})
+		return
+	}
+
+	h.setupDone = true
+
+	c.JSON(http.StatusOK, loginResponse{
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken,
+		ExpiresIn:    3600,
+	})
 }
 
 // ChangePassword handles PUT /api/v1/auth/password

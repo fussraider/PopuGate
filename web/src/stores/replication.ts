@@ -72,5 +72,14 @@ export const useReplicationStore = defineStore('replication', () => {
     }
   }
 
-  return { slaves, loading, syncing, settingUp, generatingKey, status, syncResults, loadStatus, loadSlaves, setup, addSlave, removeSlave, sync, test, sshKeygen }
+  async function loadSSHPublicKey(): Promise<string> {
+    try {
+      const res = await replicationApi.sshKey()
+      return res.public_key || ''
+    } catch {
+      return ''
+    }
+  }
+
+  return { slaves, loading, syncing, settingUp, generatingKey, status, syncResults, loadStatus, loadSlaves, setup, addSlave, removeSlave, sync, test, sshKeygen, loadSSHPublicKey }
 })

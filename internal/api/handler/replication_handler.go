@@ -178,6 +178,21 @@ func (h *ReplicationHandler) Test(c *gin.Context) {
 	c.JSON(http.StatusOK, result)
 }
 
+// GetSSHKey handles GET /api/v1/replication/ssh-key
+func (h *ReplicationHandler) GetSSHKey(c *gin.Context) {
+	if h.replSvc == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "replication service not available"})
+		return
+	}
+
+	publicKey, err := h.replSvc.GetSSHPublicKey(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "no ssh key found"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"public_key": publicKey})
+}
+
 // SSHKeygen handles POST /api/v1/replication/ssh-keygen
 func (h *ReplicationHandler) SSHKeygen(c *gin.Context) {
 	if h.replSvc == nil {

@@ -256,14 +256,18 @@ function openLimitsModal(sec: any) {
 }
 
 async function handleSetLimits() {
-  await secretsStore.setLimits(
-    limitsTarget.value,
-    limitsForm.value.maxConns,
-    limitsForm.value.maxIPs,
-    limitsForm.value.quotaMB * 1024 * 1024,
-    limitsForm.value.expiresAt || '0',
-  )
-  limitsModal.value = false
+  try {
+    await secretsStore.setLimits(
+      limitsTarget.value,
+      limitsForm.value.maxConns,
+      limitsForm.value.maxIPs,
+      limitsForm.value.quotaMB * 1024 * 1024,
+      limitsForm.value.expiresAt || '0',
+    )
+    limitsModal.value = false
+  } catch (e: any) {
+    toast.error(e.response?.data?.error ?? e.message)
+  }
 }
 
 // QR
@@ -275,6 +279,7 @@ const webLink = ref('')
 
 async function showQR(label: string) {
   qrLabel.value = label
+  if (qrImage.value) URL.revokeObjectURL(qrImage.value)
   qrImage.value = ''
   tgLink.value = ''
   webLink.value = ''

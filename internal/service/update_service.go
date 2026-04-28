@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -56,6 +58,7 @@ type githubReleaseAsset struct {
 	Name               string `json:"name"`
 	BrowserDownloadURL string `json:"browser_download_url"`
 	Size               int64  `json:"size"`
+	Digest             string `json:"digest,omitempty"`
 }
 
 // Check queries the GitHub releases API for the latest version.
@@ -109,6 +112,25 @@ func (s *UpdateService) Apply(ctx context.Context) (*UpdateResult, error) {
 		return nil, fmt.Errorf("no binary found for %s/%s in release %s", runtime.GOOS, runtime.GOARCH, release.TagName)
 	}
 
+	// Find checksums asset
+	var checksumsAsset *githubReleaseAsset
+	for i := range release.Assets {
+		if release.Assets[i].Name == "checksums.txt" {
+			checksumsAsset = &release.Assets[i]
+			break
+		}
+	}
+
+	// Download checksums and extract expected hash for our binary
+	var expectedSHA256 string
+	if checksumsAsset != nil {
+		hash, err := s.fetchChecksum(ctx, checksumsAsset.BrowserDownloadURL, assetName)
+		if err != nil {
+			return nil, fmt.Errorf("fetch checksums: %w", err)
+		}
+		expectedSHA256 = hash
+	}
+
 	// 4. Resolve current binary path
 	exePath, err := os.Executable()
 	if err != nil {
@@ -120,7 +142,7 @@ func (s *UpdateService) Apply(ctx context.Context) (*UpdateResult, error) {
 	}
 
 	// 5. Download to temp file in same directory (same filesystem for atomic rename)
-	tmpFile, err := s.downloadAsset(ctx, asset.BrowserDownloadURL, asset.Size, filepath.Dir(exePath))
+	tmpFile, err := s.downloadAsset(ctx, asset.BrowserDownloadURL, asset.Size, filepath.Dir(exePath), expectedSHA256)
 	if err != nil {
 		return nil, fmt.Errorf("download: %w", err)
 	}
@@ -198,8 +220,8 @@ func (s *UpdateService) fetchRelease(ctx context.Context) (*githubRelease, error
 	return &release, nil
 }
 
-// downloadAsset downloads a release asset to a temp file in targetDir.
-func (s *UpdateService) downloadAsset(ctx context.Context, url string, expectedSize int64, targetDir string) (string, error) {
+// downloadAsset downloads a release asset to a temp file in targetDir and verifies SHA256 if provided.
+func (s *UpdateService) downloadAsset(ctx context.Context, url string, expectedSize int64, targetDir string, expectedSHA256 string) (string, error) {
 	client := &http.Client{Timeout: 5 * time.Minute}
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
@@ -230,6 +252,27 @@ func (s *UpdateService) downloadAsset(ctx context.Context, url string, expectedS
 		return "", fmt.Errorf("write download: %w", err)
 	}
 
+	// SHA256 verification
+	if expectedSHA256 != "" {
+		f, err := os.Open(tmpPath)
+		if err != nil {
+			os.Remove(tmpPath)
+			return "", fmt.Errorf("open for hash: %w", err)
+		}
+		h := sha256.New()
+		if _, err := io.Copy(h, f); err != nil {
+			f.Close()
+			os.Remove(tmpPath)
+			return "", fmt.Errorf("hash read: %w", err)
+		}
+		f.Close()
+		actualHash := hex.EncodeToString(h.Sum(nil))
+		if !strings.EqualFold(actualHash, expectedSHA256) {
+			os.Remove(tmpPath)
+			return "", fmt.Errorf("SHA256 mismatch: expected %s, got %s", expectedSHA256, actualHash)
+		}
+	}
+
 	// Size validation
 	if expectedSize > 0 && written != expectedSize {
 		os.Remove(tmpPath)
@@ -243,4 +286,33 @@ func (s *UpdateService) downloadAsset(ctx context.Context, url string, expectedS
 	}
 
 	return tmpPath, nil
+}
+
+// fetchChecksum downloads the checksums.txt and extracts the SHA256 hash for the given asset name.
+func (s *UpdateService) fetchChecksum(ctx context.Context, url, assetName string) (string, error) {
+	client := &http.Client{Timeout: 30 * time.Second}
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return "", err
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return "", fmt.Errorf("checksums download returned %d", resp.StatusCode)
+	}
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		parts := strings.SplitN(line, "  ", 2)
+		if len(parts) == 2 && strings.TrimSpace(parts[1]) == assetName {
+			return strings.TrimSpace(parts[0]), nil
+		}
+	}
+	return "", fmt.Errorf("no checksum found for %s", assetName)
 }

@@ -218,9 +218,10 @@ func (s *ContainerService) Status(ctx context.Context) (*model.ProxyStatus, erro
 	}
 
 	// Global traffic (all-time)
-	global, _ := s.traffic.GetGlobal(ctx)
-	status.TrafficIn = global.BytesIn
-	status.TrafficOut = global.BytesOut
+	if global, err := s.traffic.GetGlobal(ctx); err == nil && global != nil {
+		status.TrafficIn = global.BytesIn
+		status.TrafficOut = global.BytesOut
+	}
 
 	return status, nil
 }

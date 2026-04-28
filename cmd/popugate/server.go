@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -131,6 +132,7 @@ func runServer(cmd *cobra.Command, args []string) {
 
 	// Bot setup
 	var activeBot *bot.Bot
+	var botMu sync.Mutex
 	botCtx, botCancel := context.WithCancel(context.Background())
 	defer botCancel()
 
@@ -162,7 +164,7 @@ func runServer(cmd *cobra.Command, args []string) {
 		return qrutil.GeneratePNG(link, 256)
 	}
 
-	startBotIfNeeded(botCtx, settingsStore, botDeps, &activeBot)
+	startBotIfNeeded(botCtx, settingsStore, botDeps, &activeBot, &botMu)
 
 	// Get settings from DB
 	ctx := context.Background()
@@ -213,7 +215,7 @@ func runServer(cmd *cobra.Command, args []string) {
 	})
 
 	// Start scheduler
-	sched := setupScheduler(trafficSvc, healthSvc, replSvc, blocklistStore, settingsStore, secretStore, &activeBot, updateSvc)
+	sched := setupScheduler(trafficSvc, healthSvc, replSvc, blocklistStore, settingsStore, secretStore, &activeBot, &botMu, updateSvc)
 	defer sched.Stop()
 
 	// HTTP server
@@ -256,7 +258,7 @@ func runServer(cmd *cobra.Command, args []string) {
 	srvLog.Infof("Server stopped")
 }
 
-func startBotIfNeeded(ctx context.Context, settingsStore *store.SettingsStore, deps *bot.Dependencies, activeBot **bot.Bot) {
+func startBotIfNeeded(ctx context.Context, settingsStore *store.SettingsStore, deps *bot.Dependencies, activeBot **bot.Bot, mu *sync.Mutex) {
 	settings, err := settingsStore.Load(ctx)
 	if err != nil {
 		return
@@ -265,7 +267,9 @@ func startBotIfNeeded(ctx context.Context, settingsStore *store.SettingsStore, d
 		return
 	}
 	b := bot.New(settings.TelegramBotToken, settings.TelegramChatID, settings.TelegramServerLabel, deps)
+	mu.Lock()
 	*activeBot = b
+	mu.Unlock()
 	go b.Start(ctx)
 	logger.WithScope("bot").Infof("started")
 }
@@ -278,6 +282,7 @@ func setupScheduler(
 	settings *store.SettingsStore,
 	secrets *store.SecretStore,
 	activeBot **bot.Bot,
+	botMu *sync.Mutex,
 	updateSvc *service.UpdateService,
 ) *scheduler.Scheduler {
 	sched := scheduler.New()
@@ -327,7 +332,9 @@ func setupScheduler(
 			}
 		case "telegram-report":
 			tasks[i].Fn = func(ctx context.Context) error {
+				botMu.Lock()
 				botPtr := *activeBot
+				botMu.Unlock()
 				if botPtr == nil || !botPtr.IsRunning() {
 					return nil
 				}

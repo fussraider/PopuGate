@@ -102,6 +102,16 @@ func (s *DockerService) pullAndTag(ctx context.Context, pullRef, taggedImage, la
 }
 
 func (s *DockerService) buildFromSource(ctx context.Context, version, taggedImage, latestImage string) error {
+	repo := model.TelemtRepo()
+	commit := model.TelemtCommit()
+
+	if !isSafeGitURL(repo) {
+		return fmt.Errorf("invalid TELEMT_REPO value: rejected by safety check")
+	}
+	if !isSafeGitRef(commit) {
+		return fmt.Errorf("invalid TELEMT_COMMIT value: rejected by safety check")
+	}
+
 	buildDir, err := os.MkdirTemp("", "popugate-build-*")
 	if err != nil {
 		return fmt.Errorf("create build dir: %w", err)
@@ -128,14 +138,14 @@ COPY --from=builder /telemt /usr/local/bin/telemt
 RUN chmod +x /usr/local/bin/telemt
 STOPSIGNAL SIGINT
 ENTRYPOINT ["telemt"]
-`, model.TelemtRepo())
+`, repo)
 
 	if err := os.WriteFile(filepath.Join(buildDir, "Dockerfile"), []byte(dockerfile), 0644); err != nil {
 		return fmt.Errorf("write Dockerfile: %w", err)
 	}
 
 	cmd := exec.CommandContext(ctx, "docker", "buildx", "build",
-		"--build-arg", "TELEMT_COMMIT="+model.TelemtCommit(),
+		"--build-arg", "TELEMT_COMMIT="+commit,
 		"-t", taggedImage,
 		buildDir,
 		"--load",
@@ -200,4 +210,33 @@ func (s *DockerService) GetInstalledVersion() string {
 	}
 
 	return ""
+}
+
+// isSafeGitURL validates that a git URL only contains safe characters.
+func isSafeGitURL(url string) bool {
+	if url == "" {
+		return false
+	}
+	for _, r := range url {
+		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') ||
+			r == ':' || r == '/' || r == '.' || r == '-' || r == '_' || r == '@' ||
+			r == '~' || r == '+' || r == '?') {
+			return false
+		}
+	}
+	return !strings.Contains(url, `"`)
+}
+
+// isSafeGitRef validates that a git ref (commit/branch/tag) only contains safe characters.
+func isSafeGitRef(ref string) bool {
+	if ref == "" {
+		return false
+	}
+	for _, r := range ref {
+		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') ||
+			r == '.' || r == '-' || r == '_' || r == '/') {
+			return false
+		}
+	}
+	return true
 }

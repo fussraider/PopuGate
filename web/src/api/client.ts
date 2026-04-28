@@ -8,8 +8,14 @@ const apiClient: AxiosInstance = axios.create({
   headers: { 'Content-Type': 'application/json' },
 })
 
+// Skip auth interceptor for logout endpoint to prevent recursion
+function isLogoutRequest(url?: string): boolean {
+  return !!url && (url.endsWith('/auth/logout') || url.includes('/auth/logout'))
+}
+
 // Request interceptor: attach JWT
 apiClient.interceptors.request.use((config) => {
+  if (isLogoutRequest(config.url)) return config
   const authStore = useAuthStore()
   if (authStore.accessToken) {
     config.headers.Authorization = `Bearer ${authStore.accessToken}`

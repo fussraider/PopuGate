@@ -216,6 +216,8 @@ export const replicationApi = {
     api.post<SlaveTestResult>('/replication/test', { host }, { timeout: 120000 }).then((r) => r.data),
 
   sshKeygen: () => api.post('/replication/ssh-keygen', {}, { timeout: 120000 }).then((r) => r.data),
+
+  sshKey: () => api.get('/replication/ssh-key').then((r) => r.data),
 }
 
 // ─── Update ────────────────────────────────────────────────────

@@ -138,6 +138,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useReplicationStore } from '@/stores/replication'
+import { useToastStore } from '@/stores/toast'
 import Modal from '@/components/common/Modal.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
@@ -145,6 +146,7 @@ import { FlaskConical, RefreshCw, Trash2, Loader2 } from '@lucide/vue'
 
 const { t } = useI18n()
 const replicationStore = useReplicationStore()
+const toast = useToastStore()
 
 const roleForm = ref({ role: 'standalone', interval: 60 })
 const publicKey = ref('')
@@ -156,11 +158,20 @@ const statusBadgeVariant = computed(() => {
 })
 
 async function handleSetupRole() {
-  await replicationStore.setup(roleForm.value.role, roleForm.value.interval)
+  try {
+    await replicationStore.setup(roleForm.value.role, roleForm.value.interval)
+    toast.success(t('replication.setup_success'))
+  } catch (e: any) {
+    toast.error(e.response?.data?.error ?? e.message)
+  }
 }
 
 async function handleSSHKeygen() {
-  publicKey.value = await replicationStore.sshKeygen()
+  try {
+    publicKey.value = await replicationStore.sshKeygen()
+  } catch (e: any) {
+    toast.error(e.response?.data?.error ?? e.message)
+  }
 }
 
 function copyKey() {
@@ -168,7 +179,11 @@ function copyKey() {
 }
 
 async function testSlave(host: string) {
-  testResult.value = await replicationStore.test(host)
+  try {
+    testResult.value = await replicationStore.test(host)
+  } catch (e: any) {
+    toast.error(e.response?.data?.error ?? e.message)
+  }
 }
 
 const addSlaveModal = ref(false)
@@ -176,18 +191,30 @@ const slaveForm = ref({ host: '', port: 22, label: '' })
 
 function openAddSlave() { slaveForm.value = { host: '', port: 22, label: '' }; addSlaveModal.value = true }
 async function handleAddSlave() {
-  await replicationStore.addSlave(slaveForm.value.host, slaveForm.value.port, slaveForm.value.label)
-  addSlaveModal.value = false
+  try {
+    await replicationStore.addSlave(slaveForm.value.host, slaveForm.value.port, slaveForm.value.label)
+    addSlaveModal.value = false
+  } catch (e: any) {
+    toast.error(e.response?.data?.error ?? e.message)
+  }
 }
 
 const confirmModal = ref(false)
 const removeTarget = ref('')
 function confirmRemove(host: string) { removeTarget.value = host; confirmModal.value = true }
-async function handleRemove() { await replicationStore.removeSlave(removeTarget.value); confirmModal.value = false }
+async function handleRemove() {
+  try {
+    await replicationStore.removeSlave(removeTarget.value)
+    confirmModal.value = false
+  } catch (e: any) {
+    toast.error(e.response?.data?.error ?? e.message)
+  }
+}
 
-onMounted(() => {
+onMounted(async () => {
   replicationStore.loadStatus()
   replicationStore.loadSlaves()
+  publicKey.value = await replicationStore.loadSSHPublicKey()
 })
 </script>
 

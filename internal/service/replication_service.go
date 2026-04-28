@@ -141,9 +141,18 @@ func (s *ReplicationService) GenerateSSHKey(ctx context.Context) (string, error)
 	return sshutil.GenerateEd25519Key(settings.SSHKeyPath())
 }
 
+// GetSSHPublicKey reads the existing public key from disk.
+func (s *ReplicationService) GetSSHPublicKey(ctx context.Context) (string, error) {
+	settings, _ := s.settings.Load(ctx)
+	return sshutil.ReadPublicKey(settings.SSHKeyPath())
+}
+
 func (s *ReplicationService) syncSlave(ctx context.Context, settings *model.Settings, sl model.Slave) sshutil.SyncResult {
 	cfg := s.buildSyncConfig(settings, sl)
-	result, _ := sshutil.Sync(ctx, cfg)
+	result, err := sshutil.Sync(ctx, cfg)
+	if err != nil || result == nil {
+		return sshutil.SyncResult{Host: sl.Host, Error: fmt.Sprintf("sync failed: %v", err)}
+	}
 	return *result
 }
 

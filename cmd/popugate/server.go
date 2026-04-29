@@ -115,7 +115,7 @@ func runServer(cmd *cobra.Command, args []string) {
 	trafficSvc := service.NewTrafficService(trafficStore, settingsStore, dockerClient, instanceStore)
 	trafficSvc.SetSecretStore(secretStore, quotaStore)
 	geoblockSvc := service.NewGeoblockService(settingsStore, instanceStore, geoblockCache)
-	updateSvc := service.NewUpdateService()
+	updateSvc := service.NewUpdateService(dockerClient)
 	var dockerSvc *service.DockerService
 	var containerSvc *service.ContainerService
 	var healthSvc *service.HealthService

@@ -33,6 +33,11 @@ func NewDockerClient() (*DockerClient, error) {
 	return &DockerClient{cli: cli}, nil
 }
 
+// Cli returns the underlying Docker SDK client for advanced operations.
+func (d *DockerClient) Cli() *client.Client {
+	return d.cli
+}
+
 // Close releases Docker client resources.
 func (d *DockerClient) Close() error {
 	if d.cli != nil {

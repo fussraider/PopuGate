@@ -160,7 +160,7 @@ jobs:
             COMMIT=${{ github.sha }}
 
   release:
-    needs: build
+    needs: [build, build-web]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -171,8 +171,22 @@ jobs:
           merge-multiple: true
           path: artifacts
 
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: web-dist
+
+      - name: Package web dist
+        run: tar -czf artifacts/popugate-web-dist.tar.gz -C web-dist .
+
+      - name: Generate checksums
+        working-directory: artifacts
+        run: sha256sum popugate-* > checksums.txt
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
-          files: artifacts/popugate-*
+          files: |
+            artifacts/popugate-*
+            artifacts/checksums.txt
           generate_release_notes: true

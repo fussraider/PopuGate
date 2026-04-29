@@ -1,12 +1,13 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { updateApi } from '@/api/endpoints'
+import { updateApi, healthApi } from '@/api/endpoints'
 import type { UpdateStatus, UpdateResult } from '@/types/models'
 
 export const useUpdateStore = defineStore('update', () => {
   const status = ref<UpdateStatus | null>(null)
   const loading = ref(false)
   const applying = ref(false)
+  const restarting = ref(false)
   const result = ref<UpdateResult | null>(null)
   const error = ref('')
 
@@ -25,8 +26,11 @@ export const useUpdateStore = defineStore('update', () => {
   async function apply() {
     applying.value = true
     error.value = ''
+    result.value = null
     try {
       result.value = await updateApi.apply()
+      restarting.value = true
+      pollForRestart()
     } catch (e: any) {
       error.value = e.message
     } finally {
@@ -34,5 +38,26 @@ export const useUpdateStore = defineStore('update', () => {
     }
   }
 
-  return { status, loading, applying, result, error, check, apply }
+  function pollForRestart() {
+    let attempts = 0
+    const maxAttempts = 60
+    const interval = setInterval(async () => {
+      attempts++
+      if (attempts >= maxAttempts) {
+        clearInterval(interval)
+        restarting.value = false
+        return
+      }
+      try {
+        await healthApi.check()
+        clearInterval(interval)
+        restarting.value = false
+        window.location.reload()
+      } catch {
+        // service not yet available
+      }
+    }, 5000)
+  }
+
+  return { status, loading, applying, restarting, result, error, check, apply }
 })

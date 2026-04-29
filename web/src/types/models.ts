@@ -197,13 +197,21 @@ export interface UpdateStatus {
   latest: string
   update_available: boolean
   url?: string
+  mode: 'docker' | 'binary'
 }
 
 export interface UpdateResult {
+  ok?: boolean
   previous_version: string
   new_version: string
-  binary_path: string
-  backup_path: string
+  binary_path?: string
+  backup_path?: string
+  image_pulled?: string
+  web_image_pulled?: string
+  container_name?: string
+  web_container_name?: string
+  web_dist_path?: string
+  message?: string
 }
 
 export interface BackupInfo {

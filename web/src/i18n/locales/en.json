@@ -259,10 +259,17 @@
     "applying": "Applying...",
     "apply": "Apply Update",
     "auto_update": "Auto-Update",
+    "mode_docker": "Docker",
+    "mode_binary": "Binary",
+    "restarting": "Restarting...",
     "maintenance_desc": "PopuGate checks for updates periodically via the scheduler. You can also manually check and apply updates here. When applying an update, the binary is downloaded and the previous version is backed up.",
+    "maintenance_desc_docker": "PopuGate checks for updates periodically via the scheduler. In Docker mode, updates pull a new container image and recreate the container with the same configuration.",
     "apply_tip": "After applying an update, restart the service for changes to take effect.",
+    "apply_tip_docker": "After applying an update, the container will automatically restart with the new image. The page will refresh automatically.",
     "confirm_apply": "Apply the update? The service will need to be restarted.",
-    "success": "Updated from v{old} to v{new}. Restart the service to apply changes."
+    "confirm_apply_docker": "Apply the update? The container will be recreated.",
+    "success": "Updated from v{old} to v{new}. Restart the service to apply changes.",
+    "success_docker": "Updated from v{old} to v{new}. The container is being recreated, the page will refresh automatically..."
   },
   "upstreams": {
     "add": "Add Upstream",

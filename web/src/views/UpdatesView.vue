@@ -1,7 +1,12 @@
 <template>
   <div>
     <div class="card mb-lg">
-      <h3 class="mb-md">{{ t('updates.check') }}</h3>
+      <div class="flex items-center gap-md mb-md">
+        <h3>{{ t('updates.check') }}</h3>
+        <StatusBadge v-if="updateStore.status" :variant="updateStore.status.mode === 'docker' ? 'info' : 'neutral'">
+          {{ updateStore.status.mode === 'docker' ? t('updates.mode_docker') : t('updates.mode_binary') }}
+        </StatusBadge>
+      </div>
 
       <div class="status-row mb-md">
         <span>{{ t('updates.current') }}: <code>v{{ updateStore.status?.current || '—' }}</code></span>
@@ -17,14 +22,18 @@
           {{ updateStore.loading ? t('updates.checking') : t('updates.check_btn') }}
         </button>
         <button v-if="updateStore.status?.update_available" class="btn btn-warning"
-                :disabled="updateStore.applying" @click="handleApply">
-          <Loader2 v-if="updateStore.applying" :size="16" class="animate-spin" />
-          {{ updateStore.applying ? t('updates.applying') : t('updates.apply') }}
+                :disabled="updateStore.applying || updateStore.restarting" @click="handleApply">
+          <Loader2 v-if="updateStore.applying || updateStore.restarting" :size="16" class="animate-spin" />
+          {{ updateStore.restarting ? t('updates.restarting') : (updateStore.applying ? t('updates.applying') : t('updates.apply')) }}
         </button>
       </div>
 
       <div v-if="updateStore.error" class="alert alert-danger mt-md">{{ updateStore.error }}</div>
-      <div v-if="updateStore.result" class="alert alert-success mt-md">
+
+      <div v-if="updateStore.result && updateStore.status?.mode === 'docker'" class="alert alert-success mt-md">
+        {{ t('updates.success_docker', { old: updateStore.result.previous_version, new: updateStore.result.new_version }) }}
+      </div>
+      <div v-if="updateStore.result && updateStore.status?.mode === 'binary'" class="alert alert-success mt-md">
         {{ t('updates.success', { old: updateStore.result.previous_version, new: updateStore.result.new_version }) }}
       </div>
     </div>
@@ -32,10 +41,10 @@
     <div class="card">
       <h3 class="mb-md">{{ t('updates.auto_update') }}</h3>
       <p class="text-muted text-sm mb-md">
-        {{ t('updates.maintenance_desc') }}
+        {{ updateStore.status?.mode === 'docker' ? t('updates.maintenance_desc_docker') : t('updates.maintenance_desc') }}
       </p>
       <div class="alert alert-info">
-        {{ t('updates.apply_tip') }}
+        {{ updateStore.status?.mode === 'docker' ? t('updates.apply_tip_docker') : t('updates.apply_tip') }}
       </div>
     </div>
   </div>
@@ -52,9 +61,11 @@ const { t } = useI18n()
 const updateStore = useUpdateStore()
 
 async function handleApply() {
-  if (confirm(t('updates.confirm_apply'))) {
-    await updateStore.apply()
-  }
+  const msg = updateStore.status?.mode === 'docker'
+    ? t('updates.confirm_apply_docker')
+    : t('updates.confirm_apply')
+  if (!confirm(msg)) return
+  await updateStore.apply()
 }
 
 onMounted(() => updateStore.check())

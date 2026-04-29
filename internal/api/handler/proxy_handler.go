@@ -170,7 +170,6 @@ func (h *ProxyHandler) Logs(c *gin.Context) {
 		line := scanner.Text()
 		// Docker log format: first 8 bytes are header (usually), then payload
 		// However, when using a TTY, the header is not present.
-		// MTProxyMax usually doesn't use TTY for the container.
 		if len(line) > 8 {
 			line = line[8:]
 		}

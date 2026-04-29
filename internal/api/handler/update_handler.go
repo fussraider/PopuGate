@@ -39,32 +39,37 @@ func (h *UpdateHandler) Check(c *gin.Context) {
 }
 
 // Apply handles POST /api/v1/update/apply
-// Downloads and installs the update, then triggers a restart
-// in a goroutine after the response is sent.
+// In binary mode: downloads and installs the update, then triggers a restart.
+// In Docker mode: pulls new image, then spawns sidecar to recreate the container.
 func (h *UpdateHandler) Apply(c *gin.Context) {
-	// Use a background context with timeout for updates (10 minutes)
-	// to avoid being killed by request context timeout.
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 
 	result, err := h.updateSvc.Apply(ctx)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	resp := gin.H{
 		"ok":               true,
 		"previous_version": result.PreviousVersion,
 		"new_version":      result.NewVersion,
-		"backup_path":      result.BackupPath,
 		"message":          "update applied, restarting...",
-	})
+	}
+	if result.BackupPath != "" {
+		resp["backup_path"] = result.BackupPath
+	}
+	if result.ImagePulled != "" {
+		resp["image_pulled"] = result.ImagePulled
+		resp["container_name"] = result.ContainerName
+	}
 
-	// Restart in background after response is sent
+	c.JSON(http.StatusOK, resp)
+
 	go func() {
 		time.Sleep(1 * time.Second)
-		if err := h.updateSvc.RestartSelf(); err != nil {
+		if err := h.updateSvc.RestartSelf(result.ImagePulled); err != nil {
 			logger.WithScope("update").Warnf("restart after update: %v", err)
 		}
 	}()

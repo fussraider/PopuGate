@@ -88,6 +88,26 @@ func (s *UpstreamStore) Delete(ctx context.Context, name string) error {
 	return err
 }
 
+// Update modifies an existing upstream identified by name.
+func (s *UpstreamStore) Update(ctx context.Context, name string, u *model.Upstream) error {
+	enabled := 0
+	if u.Enabled {
+		enabled = 1
+	}
+	result, err := s.db.ExecContext(ctx, `
+		UPDATE upstreams SET type = ?, address = ?, username = ?, password = ?, weight = ?, iface = ?, enabled = ?
+		WHERE name = ?
+	`, u.Type, u.Address, u.Username, u.Password, u.Weight, u.Iface, enabled, name)
+	if err != nil {
+		return fmt.Errorf("update upstream %s: %w", name, err)
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return fmt.Errorf("upstream '%s' not found", name)
+	}
+	return nil
+}
+
 // UpdateEnabled toggles an upstream's enabled state.
 func (s *UpstreamStore) UpdateEnabled(ctx context.Context, name string, enabled bool) error {
 	v := 0

@@ -81,6 +81,10 @@ func (s *SettingsStore) Load(ctx context.Context) (*model.Settings, error) {
 	settings.ReplicationRestartOnChange = getBool(kv, "replication_restart_on_change")
 	settings.ReplicationLog = getString(kv, "replication_log", "")
 	settings.Debug = getBool(kv, "debug")
+	// telemt engine
+	settings.TelemtVersion = getString(kv, "telemt_version", "")
+	settings.TelemtCommit = getString(kv, "telemt_commit", "")
+	settings.TelemtRepo = getString(kv, "telemt_repo", "")
 
 	settings.Validate()
 	return &settings, nil

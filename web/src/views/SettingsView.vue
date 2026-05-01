@@ -90,6 +90,22 @@
         </div>
       </div>
 
+      <!-- telemt Engine -->
+      <div class="card mb-lg">
+        <h3 class="mb-md">{{ t('settings_view.telemt_engine') }}</h3>
+        <p class="text-muted text-sm mb-md">{{ t('settings_view.telemt_engine_desc') }}</p>
+        <div class="settings-grid">
+          <div class="form-group">
+            <label class="form-label">{{ t('settings_view.telemt_version') }}</label>
+            <input v-model="form.telemt_version" class="input" :placeholder="t('settings_view.telemt_version_placeholder')" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">{{ t('settings_view.telemt_commit') }}</label>
+            <input v-model="form.telemt_commit" class="input" :placeholder="t('settings_view.telemt_commit_placeholder')" />
+          </div>
+        </div>
+      </div>
+
       <!-- Auto-Update -->
       <div class="card mb-lg">
         <h3 class="mb-md">{{ t('settings_view.maintenance') }}</h3>

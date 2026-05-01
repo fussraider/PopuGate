@@ -46,7 +46,7 @@ func TestIsSafeGitRef(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.ref, func(t *testing.T) {
-			got := isSafeGitRef(tt.ref)
+			got := IsSafeGitRef(tt.ref)
 			if got != tt.safe {
 				t.Errorf("isSafeGitRef(%q) = %v, want %v", tt.ref, got, tt.safe)
 			}

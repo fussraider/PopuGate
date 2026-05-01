@@ -28,17 +28,19 @@ type RouterConfig struct {
 	Backups   *store.BackupStore
 	Docker    *dockerutil.DockerClient
 	// Services
-	SecretSvc    *service.SecretService
-	UpstreamSvc  *service.UpstreamService
-	ContainerSvc *service.ContainerService
-	DockerSvc    *service.DockerService
-	GeoblockSvc  *service.GeoblockService
-	BotDeps      *bot.Dependencies
-	HealthSvc    *service.HealthService
-	TrafficSvc   *service.TrafficService
-	ReplSvc      *service.ReplicationService
-	UpdateSvc    *service.UpdateService
-	CORSOrigins  []string // defaults to ["*"] if empty
+	SecretSvc       *service.SecretService
+	UpstreamSvc     *service.UpstreamService
+	ContainerSvc    *service.ContainerService
+	DockerSvc       *service.DockerService
+	GeoblockSvc     *service.GeoblockService
+	BotDeps         *bot.Dependencies
+	HealthSvc       *service.HealthService
+	TrafficSvc      *service.TrafficService
+	ReplSvc         *service.ReplicationService
+	UpdateSvc       *service.UpdateService
+	TelemtUpdateSvc *service.TelemtUpdateService
+	TelemtCfg       *service.DBTelemtConfig
+	CORSOrigins     []string // defaults to ["*"] if empty
 }
 
 // SetupRouter creates and configures the Gin router.
@@ -115,6 +117,7 @@ func SetupRouter(cfg RouterConfig) *gin.Engine {
 		protected.GET("/upstreams/interfaces", upstreamHandler.Interfaces)
 		protected.POST("/upstreams/test", upstreamHandler.TestConfig)
 		protected.POST("/upstreams", upstreamHandler.Add)
+		protected.PUT("/upstreams/:name", upstreamHandler.Update)
 		protected.DELETE("/upstreams/:name", upstreamHandler.Remove)
 		protected.PUT("/upstreams/:name/toggle", upstreamHandler.Toggle)
 		protected.POST("/upstreams/:name/test", upstreamHandler.Test)
@@ -141,6 +144,15 @@ func SetupRouter(cfg RouterConfig) *gin.Engine {
 		protected.GET("/docker/status", dockerHandler.Status)
 		protected.GET("/engine/status", dockerHandler.EngineStatus)
 		protected.POST("/engine/build", dockerHandler.Build)
+
+		// telemt engine updates
+		if cfg.TelemtUpdateSvc != nil {
+			telemtUpdateHandler := handler.NewTelemtUpdateHandler(cfg.TelemtUpdateSvc, cfg.TelemtCfg, cfg.DockerSvc)
+			protected.GET("/engine/update", telemtUpdateHandler.GetStatus)
+			protected.GET("/engine/releases", telemtUpdateHandler.GetReleases)
+			protected.POST("/engine/check", telemtUpdateHandler.CheckRemote)
+			protected.POST("/engine/update", telemtUpdateHandler.Apply)
+		}
 
 		// Geoblock
 		geoblockHandler := handler.NewGeoblockHandler(cfg.Settings, cfg.GeoblockSvc)

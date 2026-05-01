@@ -116,18 +116,21 @@ func runServer(cmd *cobra.Command, args []string) {
 	trafficSvc.SetSecretStore(secretStore, quotaStore)
 	geoblockSvc := service.NewGeoblockService(settingsStore, instanceStore, geoblockCache)
 	updateSvc := service.NewUpdateService(dockerClient)
+	telemtCfg := service.NewDBTelemtConfig(settingsStore)
 	var dockerSvc *service.DockerService
 	var containerSvc *service.ContainerService
 	var healthSvc *service.HealthService
 	var replSvc *service.ReplicationService
+	var telemtUpdateSvc *service.TelemtUpdateService
 	if dockerClient != nil {
-		dockerSvc = service.NewDockerService(dockerClient)
+		dockerSvc = service.NewDockerService(dockerClient, telemtCfg)
 		containerSvc = service.NewContainerService(
 			dockerClient, secretStore, upstreamStore, instanceStore, trafficStore, settingsStore, trafficSvc,
 		)
 		healthSvc = service.NewHealthService(dockerClient, settingsStore, instanceStore)
 		healthSvc.SetContainerSvc(containerSvc)
 		replSvc = service.NewReplicationService(settingsStore, slaveStore)
+		telemtUpdateSvc = service.NewTelemtUpdateService(settingsStore, dockerSvc, containerSvc, telemtCfg)
 	}
 
 	// Bot setup
@@ -191,31 +194,33 @@ func runServer(cmd *cobra.Command, args []string) {
 	// Setup router
 	cachedJWTProvider := api.NewCachedJWTSecretProvider(settingsStore, 5*time.Minute)
 	router := api.SetupRouter(api.RouterConfig{
-		Debug:        isDebug,
-		JWTSecret:    cachedJWTProvider,
-		Settings:     settingsStore,
-		Secrets:      secretStore,
-		Upstreams:    upstreamStore,
-		Instances:    instanceStore,
-		Slaves:       slaveStore,
-		Traffic:      trafficStore,
-		Blocklist:    blocklistStore,
-		Backups:      backupStore,
-		Docker:       dockerClient,
-		SecretSvc:    secretSvc,
-		UpstreamSvc:  upstreamSvc,
-		ContainerSvc: containerSvc,
-		DockerSvc:    dockerSvc,
-		GeoblockSvc:  geoblockSvc,
-		BotDeps:      botDeps,
-		HealthSvc:    healthSvc,
-		TrafficSvc:   trafficSvc,
-		ReplSvc:      replSvc,
-		UpdateSvc:    updateSvc,
+		Debug:           isDebug,
+		JWTSecret:       cachedJWTProvider,
+		Settings:        settingsStore,
+		Secrets:         secretStore,
+		Upstreams:       upstreamStore,
+		Instances:       instanceStore,
+		Slaves:          slaveStore,
+		Traffic:         trafficStore,
+		Blocklist:       blocklistStore,
+		Backups:         backupStore,
+		Docker:          dockerClient,
+		SecretSvc:       secretSvc,
+		UpstreamSvc:     upstreamSvc,
+		ContainerSvc:    containerSvc,
+		DockerSvc:       dockerSvc,
+		GeoblockSvc:     geoblockSvc,
+		BotDeps:         botDeps,
+		HealthSvc:       healthSvc,
+		TrafficSvc:      trafficSvc,
+		ReplSvc:         replSvc,
+		UpdateSvc:       updateSvc,
+		TelemtUpdateSvc: telemtUpdateSvc,
+		TelemtCfg:       telemtCfg,
 	})
 
 	// Start scheduler
-	sched := setupScheduler(trafficSvc, healthSvc, replSvc, blocklistStore, settingsStore, secretStore, &activeBot, &botMu, updateSvc)
+	sched := setupScheduler(trafficSvc, healthSvc, replSvc, blocklistStore, settingsStore, secretStore, &activeBot, &botMu, updateSvc, telemtUpdateSvc, telemtCfg)
 	defer sched.Stop()
 
 	// HTTP server
@@ -284,6 +289,8 @@ func setupScheduler(
 	activeBot **bot.Bot,
 	botMu *sync.Mutex,
 	updateSvc *service.UpdateService,
+	telemtUpdateSvc *service.TelemtUpdateService,
+	telemtCfg *service.DBTelemtConfig,
 ) *scheduler.Scheduler {
 	sched := scheduler.New()
 	tasks := scheduler.DefaultTasks()
@@ -349,6 +356,19 @@ func setupScheduler(
 					}
 					if status.UpdateAvailable {
 						srvLog.Infof("update available: v%s (current: v%s)", status.Latest, status.Current)
+					}
+					return nil
+				}
+			}
+		case "telemt-check":
+			if telemtUpdateSvc != nil {
+				tasks[i].Fn = func(ctx context.Context) error {
+					release, err := telemtUpdateSvc.CheckRemote(ctx)
+					if err != nil {
+						return err
+					}
+					if release.Version != telemtCfg.TelemtVersion() {
+						srvLog.Infof("telemt update available: %s (current: %s)", release.Version, telemtCfg.TelemtVersion())
 					}
 					return nil
 				}

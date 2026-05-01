@@ -161,6 +161,68 @@ func TestUpstreamStore_UpdateEnabled(t *testing.T) {
 	}
 }
 
+func TestUpstreamStore_Update(t *testing.T) {
+	db := testutil.OpenTestDB(t)
+	s := NewUpstreamStore(db)
+	ctx := context.Background()
+
+	if err := s.Create(ctx, &model.Upstream{
+		Name: "proxy1", Type: model.UpstreamSOCKS5, Address: "10.0.0.1:1080",
+		Username: "user1", Password: "pass1", Weight: 30, Iface: "eth0", Enabled: true,
+	}); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	updated := &model.Upstream{
+		Type: model.UpstreamSOCKS4, Address: "10.0.0.2:1081",
+		Username: "user2", Password: "pass2", Weight: 70, Iface: "eth1", Enabled: false,
+	}
+	if err := s.Update(ctx, "proxy1", updated); err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+
+	got, err := s.GetByName(ctx, "proxy1")
+	if err != nil {
+		t.Fatalf("GetByName: %v", err)
+	}
+	if got.Name != "proxy1" {
+		t.Fatalf("expected name proxy1, got %s", got.Name)
+	}
+	if got.Type != model.UpstreamSOCKS4 {
+		t.Fatalf("expected type socks4, got %s", got.Type)
+	}
+	if got.Address != "10.0.0.2:1081" {
+		t.Fatalf("expected address 10.0.0.2:1081, got %s", got.Address)
+	}
+	if got.Username != "user2" {
+		t.Fatalf("expected username user2, got %s", got.Username)
+	}
+	if got.Password != "pass2" {
+		t.Fatalf("expected password pass2, got %s", got.Password)
+	}
+	if got.Weight != 70 {
+		t.Fatalf("expected weight 70, got %d", got.Weight)
+	}
+	if got.Iface != "eth1" {
+		t.Fatalf("expected iface eth1, got %s", got.Iface)
+	}
+	if got.Enabled {
+		t.Fatal("expected enabled=false")
+	}
+}
+
+func TestUpstreamStore_UpdateNonexistent(t *testing.T) {
+	db := testutil.OpenTestDB(t)
+	s := NewUpstreamStore(db)
+
+	err := s.Update(context.Background(), "nope", &model.Upstream{
+		Type: model.UpstreamDirect, Weight: 10, Enabled: true,
+	})
+	if err == nil {
+		t.Fatal("expected error for nonexistent upstream")
+	}
+}
+
 func TestUpstreamStore_GetByNameNonexistent(t *testing.T) {
 	db := testutil.OpenTestDB(t)
 	s := NewUpstreamStore(db)

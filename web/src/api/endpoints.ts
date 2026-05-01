@@ -22,6 +22,8 @@ import type {
   BuildResult,
   UpdateStatus,
   UpdateResult,
+  TelemtUpdateStatus,
+  TelemtReleaseListItem,
   BackupInfo,
   OSType,
   ServiceStatus,
@@ -157,6 +159,11 @@ export const dockerApi = {
   engineStatus: () => api.get<EngineStatus>('/engine/status').then((r) => r.data),
   build: (force = false) =>
     api.post<BuildResult>('/engine/build', { force }, { timeout: 1800000 }).then((r) => r.data),
+  engineUpdateStatus: () => api.get<TelemtUpdateStatus>('/engine/update').then((r) => r.data),
+  engineReleases: () => api.get<TelemtReleaseListItem[]>('/engine/releases').then((r) => r.data),
+  engineCheckRemote: () => api.post<TelemtUpdateStatus>('/engine/check', {}).then((r) => r.data),
+  engineApplyUpdate: (version: string, commit: string) =>
+    api.post<{ ok: boolean; message: string; version: string }>('/engine/update', { version, commit }, { timeout: 2100000 }).then((r) => r.data),
 }
 
 // ─── Geoblock ──────────────────────────────────────────────────

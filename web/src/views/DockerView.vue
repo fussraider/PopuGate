@@ -38,6 +38,63 @@
       <div v-if="dockerStore.buildResult" class="alert alert-info mt-md">{{ dockerStore.buildResult }}</div>
     </div>
 
+    <!-- Engine Updates -->
+    <div class="card mb-lg">
+      <h3 class="mb-md">{{ t('docker.engine_updates') }}</h3>
+
+      <!-- Updating in progress (from server state, survives page refresh) -->
+      <div v-if="dockerStore.telemtUpdateStatus?.updating" class="alert alert-info mb-md">
+        <Loader2 :size="16" class="animate-spin inline-icon" />
+        {{ t('docker.updating_to', { version: dockerStore.telemtUpdateStatus.updating_to }) }}
+      </div>
+
+      <div v-if="dockerStore.telemtUpdateStatus && !dockerStore.telemtUpdateStatus.updating" class="status-row mb-md">
+        <span>{{ t('docker.current') }}: <code>{{ dockerStore.telemtUpdateStatus.current || '—' }}</code></span>
+        <span v-if="dockerStore.telemtUpdateStatus.latest">
+          {{ t('docker.latest') }}: <code>{{ dockerStore.telemtUpdateStatus.latest.version }}</code>
+        </span>
+        <StatusBadge v-if="dockerStore.telemtUpdateStatus.latest"
+                     :variant="dockerStore.telemtUpdateStatus.update_available ? 'warning' : 'success'">
+          {{ dockerStore.telemtUpdateStatus.update_available ? t('docker.update_available') : t('docker.up_to_date') }}
+        </StatusBadge>
+      </div>
+      <div v-if="!dockerStore.telemtUpdateStatus" class="text-muted mb-md">{{ t('common.loading') }}</div>
+      <div class="flex gap-sm">
+        <button class="btn btn-secondary" :disabled="dockerStore.checkingRemote || dockerStore.telemtUpdateStatus?.updating" @click="dockerStore.checkRemoteTelemt()">
+          <Loader2 v-if="dockerStore.checkingRemote" :size="16" class="animate-spin" />
+          {{ dockerStore.checkingRemote ? t('docker.checking') : t('docker.check_updates') }}
+        </button>
+        <button v-if="dockerStore.telemtUpdateStatus?.update_available && dockerStore.telemtUpdateStatus?.latest && !dockerStore.telemtUpdateStatus?.updating"
+                class="btn btn-warning"
+                :disabled="dockerStore.applyingUpdate"
+                @click="handleEngineUpdate">
+          <Loader2 v-if="dockerStore.applyingUpdate" :size="16" class="animate-spin" />
+          {{ dockerStore.applyingUpdate ? t('docker.updating') : t('docker.update_engine') }}
+        </button>
+      </div>
+      <div v-if="dockerStore.telemtUpdateStatus?.last_checked" class="text-muted text-sm mt-md">
+        {{ t('docker.last_checked') }}: {{ formatDate(dockerStore.telemtUpdateStatus.last_checked) }}
+      </div>
+
+      <!-- Releases dropdown -->
+      <div v-if="dockerStore.releases.length > 0" class="mt-md">
+        <label class="text-sm text-muted">{{ t('docker.select_release') }}</label>
+        <div class="flex gap-sm mt-sm">
+          <select v-model="dockerStore.selectedRelease" class="select flex-1">
+            <option :value="null" disabled>{{ t('docker.choose_release') }}</option>
+            <option v-for="r in dockerStore.releases" :key="r.version" :value="r">
+              {{ r.tag_name }} ({{ r.commit?.substring(0, 7) }})
+            </option>
+          </select>
+          <button class="btn btn-secondary"
+                  :disabled="!dockerStore.selectedRelease || dockerStore.applyingUpdate || dockerStore.telemtUpdateStatus?.updating"
+                  @click="handleSelectedRelease">
+            {{ t('docker.build_selected') }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Container Info -->
     <div class="card">
       <h3 class="mb-md">{{ t('docker.container_title') }}</h3>
@@ -62,7 +119,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useDockerStore, useProxyStore } from '@/stores'
 import { Loader2 } from '@lucide/vue'
@@ -74,9 +131,42 @@ const { t } = useI18n()
 const dockerStore = useDockerStore()
 const proxyStore = useProxyStore()
 
+async function handleEngineUpdate() {
+  const latest = dockerStore.telemtUpdateStatus?.latest
+  if (!latest) return
+  if (!confirm(t('docker.confirm_engine_update', { version: latest.version }))) return
+  await dockerStore.applyTelemtUpdate(latest.version, latest.commit || '')
+}
+
+async function handleSelectedRelease() {
+  const release = dockerStore.selectedRelease
+  if (!release) return
+  if (!confirm(t('docker.confirm_engine_update', { version: release.version }))) return
+  await dockerStore.applyTelemtUpdate(release.version, release.commit || '')
+}
+
+function formatDate(unixTimestamp: string): string {
+  const d = new Date(parseInt(unixTimestamp) * 1000)
+  return d.toLocaleString()
+}
+
 onMounted(() => {
   dockerStore.loadDockerStatus()
   dockerStore.loadEngineStatus()
+  dockerStore.loadTelemtUpdateStatus()
+  dockerStore.loadReleases()
   proxyStore.loadStatus()
 })
+
+onBeforeUnmount(() => {
+  dockerStore.stopUpdatePoll()
+})
 </script>
+
+<style scoped lang="scss">
+.inline-icon {
+  display: inline-block;
+  vertical-align: middle;
+  margin-right: 0.25rem;
+}
+</style>

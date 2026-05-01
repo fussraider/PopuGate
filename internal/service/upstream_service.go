@@ -59,6 +59,27 @@ func (s *UpstreamService) Add(ctx context.Context, u *model.Upstream) error {
 	return s.upstreams.Create(ctx, u)
 }
 
+// Update modifies an existing upstream.
+func (s *UpstreamService) Update(ctx context.Context, name string, u *model.Upstream) error {
+	if err := u.Validate(); err != nil {
+		return err
+	}
+
+	existing, err := s.upstreams.GetByName(ctx, name)
+	if err != nil {
+		return err
+	}
+	if existing == nil {
+		return fmt.Errorf("upstream '%s' not found", name)
+	}
+
+	// Preserve the original name and enabled state
+	u.Name = existing.Name
+	u.Enabled = existing.Enabled
+
+	return s.upstreams.Update(ctx, name, u)
+}
+
 // Remove deletes an upstream by name.
 func (s *UpstreamService) Remove(ctx context.Context, name string) error {
 	existing, err := s.upstreams.GetByName(ctx, name)

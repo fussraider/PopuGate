@@ -59,6 +59,11 @@ type Settings struct {
 	ReplicationRestartOnChange bool   `json:"replication_restart_on_change"`
 	ReplicationLog             string `json:"replication_log"`
 	Debug                      bool   `json:"debug"`
+
+	// telemt engine
+	TelemtVersion string `json:"telemt_version"`
+	TelemtCommit  string `json:"telemt_commit"`
+	TelemtRepo    string `json:"telemt_repo"`
 }
 
 // DefaultSSHKeyPath returns the default SSH key location.

@@ -34,6 +34,9 @@ export interface Settings {
   replication_restart_on_change: boolean
   replication_log: string
   debug: boolean
+  telemt_version: string
+  telemt_commit: string
+  telemt_repo: string
 }
 
 export interface Secret {
@@ -212,6 +215,33 @@ export interface UpdateResult {
   web_container_name?: string
   web_dist_path?: string
   message?: string
+}
+
+export interface TelemtReleaseInfo {
+  version: string
+  commit?: string
+  tag_name?: string
+  html_url?: string
+  published_at?: string
+}
+
+export interface TelemtReleaseListItem {
+  version: string
+  commit: string
+  tag_name: string
+  html_url?: string
+  published_at?: string
+  prerelease: boolean
+}
+
+export interface TelemtUpdateStatus {
+  current: string
+  latest: TelemtReleaseInfo | null
+  update_available: boolean
+  last_checked?: string
+  installed_version?: string
+  updating?: boolean
+  updating_to?: string
 }
 
 export interface BackupInfo {

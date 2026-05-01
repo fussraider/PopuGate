@@ -41,6 +41,44 @@ type addUpstreamRequest struct {
 	Iface    string `json:"iface"`
 }
 
+type updateUpstreamRequest struct {
+	Type     string `json:"type" binding:"required"`
+	Address  string `json:"address"`
+	Username string `json:"username"`
+	Password string `json:"password"`
+	Weight   int    `json:"weight"`
+	Iface    string `json:"iface"`
+}
+
+// Update handles PUT /api/v1/upstreams/:name
+func (h *UpstreamHandler) Update(c *gin.Context) {
+	name := c.Param("name")
+	var req updateUpstreamRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	u := &model.Upstream{
+		Name:     name,
+		Type:     model.UpstreamType(strings.TrimSpace(req.Type)),
+		Address:  strings.TrimSpace(req.Address),
+		Username: strings.TrimSpace(req.Username),
+		Password: strings.TrimSpace(req.Password),
+		Weight:   req.Weight,
+		Iface:    strings.TrimSpace(req.Iface),
+	}
+	if u.Weight == 0 {
+		u.Weight = 10
+	}
+
+	if err := h.upstreams.Update(c.Request.Context(), name, u); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, u)
+}
+
 type testUpstreamRequest struct {
 	Type     string `json:"type" binding:"required"`
 	Address  string `json:"address"`

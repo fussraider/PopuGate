@@ -17,12 +17,16 @@ import (
 
 // DockerService handles Docker installation and engine image management.
 type DockerService struct {
-	docker *dockerutil.DockerClient
+	docker    *dockerutil.DockerClient
+	telemtCfg TelemtConfigProvider
 }
 
 // NewDockerService creates a new DockerService.
-func NewDockerService(docker *dockerutil.DockerClient) *DockerService {
-	return &DockerService{docker: docker}
+func NewDockerService(docker *dockerutil.DockerClient, telemtCfg TelemtConfigProvider) *DockerService {
+	if telemtCfg == nil {
+		telemtCfg = &defaultTelemtConfig{}
+	}
+	return &DockerService{docker: docker, telemtCfg: telemtCfg}
 }
 
 // BuildResult holds the outcome of a build attempt.
@@ -37,7 +41,7 @@ type BuildResult struct {
 // 2. Pull :latest from registry
 // 3. Build from source
 func (s *DockerService) BuildEngine(ctx context.Context, force bool) (*BuildResult, error) {
-	version := fmt.Sprintf("%s-%s", model.TelemtVersion(), model.TelemtCommit())
+	version := fmt.Sprintf("%s-%s", s.telemtCfg.TelemtVersion(), s.telemtCfg.TelemtCommit())
 	taggedImage := model.DockerImageBase + ":" + version
 	latestImage := model.DockerImageBase + ":latest"
 	registryVersion := model.RegistryImage + ":" + version
@@ -102,13 +106,13 @@ func (s *DockerService) pullAndTag(ctx context.Context, pullRef, taggedImage, la
 }
 
 func (s *DockerService) buildFromSource(ctx context.Context, version, taggedImage, latestImage string) error {
-	repo := model.TelemtRepo()
-	commit := model.TelemtCommit()
+	repo := s.telemtCfg.TelemtRepo()
+	commit := s.telemtCfg.TelemtCommit()
 
 	if !isSafeGitURL(repo) {
 		return fmt.Errorf("invalid TELEMT_REPO value: rejected by safety check")
 	}
-	if !isSafeGitRef(commit) {
+	if !IsSafeGitRef(commit) {
 		return fmt.Errorf("invalid TELEMT_COMMIT value: rejected by safety check")
 	}
 
@@ -227,8 +231,8 @@ func isSafeGitURL(url string) bool {
 	return !strings.Contains(url, `"`)
 }
 
-// isSafeGitRef validates that a git ref (commit/branch/tag) only contains safe characters.
-func isSafeGitRef(ref string) bool {
+// IsSafeGitRef validates that a git ref (commit/branch/tag) only contains safe characters.
+func IsSafeGitRef(ref string) bool {
 	if ref == "" {
 		return false
 	}

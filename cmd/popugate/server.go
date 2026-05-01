@@ -131,6 +131,7 @@ func runServer(cmd *cobra.Command, args []string) {
 		healthSvc.SetContainerSvc(containerSvc)
 		replSvc = service.NewReplicationService(settingsStore, slaveStore)
 		telemtUpdateSvc = service.NewTelemtUpdateService(settingsStore, dockerSvc, containerSvc, telemtCfg)
+		telemtUpdateSvc.ResetStaleUpdate(context.Background())
 	}
 
 	// Bot setup

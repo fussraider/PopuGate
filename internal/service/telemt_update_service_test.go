@@ -252,6 +252,46 @@ func TestTelemtUpdateService_GetReleases_InvalidJSON(t *testing.T) {
 	}
 }
 
+func TestTelemtUpdateService_ResetStaleUpdate_ClearsFlag(t *testing.T) {
+	db := testutil.OpenTestDB(t)
+	settingsStore := store.NewSettingsStore(db)
+
+	settingsStore.Save(context.Background(), map[string]string{
+		"telemt_updating":    "true",
+		"telemt_updating_to": "4.0.0-abcd",
+	})
+
+	telemtCfg := NewDBTelemtConfig(settingsStore)
+	svc := NewTelemtUpdateService(settingsStore, nil, nil, telemtCfg)
+
+	svc.ResetStaleUpdate(context.Background())
+
+	flag, _ := settingsStore.Get(context.Background(), "telemt_updating")
+	if flag != "false" {
+		t.Errorf("telemt_updating = %q, want false", flag)
+	}
+	updatingTo, _ := settingsStore.Get(context.Background(), "telemt_updating_to")
+	if updatingTo != "" {
+		t.Errorf("telemt_updating_to = %q, want empty", updatingTo)
+	}
+}
+
+func TestTelemtUpdateService_ResetStaleUpdate_NoOpWhenNotUpdating(t *testing.T) {
+	db := testutil.OpenTestDB(t)
+	settingsStore := store.NewSettingsStore(db)
+
+	telemtCfg := NewDBTelemtConfig(settingsStore)
+	svc := NewTelemtUpdateService(settingsStore, nil, nil, telemtCfg)
+
+	// Should not fail or change anything when flag is not set
+	svc.ResetStaleUpdate(context.Background())
+
+	flag, _ := settingsStore.Get(context.Background(), "telemt_updating")
+	if flag == "true" {
+		t.Error("telemt_updating should not be true")
+	}
+}
+
 func TestShortSHA(t *testing.T) {
 	tests := []struct {
 		input string

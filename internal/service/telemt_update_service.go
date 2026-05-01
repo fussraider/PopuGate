@@ -66,6 +66,19 @@ func NewTelemtUpdateService(
 	}
 }
 
+// ResetStaleUpdate clears a stale "updating" flag left from a crash/restart.
+// Should be called once at server startup.
+func (s *TelemtUpdateService) ResetStaleUpdate(ctx context.Context) {
+	updatingFlag, _ := s.settings.Get(ctx, "telemt_updating")
+	if updatingFlag == "true" {
+		logger.WithScope("telemt-update").Warnf("clearing stale telemt update flag (server restarted mid-update)")
+		s.settings.Save(ctx, map[string]string{
+			"telemt_updating":    "false",
+			"telemt_updating_to": "",
+		})
+	}
+}
+
 // CheckRemote queries the GitHub API for the latest telemt release, fetches the
 // full releases list, and caches everything.
 func (s *TelemtUpdateService) CheckRemote(ctx context.Context) (*TelemtReleaseInfo, error) {

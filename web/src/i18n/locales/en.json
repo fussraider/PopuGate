@@ -314,7 +314,7 @@
     "confirm_remove": "Remove upstream '{name}'?",
     "added_success": "Upstream \"{name}\" added",
     "removed_success": "Upstream \"{name}\" removed",
-    "test_success": "Upstream \"{name}\" is reachable",
+    "test_success": "Upstream \"{name}\" is reachable{extra}",
     "test_failed": "Upstream \"{name}\" unreachable: {error}",
     "test_config": "Test",
     "test_ok": "Connection OK",

@@ -151,6 +151,13 @@ func (s *TrafficService) GetLiveMetrics(ctx context.Context) (*model.LiveMetrics
 		return nil, fmt.Errorf("no metrics collected from any active instance")
 	}
 
+	// If the engine doesn't expose telemt_connections_current, compute from per-user metrics
+	if combined.ConnsCurrent == 0 && len(combined.UserMetrics) > 0 {
+		for _, um := range combined.UserMetrics {
+			combined.ConnsCurrent += um.Connections
+		}
+	}
+
 	s.mu.Lock()
 	s.lastLive = combined
 	s.lastTime = time.Now()

@@ -46,10 +46,12 @@ export const useUpstreamsStore = defineStore('upstreams', () => {
     }
   }
 
-  async function test(name: string) {
+  async function test(name: string): Promise<UpstreamTestResult | null> {
     testing.value = name
     try {
-      await upstreamsApi.test(name)
+      return await upstreamsApi.test(name)
+    } catch {
+      return null
     } finally {
       testing.value = null
     }

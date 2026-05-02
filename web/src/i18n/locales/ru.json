@@ -314,7 +314,7 @@
     "confirm_remove": "Удалить апстрим '{name}'?",
     "added_success": "Апстрим \"{name}\" добавлен",
     "removed_success": "Апстрим \"{name}\" удален",
-    "test_success": "Апстрим \"{name}\" доступен",
+    "test_success": "Апстрим \"{name}\" доступен{extra}",
     "test_failed": "Апстрим \"{name}\" недоступен: {error}",
     "test_config": "Проверить",
     "test_ok": "Соединение успешно",

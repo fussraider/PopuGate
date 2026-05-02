@@ -194,8 +194,16 @@ async function handleRemove() {
 
 async function testUpstream(name: string) {
   try {
-    await store.test(name)
-    toast.success(t('upstreams.test_success', { name }))
+    const result = await store.test(name)
+    if (result?.ok) {
+      const parts: string[] = []
+      if (result.latency_ms) parts.push(`${result.latency_ms}ms`)
+      if (result.exit_ip) parts.push(`IP: ${result.exit_ip}`)
+      const extra = parts.length ? ` (${parts.join(', ')})` : ''
+      toast.success(t('upstreams.test_success', { name, extra }))
+    } else {
+      toast.error(t('upstreams.test_failed', { name, error: result?.error ?? 'Unknown error' }))
+    }
   } catch (e: any) {
     toast.error(t('upstreams.test_failed', { name, error: e.response?.data?.error ?? e.message }))
   }

@@ -8,6 +8,11 @@ const apiClient: AxiosInstance = axios.create({
   headers: { 'Content-Type': 'application/json' },
 })
 
+// Mutex: ensures only one refresh request is in-flight at a time.
+// Without this, concurrent 401s each fire their own refresh — the first
+// succeeds and blocklists the old refresh token, so the rest fail → logout.
+let refreshPromise: Promise<boolean> | null = null
+
 // Skip auth interceptor for logout endpoint to prevent recursion
 function isLogoutRequest(url?: string): boolean {
   return !!url && (url.endsWith('/auth/logout') || url.includes('/auth/logout'))
@@ -43,7 +48,16 @@ apiClient.interceptors.response.use(
     if (status === 401 && !original._retry) {
       original._retry = true
       const authStore = useAuthStore()
-      if (await authStore.refresh()) {
+
+      // Reuse in-flight refresh or start a new one
+      if (!refreshPromise) {
+        refreshPromise = authStore.refresh().finally(() => {
+          refreshPromise = null
+        })
+      }
+
+      const refreshed = await refreshPromise
+      if (refreshed) {
         original.headers = {
           ...original.headers,
           Authorization: `Bearer ${authStore.accessToken}`,

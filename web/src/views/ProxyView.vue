@@ -137,11 +137,14 @@ watch(() => proxyStore.logs, () => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: $spacing-sm;
+  flex-wrap: wrap;
 }
 
 .flex-center {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
 }
 
 .gap-md {

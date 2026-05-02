@@ -1,17 +1,26 @@
-import { ref } from 'vue'
+import { ref, type Ref } from 'vue'
 import { useToastStore } from '@/stores/toast'
 
-export function useAsyncAction() {
+export interface UseAsyncActionOptions {
+  successMessage?: string
+  modal?: Ref<boolean>
+}
+
+export function useAsyncAction(options?: UseAsyncActionOptions) {
   const loading = ref(false)
   const toast = useToastStore()
 
-  async function run(fn: () => Promise<void>, successMsg?: string) {
+  async function run<T = void>(fn: () => Promise<T>, successMsg?: string): Promise<T | undefined> {
     loading.value = true
     try {
-      await fn()
-      if (successMsg) toast.success(successMsg)
+      const result = await fn()
+      const msg = successMsg ?? options?.successMessage
+      if (msg) toast.success(msg)
+      if (options?.modal) options.modal.value = false
+      return result
     } catch (e: any) {
       toast.error(e.response?.data?.error ?? e.message)
+      return undefined
     } finally {
       loading.value = false
     }

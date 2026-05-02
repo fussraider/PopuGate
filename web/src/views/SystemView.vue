@@ -94,6 +94,8 @@
         <p><strong>{{ t('common.description') }}:</strong> {{ t('system.unsupported') }}</p>
       </div>
     </div>
+
+    <ConfirmDialog v-bind="confirmState" @confirm="handleConfirm" @cancel="handleCancel" />
   </div>
 </template>
 
@@ -102,14 +104,18 @@ import { computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useSystemStore } from '@/stores/system'
 import { useToastStore } from '@/stores/toast'
+import { useConfirmDialog } from '@/composables/useConfirmDialog'
 import { Loader2 } from '@lucide/vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import InfoGrid from '@/components/common/InfoGrid.vue'
 import InfoItem from '@/components/common/InfoItem.vue'
+import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 
 const { t } = useI18n()
 const systemStore = useSystemStore()
 const toast = useToastStore()
+
+const { confirmState, confirm, handleConfirm, handleCancel } = useConfirmDialog()
 
 const serviceStatusVariant = computed(() => {
   const status = systemStore.service?.active?.toLowerCase() || ''
@@ -129,7 +135,7 @@ async function handleInstall() {
 }
 
 async function handleUninstall() {
-  if (!confirm(t('system.uninstall_confirm'))) return
+  if (!await confirm({ title: t('system.uninstall'), message: t('system.uninstall_confirm'), confirmText: t('system.uninstall') })) return
   try {
     await systemStore.uninstallService()
     toast.success(t('system.uninstalled_success'))

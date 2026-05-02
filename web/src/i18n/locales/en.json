@@ -1,4 +1,14 @@
 {
+  "nav": {
+    "groups": {
+      "overview": "Overview",
+      "proxy": "Proxy",
+      "security": "Security",
+      "monitoring": "Monitoring",
+      "integrations": "Integrations",
+      "system": "System"
+    }
+  },
   "common": {
     "logout": "Logout",
     "dashboard": "Dashboard",
@@ -302,6 +312,9 @@
     "test": "Test",
     "delete": "Delete",
     "add_title": "Add Upstream",
+    "edit": "Edit",
+    "edit_title": "Edit Upstream",
+    "updated_success": "Upstream \"{name}\" updated",
     "name_label": "Name",
     "type_label": "Type",
     "direct": "Direct",

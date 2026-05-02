@@ -25,7 +25,7 @@
           {{ dockerStore.engineStatus?.image_exists ? t('docker.image_ready') : t('docker.no_image') }}
         </StatusBadge>
       </div>
-      <div class="flex gap-sm">
+      <div class="btn-group-wrap">
         <button class="btn btn-primary" :disabled="dockerStore.building" @click="dockerStore.buildEngine(false)">
           <Loader2 v-if="dockerStore.building" :size="16" class="animate-spin" />
           {{ dockerStore.building ? t('docker.building') : t('docker.build_pull') }}
@@ -115,6 +115,8 @@
         </InfoItem>
       </InfoGrid>
     </div>
+
+    <ConfirmDialog v-bind="confirmState" @confirm="handleConfirm" @cancel="handleCancel" />
   </div>
 </template>
 
@@ -122,26 +124,30 @@
 import { onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useDockerStore, useProxyStore } from '@/stores'
+import { useConfirmDialog } from '@/composables/useConfirmDialog'
 import { Loader2 } from '@lucide/vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import InfoGrid from '@/components/common/InfoGrid.vue'
 import InfoItem from '@/components/common/InfoItem.vue'
+import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 
 const { t } = useI18n()
 const dockerStore = useDockerStore()
 const proxyStore = useProxyStore()
 
+const { confirmState, confirm, handleConfirm, handleCancel } = useConfirmDialog()
+
 async function handleEngineUpdate() {
   const latest = dockerStore.telemtUpdateStatus?.latest
   if (!latest) return
-  if (!confirm(t('docker.confirm_engine_update', { version: latest.version }))) return
+  if (!await confirm({ title: t('docker.update_engine'), message: t('docker.confirm_engine_update', { version: latest.version }), confirmText: t('docker.update_engine') })) return
   await dockerStore.applyTelemtUpdate(latest.version, latest.commit || '')
 }
 
 async function handleSelectedRelease() {
   const release = dockerStore.selectedRelease
   if (!release) return
-  if (!confirm(t('docker.confirm_engine_update', { version: release.version }))) return
+  if (!await confirm({ title: t('docker.update_engine'), message: t('docker.confirm_engine_update', { version: release.version }), confirmText: t('docker.build_selected') })) return
   await dockerStore.applyTelemtUpdate(release.version, release.commit || '')
 }
 
@@ -164,9 +170,12 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped lang="scss">
+@use '@/assets/scss/variables' as *;
+
 .inline-icon {
   display: inline-block;
   vertical-align: middle;
   margin-right: 0.25rem;
 }
+.btn-group-wrap { display: flex; gap: $spacing-sm; flex-wrap: wrap; }
 </style>

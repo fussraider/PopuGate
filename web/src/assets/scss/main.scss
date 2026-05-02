@@ -14,6 +14,7 @@ html {
   font-size: 16px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
 }
 
 body {
@@ -22,6 +23,7 @@ body {
   line-height: $line-height-normal;
   color: $text-primary;
   background: $bg-body;
+  overflow-x: hidden;
 }
 
 #app {
@@ -226,8 +228,13 @@ code {
   display: flex;
   gap: $spacing-sm;
   align-items: center;
+  min-width: 0;
 
-  .input { flex: 1; }
+  .input { flex: 1; min-width: 0; }
+
+  @media (max-width: 480px) {
+    flex-wrap: wrap;
+  }
 }
 
 // ─── Badge ─────────────────────────────────────────────────────────
@@ -365,8 +372,24 @@ code {
   }
 
   .modal {
-    max-width: 100%;
+    max-width: calc(100vw - 2rem);
     margin: $spacing-md;
+  }
+
+  .modal-overlay {
+    padding: $spacing-md;
+  }
+
+  .card {
+    padding: $spacing-md;
+  }
+
+  .traffic-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .info-grid {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -389,6 +412,10 @@ code {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: $spacing-md;
+
+  @media (max-width: 768px) {
+    grid-template-columns: 1fr;
+  }
 }
 
 .checkbox-label {
@@ -458,7 +485,8 @@ code {
 .actions-cell {
   display: flex;
   gap: 2px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  white-space: nowrap;
 }
 
 .status-row {
@@ -542,8 +570,8 @@ code {
 .text-xs { font-size: $font-size-xs; }
 .text-sm { font-size: $font-size-sm; }
 
-.flex-between { display: flex; justify-content: space-between; align-items: center; }
-.flex-center { display: flex; align-items: center; }
+.flex-between { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: $spacing-sm; }
+.flex-center { display: flex; align-items: center; flex-wrap: wrap; }
 
 // ─── Animations ─────────────────────────────────────────────────────
 
@@ -554,14 +582,19 @@ code {
 
 // ─── Page Transitions ───────────────────────────────────────────────
 
-.page-fade-enter-active,
-.page-fade-leave-active {
-  transition: opacity 0.15s ease;
+.page-slide-enter-active,
+.page-slide-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
 }
 
-.page-fade-enter-from,
-.page-fade-leave-to {
+.page-slide-enter-from {
   opacity: 0;
+  transform: translateY(12px);
+}
+
+.page-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
 }
 
 // ─── Skeleton Loading ──────────────────────────────────────────────

@@ -20,6 +20,7 @@ type TelemtUpdateService struct {
 	dockerSvc    *DockerService
 	containerSvc *ContainerService
 	telemtCfg    *DBTelemtConfig
+	notify       NotifyFunc
 }
 
 // TelemtReleaseInfo holds information about a remote telemt release.
@@ -65,6 +66,9 @@ func NewTelemtUpdateService(
 		telemtCfg:    telemtCfg,
 	}
 }
+
+// SetNotify sets the notification callback.
+func (s *TelemtUpdateService) SetNotify(fn NotifyFunc) { s.notify = fn }
 
 // ResetStaleUpdate clears a stale "updating" flag left from a crash/restart.
 // Should be called once at server startup.
@@ -177,6 +181,8 @@ func (s *TelemtUpdateService) Apply(ctx context.Context, version, commit string)
 		"telemt_updating_to": updatingTo,
 	})
 
+	s.notifyUpdate(ctx, "⏳ *%s* Updating telemt engine to %s...", updatingTo)
+
 	prevVersion, _ := s.settings.Get(ctx, "telemt_version")
 	prevCommit, _ := s.settings.Get(ctx, "telemt_commit")
 
@@ -206,6 +212,7 @@ func (s *TelemtUpdateService) Apply(ctx context.Context, version, commit string)
 			"telemt_commit":  prevCommit,
 		})
 		s.telemtCfg.InvalidateCache()
+		s.notifyUpdate(ctx, "❌ *%s* Telemt engine update failed: build error\n%s", err)
 		return fmt.Errorf("build engine: %w", err)
 	}
 
@@ -214,11 +221,13 @@ func (s *TelemtUpdateService) Apply(ctx context.Context, version, commit string)
 	if s.containerSvc != nil {
 		if err := s.containerSvc.Restart(ctx); err != nil {
 			log.Warnf("proxy restart failed (image is ready): %v", err)
+			s.notifyUpdate(ctx, "❌ *%s* Telemt engine update failed: restart error\n%s", err)
 			return fmt.Errorf("build succeeded but restart failed: %w", err)
 		}
 		log.Infof("proxy restarted with new engine")
 	}
 
+	s.notifyUpdate(ctx, "✅ *%s* Telemt engine updated to %s", updatingTo)
 	return nil
 }
 
@@ -306,4 +315,11 @@ func (s *TelemtUpdateService) cacheRelease(ctx context.Context, info *TelemtRele
 	if err := s.settings.Save(ctx, updates); err != nil {
 		logger.WithScope("telemt-update").Warnf("cache release: %v", err)
 	}
+}
+
+func (s *TelemtUpdateService) notifyUpdate(ctx context.Context, format string, args ...any) {
+	if s.notify == nil {
+		return
+	}
+	s.notify(ctx, format, args...)
 }

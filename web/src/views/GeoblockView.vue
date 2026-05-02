@@ -41,9 +41,15 @@
 
     <div class="card">
       <h3 class="mb-md">{{ t('geoblock.help') }}</h3>
-      <div class="alert alert-info">
-        <strong>{{ t('geoblock.blacklist_desc') }}:</strong> {{ t('geoblock.blacklist_help') }}<br />
-        <strong>{{ t('geoblock.whitelist_desc') }}:</strong> {{ t('geoblock.whitelist_help') }}
+      <div class="help-blocks">
+        <div class="help-block">
+          <strong class="help-block-title">{{ t('geoblock.blacklist_desc') }}</strong>
+          <span class="text-muted text-sm">{{ t('geoblock.blacklist_help') }}</span>
+        </div>
+        <div class="help-block">
+          <strong class="help-block-title">{{ t('geoblock.whitelist_desc') }}</strong>
+          <span class="text-muted text-sm">{{ t('geoblock.whitelist_help') }}</span>
+        </div>
       </div>
       <p class="mt-sm text-muted text-sm">
         {{ t('geoblock.help_tip') }}
@@ -109,4 +115,16 @@ onMounted(async () => {
   opacity: 0.6;
   &:hover { opacity: 1; }
 }
+
+.help-blocks { display: flex; flex-direction: column; gap: $spacing-sm; }
+.help-block {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-xs;
+  padding: $spacing-sm $spacing-md;
+  background: $color-info-bg;
+  border-radius: $border-radius;
+  border: 1px solid #bfdbfe;
+}
+.help-block-title { font-size: $font-size-sm; color: #1e40af; }
 </style>

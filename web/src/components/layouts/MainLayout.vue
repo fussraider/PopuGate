@@ -13,18 +13,21 @@
         <button class="sidebar-close" @click="sidebarOpen = false"><X :size="20" /></button>
       </div>
       <nav class="sidebar-nav">
-        <router-link
-          v-for="item in navItems"
-          :key="item.path"
-          :to="item.path"
-          class="nav-item"
-          :active-class="item.path === '/' ? '' : 'active'"
-          exact-active-class="active"
-          @click="sidebarOpen = false"
-        >
-          <component :is="item.icon" class="nav-icon" :size="18" />
-          <span class="nav-label">{{ item.label }}</span>
-        </router-link>
+        <template v-for="(group, gi) in groupedNavItems" :key="gi">
+          <div class="nav-group-label">{{ group.label }}</div>
+          <router-link
+            v-for="item in group.items"
+            :key="item.path"
+            :to="item.path"
+            class="nav-item"
+            :active-class="item.path === '/' ? '' : 'active'"
+            exact-active-class="active"
+            @click="sidebarOpen = false"
+          >
+            <component :is="item.icon" class="nav-icon" :size="18" />
+            <span class="nav-label">{{ item.label }}</span>
+          </router-link>
+        </template>
       </nav>
       <div class="sidebar-footer">
         <div class="version"><a :href="APP_VERSION_URL" target="_blank" rel="noopener">{{ APP_VERSION }}</a></div>
@@ -45,7 +48,7 @@
       </header>
       <main class="content">
         <router-view v-slot="{ Component }">
-          <Transition name="page-fade" mode="out-in">
+          <Transition name="page-slide" mode="out-in">
             <component :is="Component" />
           </Transition>
         </router-view>
@@ -84,25 +87,43 @@ const auth = useAuthStore()
 const sidebarOpen = ref(false)
 
 const navItems = computed(() => [
-  { path: '/',            icon: LayoutDashboard, label: t('common.dashboard')   },
-  { path: '/secrets',     icon: KeyRound,        label: t('common.secrets')     },
-  { path: '/upstreams',   icon: GitBranch,       label: t('common.upstreams')   },
-  { path: '/instances',   icon: Server,           label: t('common.instances')   },
-  { path: '/proxy',       icon: Play,             label: t('common.proxy')       },
-  { path: '/docker',      icon: Container,        label: t('common.docker')      },
-  { path: '/geoblock',    icon: Globe,            label: t('common.geoblock')    },
-  { path: '/traffic',     icon: TrendingUp,       label: t('common.traffic')     },
-  { path: '/bot',         icon: Bot,              label: t('common.bot')         },
-  { path: '/replication', icon: RefreshCw,        label: t('common.replication') },
-  { path: '/updates',     icon: Package,          label: t('common.updates')     },
-  { path: '/backups',     icon: Save,             label: t('common.backups')     },
-  { path: '/settings',    icon: Settings,         label: t('common.settings')    },
-  { path: '/system',      icon: Monitor,          label: t('common.system')      },
+  { path: '/',            icon: LayoutDashboard, label: t('common.dashboard'),   group: 'overview' },
+  { path: '/proxy',       icon: Play,            label: t('common.proxy'),       group: 'proxy' },
+  { path: '/instances',   icon: Server,          label: t('common.instances'),   group: 'proxy' },
+  { path: '/upstreams',   icon: GitBranch,       label: t('common.upstreams'),   group: 'proxy' },
+  { path: '/docker',      icon: Container,       label: t('common.docker'),      group: 'proxy' },
+  { path: '/secrets',     icon: KeyRound,        label: t('common.secrets'),     group: 'security' },
+  { path: '/geoblock',    icon: Globe,           label: t('common.geoblock'),    group: 'security' },
+  { path: '/traffic',     icon: TrendingUp,      label: t('common.traffic'),     group: 'monitoring' },
+  { path: '/bot',         icon: Bot,             label: t('common.bot'),         group: 'integrations' },
+  { path: '/replication', icon: RefreshCw,       label: t('common.replication'), group: 'integrations' },
+  { path: '/updates',     icon: Package,         label: t('common.updates'),     group: 'system' },
+  { path: '/backups',     icon: Save,            label: t('common.backups'),     group: 'system' },
+  { path: '/settings',    icon: Settings,        label: t('common.settings'),    group: 'system' },
+  { path: '/system',      icon: Monitor,         label: t('common.system'),      group: 'system' },
 ])
 
-// pageTitle берётся из navItems — единственный источник правды
+const groupedNavItems = computed(() => {
+  const groupOrder = ['overview', 'proxy', 'security', 'monitoring', 'integrations', 'system']
+  const groupLabels: Record<string, string> = {
+    overview: t('nav.groups.overview'),
+    proxy: t('nav.groups.proxy'),
+    security: t('nav.groups.security'),
+    monitoring: t('nav.groups.monitoring'),
+    integrations: t('nav.groups.integrations'),
+    system: t('nav.groups.system'),
+  }
+  return groupOrder
+    .filter((g) => navItems.value.some((item) => item.group === g))
+    .map((g) => ({
+      label: groupLabels[g],
+      items: navItems.value.filter((item) => item.group === g),
+    }))
+})
+
 const pageTitle = computed(() => {
-  const current = navItems.value.find((item) => {
+  const allItems = navItems.value
+  const current = allItems.find((item) => {
     if (item.path === '/') return route.path === '/'
     return route.path.startsWith(item.path)
   })
@@ -219,6 +240,15 @@ async function handleLogout() {
 .nav-icon { flex-shrink: 0; }
 .nav-label { white-space: nowrap; }
 
+.nav-group-label {
+  padding: 16px $spacing-lg 4px;
+  font-size: $font-size-xs;
+  font-weight: $font-weight-semibold;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.35);
+}
+
 .sidebar-footer {
   padding: $spacing-md $spacing-lg;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
@@ -248,6 +278,8 @@ async function handleLogout() {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  min-width: 0;
+  overflow-x: hidden;
 
   @media (max-width: 768px) { margin-left: 0; }
 }
@@ -289,6 +321,7 @@ async function handleLogout() {
   display: flex;
   gap: $spacing-sm;
   align-items: center;
+  flex-shrink: 0;
 }
 
 .content {

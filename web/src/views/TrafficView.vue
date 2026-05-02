@@ -190,27 +190,19 @@
     <!-- Per-User Traffic -->
     <div class="card">
       <h3 class="mb-md">{{ t('traffic.per_user_traffic') }}</h3>
-      <div v-if="trafficStore.users && trafficStore.users.length" class="table-wrapper">
-        <table class="table">
-          <thead>
-            <tr>
-              <th>{{ t('traffic.user_table.user') }}</th>
-              <th>{{ t('traffic.user_table.in') }}</th>
-              <th>{{ t('traffic.user_table.out') }}</th>
-              <th>{{ t('traffic.user_table.total') }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="u in trafficStore.users" :key="u.label">
-              <td><code>{{ u.label }}</code></td>
-              <td>{{ formatBytes(u.bytes_in) }}</td>
-              <td>{{ formatBytes(u.bytes_out) }}</td>
-              <td>{{ formatBytes(u.bytes_in + u.bytes_out) }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <EmptyState v-else :icon="BarChart3" :message="t('traffic.no_traffic')" />
+      <DataTable
+        :columns="userColumns"
+        :items="trafficStore.users ?? []"
+        :loading="trafficStore.loading"
+        :empty-icon="BarChart3"
+        :empty-message="t('traffic.no_traffic')"
+        row-key="label"
+      >
+        <template #cell-label="{ item }"><code>{{ item.label }}</code></template>
+        <template #cell-bytes_in="{ item }">{{ formatBytes(item.bytes_in) }}</template>
+        <template #cell-bytes_out="{ item }">{{ formatBytes(item.bytes_out) }}</template>
+        <template #cell-total="{ item }">{{ formatBytes(item.bytes_in + item.bytes_out) }}</template>
+      </DataTable>
     </div>
   </div>
 </template>
@@ -221,6 +213,7 @@ import { useI18n } from 'vue-i18n'
 import { useTrafficStore } from '@/stores/traffic'
 import { useProxyStore } from '@/stores/proxy'
 import { formatBytes } from '@/utils/format'
+import DataTable from '@/components/common/DataTable.vue'
 import ToggleSwitch from '@/components/common/ToggleSwitch.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import Tooltip from '@/components/common/Tooltip.vue'
@@ -229,6 +222,13 @@ import { Activity, Loader2, BarChart3, Info } from '@lucide/vue'
 const { t } = useI18n()
 const trafficStore = useTrafficStore()
 const proxyStore = useProxyStore()
+
+const userColumns = [
+  { key: 'label', header: t('traffic.user_table.user') },
+  { key: 'bytes_in', header: t('traffic.user_table.in') },
+  { key: 'bytes_out', header: t('traffic.user_table.out') },
+  { key: 'total', header: t('traffic.user_table.total') },
+]
 
 const autoRefresh = ref(trafficStore.autoRefresh)
 

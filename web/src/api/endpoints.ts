@@ -117,12 +117,15 @@ export const upstreamsApi = {
 
   add: (data: Omit<Upstream, 'id'>) => api.post<Upstream>('/upstreams', data).then((r) => r.data),
 
+  update: (name: string, data: Omit<Upstream, 'id' | 'name' | 'enabled'>) =>
+    api.put<Upstream>(`/upstreams/${name}`, data).then((r) => r.data),
+
   remove: (name: string) => api.delete(`/upstreams/${name}`),
 
   toggle: (name: string, enabled: boolean) =>
     api.put(`/upstreams/${name}/toggle`, { enabled }),
 
-  test: (name: string) => api.post(`/upstreams/${name}/test`),
+  test: (name: string) => api.post<UpstreamTestResult>(`/upstreams/${name}/test`).then((r) => r.data),
 
   testConfig: (data: { type: string; address?: string; username?: string; password?: string; iface?: string }) =>
     api.post<UpstreamTestResult>('/upstreams/test', data).then((r) => r.data),

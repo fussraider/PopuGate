@@ -28,6 +28,7 @@ type ContainerService struct {
 	traffic    *store.TrafficStore
 	settings   *store.SettingsStore
 	trafficSvc *TrafficService
+	notify     NotifyFunc
 }
 
 // NewContainerService creates a new ContainerService.
@@ -50,6 +51,9 @@ func NewContainerService(
 		trafficSvc: trafficSvc,
 	}
 }
+
+// SetNotify sets the notification callback.
+func (s *ContainerService) SetNotify(fn NotifyFunc) { s.notify = fn }
 
 // Start starts all enabled proxy instances.
 func (s *ContainerService) Start(ctx context.Context) error {
@@ -75,6 +79,7 @@ func (s *ContainerService) Start(ctx context.Context) error {
 		return fmt.Errorf("start instances: %w", err)
 	}
 
+	s.notifyEngineState(ctx, "🟢 *%s* Proxy engine started")
 	return nil
 }
 
@@ -86,7 +91,7 @@ func (s *ContainerService) Stop(ctx context.Context) error {
 	}
 
 	// Write stop flag to prevent auto-recovery from restarting
-	if err := os.WriteFile(stopFlagPath, []byte(fmt.Sprintf("%d", time.Now().Unix())), 0644); err != nil {
+	if err := os.WriteFile(stopFlagPath, fmt.Appendf(nil, "%d", time.Now().Unix()), 0644); err != nil {
 		statusLog.Warnf("write stop flag: %v", err)
 	}
 
@@ -111,6 +116,7 @@ func (s *ContainerService) Stop(ctx context.Context) error {
 	}
 	wg.Wait()
 
+	s.notifyEngineState(ctx, "🔴 *%s* Proxy engine stopped")
 	return nil
 }
 
@@ -339,6 +345,13 @@ func (s *ContainerService) flushTraffic(ctx context.Context) error {
 		return s.trafficSvc.Flush(ctx)
 	}
 	return nil
+}
+
+func (s *ContainerService) notifyEngineState(ctx context.Context, format string) {
+	if s.notify == nil {
+		return
+	}
+	s.notify(ctx, format)
 }
 
 func formatDuration(d time.Duration) string {

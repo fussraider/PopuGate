@@ -170,6 +170,37 @@ func runServer(cmd *cobra.Command, args []string) {
 
 	startBotIfNeeded(botCtx, settingsStore, botDeps, &activeBot, &botMu)
 
+	// Notification callback — used by services and scheduler to send alerts via Telegram bot.
+	// Resolves the server label and checks TelegramAlertsEnabled in a single settings load.
+	notifyFn := func(ctx context.Context, format string, args ...any) {
+		botMu.Lock()
+		b := activeBot
+		botMu.Unlock()
+		if b == nil || !b.IsRunning() {
+			return
+		}
+		s, err := settingsStore.Load(ctx)
+		if err != nil || !s.TelegramAlertsEnabled {
+			return
+		}
+		label := s.TelegramServerLabel
+		if label == "" {
+			label = "PopuGate"
+		}
+		fullArgs := append([]any{label}, args...)
+		msg := fmt.Sprintf(format, fullArgs...)
+		if err := b.SendMessage(ctx, msg); err != nil {
+			srvLog.Warnf("notify: %v", err)
+		}
+	}
+
+	if containerSvc != nil {
+		containerSvc.SetNotify(notifyFn)
+	}
+	if telemtUpdateSvc != nil {
+		telemtUpdateSvc.SetNotify(notifyFn)
+	}
+
 	// Get settings from DB
 	ctx := context.Background()
 	settings, err := settingsStore.Load(ctx)
@@ -221,7 +252,7 @@ func runServer(cmd *cobra.Command, args []string) {
 	})
 
 	// Start scheduler
-	sched := setupScheduler(trafficSvc, healthSvc, replSvc, blocklistStore, settingsStore, secretStore, &activeBot, &botMu, updateSvc, telemtUpdateSvc, telemtCfg)
+	sched := setupScheduler(trafficSvc, healthSvc, replSvc, blocklistStore, settingsStore, secretStore, &activeBot, &botMu, updateSvc, telemtUpdateSvc, telemtCfg, notifyFn)
 	defer sched.Stop()
 
 	// HTTP server
@@ -292,6 +323,7 @@ func setupScheduler(
 	updateSvc *service.UpdateService,
 	telemtUpdateSvc *service.TelemtUpdateService,
 	telemtCfg *service.DBTelemtConfig,
+	notify service.NotifyFunc,
 ) *scheduler.Scheduler {
 	sched := scheduler.New()
 	tasks := scheduler.DefaultTasks()
@@ -357,6 +389,7 @@ func setupScheduler(
 					}
 					if status.UpdateAvailable {
 						srvLog.Infof("update available: v%s (current: v%s)", status.Latest, status.Current)
+						notify(ctx, "🆕 *%s* New PopuGate version available: v%s\nCurrent: v%s", status.Latest, status.Current)
 					}
 					return nil
 				}
@@ -370,6 +403,7 @@ func setupScheduler(
 					}
 					if release.Version != telemtCfg.TelemtVersion() {
 						srvLog.Infof("telemt update available: %s (current: %s)", release.Version, telemtCfg.TelemtVersion())
+						notify(ctx, "🆕 *%s* New telemt engine version available: %s\nCurrent: %s", release.Version, telemtCfg.TelemtVersion())
 					}
 					return nil
 				}

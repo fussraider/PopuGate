@@ -30,6 +30,12 @@ export const useUpstreamsStore = defineStore('upstreams', () => {
     upstreams.value.push(created)
   }
 
+  async function update(name: string, data: Omit<Upstream, 'id' | 'name' | 'enabled'>) {
+    const updated = await upstreamsApi.update(name, data)
+    const idx = upstreams.value.findIndex((u) => u.name === name)
+    if (idx !== -1) upstreams.value[idx] = updated
+  }
+
   async function remove(name: string) {
     await upstreamsApi.remove(name)
     upstreams.value = upstreams.value.filter((u) => u.name !== name)
@@ -69,5 +75,5 @@ export const useUpstreamsStore = defineStore('upstreams', () => {
     }
   }
 
-  return { upstreams, interfaces, loading, testing, toggling, testingConfig, testResult, load, loadInterfaces, add, remove, toggle, test, testConfig }
+  return { upstreams, interfaces, loading, testing, toggling, testingConfig, testResult, load, loadInterfaces, add, update, remove, toggle, test, testConfig }
 })

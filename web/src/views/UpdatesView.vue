@@ -47,6 +47,8 @@
         {{ updateStore.status?.mode === 'docker' ? t('updates.apply_tip_docker') : t('updates.apply_tip') }}
       </div>
     </div>
+
+    <ConfirmDialog v-bind="confirmState" @confirm="handleConfirm" @cancel="handleCancel" />
   </div>
 </template>
 
@@ -54,17 +56,21 @@
 import { onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useUpdateStore } from '@/stores/update'
+import { useConfirmDialog } from '@/composables/useConfirmDialog'
 import { Loader2 } from '@lucide/vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
+import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 
 const { t } = useI18n()
 const updateStore = useUpdateStore()
+
+const { confirmState, confirm, handleConfirm, handleCancel } = useConfirmDialog()
 
 async function handleApply() {
   const msg = updateStore.status?.mode === 'docker'
     ? t('updates.confirm_apply_docker')
     : t('updates.confirm_apply')
-  if (!confirm(msg)) return
+  if (!await confirm({ title: t('updates.apply'), message: msg, confirmText: t('updates.apply') })) return
   await updateStore.apply()
 }
 

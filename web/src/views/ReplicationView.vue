@@ -47,52 +47,40 @@
     <div class="card mb-lg">
       <div class="flex justify-between items-center mb-md">
         <h3>{{ t('replication.slaves_title') }}</h3>
-        <button class="btn btn-primary btn-sm" @click="openAddSlave">+ {{ t('replication.add_slave') }}</button>
+        <button class="btn btn-primary btn-sm" @click="slaveModal.open()">+ {{ t('replication.add_slave') }}</button>
       </div>
 
-      <div v-if="!(replicationStore.slaves && replicationStore.slaves.length)" class="text-muted text-sm">{{ t('replication.no_slaves') }}</div>
-
-      <div v-else class="table-wrapper">
-        <table class="table">
-          <thead>
-            <tr>
-              <th>{{ t('replication.table.host') }}</th>
-              <th>{{ t('replication.table.port') }}</th>
-              <th>{{ t('replication.table.label') }}</th>
-              <th>{{ t('replication.table.last_sync') }}</th>
-              <th>{{ t('replication.table.status') }}</th>
-              <th>{{ t('replication.table.actions') }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="sl in replicationStore.slaves" :key="sl.host">
-              <td><code>{{ sl.host }}</code></td>
-              <td>{{ sl.port }}</td>
-              <td>{{ sl.label || '—' }}</td>
-              <td>{{ sl.last_sync ? new Date(sl.last_sync * 1000).toLocaleString() : t('replication.never') }}</td>
-              <td>
-                <StatusBadge :variant="sl.status === 'ok' ? 'success' : 'danger'">
-                  {{ sl.status || 'unknown' }}
-                </StatusBadge>
-              </td>
-              <td>
-                <div class="actions-cell">
-                  <button class="btn btn-ghost btn-sm" :title="t('replication.test')" @click="testSlave(sl.host)">
-                    <FlaskConical :size="16" />
-                  </button>
-                  <button class="btn btn-ghost btn-sm" :title="t('replication.sync')" :disabled="replicationStore.syncing"
-                          @click="replicationStore.sync(sl.host)">
-                    <RefreshCw :size="16" :class="{ 'animate-spin': replicationStore.syncing }" />
-                  </button>
-                  <button class="btn btn-ghost btn-sm" :title="t('replication.remove')" @click="confirmRemove(sl.host)">
-                    <Trash2 :size="16" class="text-danger" />
-                  </button>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        :columns="slaveColumns"
+        :items="replicationStore.slaves ?? []"
+        :loading="false"
+        :empty-message="t('replication.no_slaves')"
+        row-key="host"
+      >
+        <template #cell-host="{ item }"><code>{{ item.host }}</code></template>
+        <template #cell-port="{ item }">{{ item.port }}</template>
+        <template #cell-label="{ item }">{{ item.label || '—' }}</template>
+        <template #cell-last_sync="{ item }">
+          {{ item.last_sync ? new Date(item.last_sync * 1000).toLocaleString() : t('replication.never') }}
+        </template>
+        <template #cell-status="{ item }">
+          <StatusBadge :variant="item.status === 'ok' ? 'success' : 'danger'">
+            {{ item.status || 'unknown' }}
+          </StatusBadge>
+        </template>
+        <template #actions="{ item }">
+          <button class="btn btn-ghost btn-sm" :title="t('replication.test')" @click="testSlave(item.host)">
+            <FlaskConical :size="16" />
+          </button>
+          <button class="btn btn-ghost btn-sm" :title="t('replication.sync')" :disabled="replicationStore.syncing"
+                  @click="replicationStore.sync(item.host)">
+            <RefreshCw :size="16" :class="{ 'animate-spin': replicationStore.syncing }" />
+          </button>
+          <button class="btn btn-ghost btn-sm" :title="t('replication.remove')" @click="handleRemove(item.host)">
+            <Trash2 :size="16" class="text-danger" />
+          </button>
+        </template>
+      </DataTable>
     </div>
 
     <!-- Test Results -->
@@ -106,31 +94,25 @@
     </div>
 
     <!-- Add Slave Modal -->
-    <Modal v-model="addSlaveModal" :title="t('replication.add_slave_title')">
-      <form @submit.prevent="handleAddSlave">
-        <div class="form-group mb-md">
-          <label class="form-label">{{ t('replication.table.host') }}</label>
-          <input v-model="slaveForm.host" class="input" required :placeholder="t('replication.host_placeholder')" />
+    <FormModal v-model="slaveModal.isOpen.value" :title="t('replication.add_slave_title')" :submitting="slaveModal.submitting.value"
+               :submit-text="t('common.add')" @submit="slaveModal.submit(f => replicationStore.addSlave(f.host, f.port, f.label))">
+      <div class="form-group mb-md">
+        <label class="form-label">{{ t('replication.table.host') }}</label>
+        <input v-model="slaveModal.form.value.host" class="input" required :placeholder="t('replication.host_placeholder')" />
+      </div>
+      <div class="form-row mb-md">
+        <div class="form-group">
+          <label class="form-label">{{ t('replication.table.port') }}</label>
+          <input v-model.number="slaveModal.form.value.port" class="input" type="number" value="22" />
         </div>
-        <div class="form-row mb-md">
-          <div class="form-group">
-            <label class="form-label">{{ t('replication.table.port') }}</label>
-            <input v-model.number="slaveForm.port" class="input" type="number" value="22" />
-          </div>
-          <div class="form-group">
-            <label class="form-label">{{ t('replication.table.label') }}</label>
-            <input v-model="slaveForm.label" class="input" :placeholder="t('replication.slave_placeholder')" />
-          </div>
+        <div class="form-group">
+          <label class="form-label">{{ t('replication.table.label') }}</label>
+          <input v-model="slaveModal.form.value.label" class="input" :placeholder="t('replication.slave_placeholder')" />
         </div>
-        <div class="modal-footer" style="padding:0;border:none;">
-          <button type="button" class="btn btn-secondary" @click="addSlaveModal = false">{{ t('common.cancel') }}</button>
-          <button type="submit" class="btn btn-primary">{{ t('common.add') }}</button>
-        </div>
-      </form>
-    </Modal>
+      </div>
+    </FormModal>
 
-    <ConfirmDialog v-model="confirmModal" :title="t('replication.remove_slave_title')"
-                   :message="t('replication.confirm_remove', { label: removeTarget })" :confirm-text="t('replication.remove')" @confirm="handleRemove" />
+    <ConfirmDialog v-bind="confirmState" @confirm="handleConfirm" @cancel="handleCancel" />
   </div>
 </template>
 
@@ -139,14 +121,25 @@ import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useReplicationStore } from '@/stores/replication'
 import { useToastStore } from '@/stores/toast'
-import Modal from '@/components/common/Modal.vue'
+import { useConfirmDialog } from '@/composables/useConfirmDialog'
+import { useFormModal } from '@/composables/useFormModal'
+import FormModal from '@/components/common/FormModal.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import DataTable from '@/components/common/DataTable.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import { FlaskConical, RefreshCw, Trash2, Loader2 } from '@lucide/vue'
 
 const { t } = useI18n()
 const replicationStore = useReplicationStore()
 const toast = useToastStore()
+
+const slaveColumns = [
+  { key: 'host', header: t('replication.table.host') },
+  { key: 'port', header: t('replication.table.port') },
+  { key: 'label', header: t('replication.table.label') },
+  { key: 'last_sync', header: t('replication.table.last_sync') },
+  { key: 'status', header: t('replication.table.status') },
+]
 
 const roleForm = ref({ role: 'standalone', interval: 60 })
 const publicKey = ref('')
@@ -157,58 +150,31 @@ const statusBadgeVariant = computed(() => {
   return role === 'master' ? 'success' : role === 'slave' ? 'info' : 'neutral'
 })
 
+const { confirmState, confirm, handleConfirm, handleCancel } = useConfirmDialog()
+const slaveModal = useFormModal({ host: '', port: 22, label: '' })
+
 async function handleSetupRole() {
   try {
     await replicationStore.setup(roleForm.value.role, roleForm.value.interval)
     toast.success(t('replication.setup_success'))
-  } catch (e: any) {
-    toast.error(e.response?.data?.error ?? e.message)
-  }
+  } catch (e: any) { toast.error(e.response?.data?.error ?? e.message) }
 }
 
 async function handleSSHKeygen() {
-  try {
-    publicKey.value = await replicationStore.sshKeygen()
-  } catch (e: any) {
-    toast.error(e.response?.data?.error ?? e.message)
-  }
+  try { publicKey.value = await replicationStore.sshKeygen() }
+  catch (e: any) { toast.error(e.response?.data?.error ?? e.message) }
 }
 
-function copyKey() {
-  navigator.clipboard.writeText(publicKey.value)
-}
+function copyKey() { navigator.clipboard.writeText(publicKey.value) }
 
 async function testSlave(host: string) {
-  try {
-    testResult.value = await replicationStore.test(host)
-  } catch (e: any) {
-    toast.error(e.response?.data?.error ?? e.message)
-  }
+  try { testResult.value = await replicationStore.test(host) }
+  catch (e: any) { toast.error(e.response?.data?.error ?? e.message) }
 }
 
-const addSlaveModal = ref(false)
-const slaveForm = ref({ host: '', port: 22, label: '' })
-
-function openAddSlave() { slaveForm.value = { host: '', port: 22, label: '' }; addSlaveModal.value = true }
-async function handleAddSlave() {
-  try {
-    await replicationStore.addSlave(slaveForm.value.host, slaveForm.value.port, slaveForm.value.label)
-    addSlaveModal.value = false
-  } catch (e: any) {
-    toast.error(e.response?.data?.error ?? e.message)
-  }
-}
-
-const confirmModal = ref(false)
-const removeTarget = ref('')
-function confirmRemove(host: string) { removeTarget.value = host; confirmModal.value = true }
-async function handleRemove() {
-  try {
-    await replicationStore.removeSlave(removeTarget.value)
-    confirmModal.value = false
-  } catch (e: any) {
-    toast.error(e.response?.data?.error ?? e.message)
-  }
+async function handleRemove(host: string) {
+  if (!await confirm({ title: t('replication.remove_slave_title'), message: t('replication.confirm_remove', { label: host }), confirmText: t('replication.remove') })) return
+  try { await replicationStore.removeSlave(host) } catch (e: any) { toast.error(e.response?.data?.error ?? e.message) }
 }
 
 onMounted(async () => {

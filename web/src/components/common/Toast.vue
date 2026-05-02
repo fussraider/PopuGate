@@ -27,9 +27,11 @@ function toastIcon(type: string): Component {
   position: fixed;
   top: $spacing-lg;
   right: $spacing-lg;
+  left: $spacing-lg;
   z-index: $z-toast;
   display: flex;
   flex-direction: column;
+  align-items: flex-end;
   gap: $spacing-sm;
   pointer-events: none;
 }
@@ -43,9 +45,13 @@ function toastIcon(type: string): Component {
   background: $bg-card;
   box-shadow: $shadow-lg;
   font-size: $font-size-sm;
-  min-width: 280px;
   max-width: 420px;
+  min-width: 0;
   pointer-events: auto;
+
+  @media (max-width: 480px) {
+    max-width: 100%;
+  }
 
   &.toast-success { border-left: 4px solid $color-success; }
   &.toast-error   { border-left: 4px solid $color-danger; }

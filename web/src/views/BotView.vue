@@ -31,7 +31,7 @@
         </div>
       </div>
 
-      <div class="flex gap-sm">
+      <div class="bot-actions">
         <button class="btn btn-primary" :disabled="botStore.loading" @click="handleSetup">
           <Loader2 v-if="botStore.loading" :size="16" class="animate-spin" />
           {{ botStore.enabled ? t('bot.update') : t('bot.setup') }}
@@ -115,6 +115,8 @@ onMounted(async () => {
 @use '@/assets/scss/variables' as *;
 
 .commands-list { display: flex; flex-direction: column; gap: $spacing-sm; }
-.command-item { display: flex; gap: $spacing-md; align-items: baseline; }
-.command-item code { min-width: 180px; }
+.command-item { display: flex; gap: $spacing-md; align-items: baseline; flex-wrap: wrap; }
+.command-item code { white-space: nowrap; }
+
+.bot-actions { display: flex; gap: $spacing-sm; flex-wrap: wrap; }
 </style>

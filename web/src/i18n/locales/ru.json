@@ -1,4 +1,14 @@
 {
+  "nav": {
+    "groups": {
+      "overview": "Обзор",
+      "proxy": "Прокси",
+      "security": "Безопасность",
+      "monitoring": "Мониторинг",
+      "integrations": "Интеграции",
+      "system": "Система"
+    }
+  },
   "common": {
     "logout": "Выйти",
     "dashboard": "Панель управления",
@@ -302,6 +312,9 @@
     "test": "Тест",
     "delete": "Удалить",
     "add_title": "Добавить апстрим",
+    "edit": "Редактировать",
+    "edit_title": "Редактирование апстрима",
+    "updated_success": "Апстрим \"{name}\" обновлен",
     "name_label": "Имя",
     "type_label": "Тип",
     "direct": "Прямой",

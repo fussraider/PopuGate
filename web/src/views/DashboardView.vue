@@ -164,6 +164,10 @@ onMounted(async () => {
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: $spacing-md;
   margin-bottom: $spacing-lg;
+
+  @media (max-width: 480px) {
+    grid-template-columns: 1fr;
+  }
 }
 
 .stat-card {

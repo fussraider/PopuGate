@@ -479,6 +479,20 @@ func (b *Bot) cmdUpstreams(ctx context.Context) string {
 	return strings.Join(lines, "\n")
 }
 
+// cmdTasks shows scheduled tasks status.
+func (b *Bot) cmdTasks(ctx context.Context) string {
+	if b.deps.GetSchedulerTasks == nil {
+		return "⚠ Scheduler status not available."
+	}
+
+	lines := b.deps.GetSchedulerTasks(ctx)
+	if len(lines) == 0 {
+		return "📋 No scheduled tasks."
+	}
+
+	return strings.Join(lines, "\n")
+}
+
 // cmdHelp shows all available commands.
 func (b *Bot) cmdHelp() string {
 	return strings.Join([]string{
@@ -499,6 +513,7 @@ func (b *Bot) cmdHelp() string {
 		"/limits — Show user limits",
 		"/setlimit <label> <conns> <ips> <quota_mb> [date] — Set limits",
 		"/upstreams — List upstreams",
+		"/tasks — Scheduled tasks",
 		"/help — This message",
 	}, "\n")
 }

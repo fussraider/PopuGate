@@ -40,6 +40,7 @@ type RouterConfig struct {
 	UpdateSvc       *service.UpdateService
 	TelemtUpdateSvc *service.TelemtUpdateService
 	TelemtCfg       *service.DBTelemtConfig
+	SchedulerSvc    *service.SchedulerService
 	CORSOrigins     []string // defaults to ["*"] if empty
 }
 
@@ -211,6 +212,16 @@ func SetupRouter(cfg RouterConfig) *gin.Engine {
 		protected.GET("/system/service/status", systemHandler.ServiceStatus)
 		protected.POST("/system/service/restart", systemHandler.RestartService)
 		protected.POST("/system/service/reload", systemHandler.ReloadService)
+
+		// Scheduler
+		if cfg.SchedulerSvc != nil {
+			schedulerHandler := handler.NewSchedulerHandler(cfg.SchedulerSvc)
+			protected.GET("/scheduler/tasks", schedulerHandler.List)
+			protected.PUT("/scheduler/tasks/:name", schedulerHandler.Update)
+			protected.POST("/scheduler/tasks/:name/run", schedulerHandler.RunNow)
+			protected.GET("/scheduler/tasks/:name/history", schedulerHandler.History)
+			protected.GET("/scheduler/history", schedulerHandler.AllHistory)
+		}
 	}
 
 	return r

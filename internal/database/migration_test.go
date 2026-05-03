@@ -37,6 +37,7 @@ func TestOpenMemory_AllTablesExist(t *testing.T) {
 		"settings", "secrets", "upstreams", "instances", "slaves",
 		"traffic_global", "traffic_user", "geoblock_cache",
 		"quota_alerts", "expiry_alerts", "token_blocklist", "schema_version",
+		"scheduler_task_overrides", "scheduler_history",
 	}
 	for _, table := range tables {
 		var count int

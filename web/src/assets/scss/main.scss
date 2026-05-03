@@ -1,3 +1,4 @@
+@use 'theme';
 @use 'variables' as *;
 
 // ─── Reset & Base ──────────────────────────────────────────────────
@@ -15,6 +16,25 @@ html {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overflow-x: hidden;
+}
+
+body,
+.card,
+.topbar,
+.modal,
+.modal-header,
+.modal-footer,
+.input,
+.select,
+.textarea,
+.table th,
+.table td,
+.badge,
+.btn,
+.btn-secondary,
+.traffic-item,
+.code {
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 body {
@@ -48,7 +68,7 @@ a {
 code {
   font-family: $font-mono;
   font-size: 0.9em;
-  background: $color-gray-100;
+  background: var(--bg-code);
   padding: 2px 6px;
   border-radius: $border-radius-sm;
 }
@@ -146,40 +166,47 @@ code {
 }
 
 .btn-primary {
-  background: $color-primary;
+  background: var(--btn-primary-bg);
   color: $color-white;
-  &:hover:not(:disabled) { background: $color-primary-dark; }
+  &:hover:not(:disabled) { background: var(--btn-primary-hover); }
 }
 
 .btn-secondary {
-  background: $color-white;
+  background: var(--bg-card);
   color: $text-primary;
   border-color: $border-color;
-  &:hover:not(:disabled) { background: $color-gray-50; }
+  &:hover:not(:disabled) { background: var(--bg-table-hover); }
 }
 
 .btn-success {
-  background: $color-success;
+  background: var(--btn-success-bg);
   color: $color-white;
-  &:hover:not(:disabled) { background: #059669; }
+  &:hover:not(:disabled) { background: var(--btn-success-hover); }
 }
 
 .btn-danger {
-  background: $color-danger;
+  background: var(--btn-danger-bg);
   color: $color-white;
-  &:hover:not(:disabled) { background: #dc2626; }
+  &:hover:not(:disabled) { background: var(--btn-danger-hover); }
 }
 
 .btn-warning {
-  background: $color-warning;
+  background: var(--btn-warning-bg);
   color: $color-white;
-  &:hover:not(:disabled) { background: #d97706; }
+  &:hover:not(:disabled) { background: var(--btn-warning-hover); }
 }
 
 .btn-ghost {
   background: transparent;
-  color: $color-primary;
-  &:hover:not(:disabled) { background: $color-primary-bg; }
+  color: var(--btn-ghost-color);
+  &:hover:not(:disabled) { background: var(--btn-ghost-hover-bg); }
+}
+
+.btn-outline {
+  background: transparent;
+  color: var(--text-primary);
+  border-color: $border-color;
+  &:hover:not(:disabled) { background: var(--bg-table-hover); }
 }
 
 .btn-sm {
@@ -213,7 +240,7 @@ code {
   &:focus {
     outline: none;
     border-color: $color-primary;
-    box-shadow: 0 0 0 3px rgba($color-primary, 0.1);
+    box-shadow: var(--focus-ring);
   }
 
   &::placeholder { color: $text-muted; }
@@ -249,11 +276,11 @@ code {
   line-height: 1.5;
 }
 
-.badge-success { background: $color-success-bg; color: #065f46; }
-.badge-warning { background: $color-warning-bg; color: #92400e; }
-.badge-danger  { background: $color-danger-bg; color: #991b1b; }
-.badge-info    { background: $color-info-bg; color: #1e40af; }
-.badge-neutral { background: $color-gray-100; color: $text-secondary; }
+.badge-success { background: $color-success-bg; color: var(--badge-success-text); }
+.badge-warning { background: $color-warning-bg; color: var(--badge-warning-text); }
+.badge-danger  { background: $color-danger-bg; color: var(--badge-danger-text); }
+.badge-info    { background: $color-info-bg; color: var(--badge-info-text); }
+.badge-neutral { background: var(--bg-code); color: $text-secondary; }
 
 // ─── Table ─────────────────────────────────────────────────────────
 
@@ -275,7 +302,7 @@ code {
   }
 
   th {
-    background: $color-gray-50;
+    background: var(--bg-table-header);
     font-weight: $font-weight-semibold;
     color: $text-secondary;
     font-size: $font-size-xs;
@@ -285,7 +312,7 @@ code {
 
   tr:last-child td { border-bottom: none; }
 
-  tr:hover td { background: $color-gray-50; }
+  tr:hover td { background: var(--bg-table-hover); }
 }
 
 // ─── Modal ─────────────────────────────────────────────────────────
@@ -341,10 +368,10 @@ code {
   align-items: flex-start;
   gap: $spacing-sm;
 
-  &.alert-success { background: $color-success-bg; color: #065f46; border: 1px solid #a7f3d0; }
-  &.alert-warning { background: $color-warning-bg; color: #92400e; border: 1px solid #fde68a; }
-  &.alert-danger  { background: $color-danger-bg; color: #991b1b; border: 1px solid #fecaca; }
-  &.alert-info    { background: $color-info-bg; color: #1e40af; border: 1px solid #bfdbfe; }
+  &.alert-success { background: $color-success-bg; color: var(--badge-success-text); border: 1px solid var(--alert-success-border); }
+  &.alert-warning { background: $color-warning-bg; color: var(--badge-warning-text); border: 1px solid var(--alert-warning-border); }
+  &.alert-danger  { background: $color-danger-bg; color: var(--badge-danger-text); border: 1px solid var(--alert-danger-border); }
+  &.alert-info    { background: $color-info-bg; color: var(--badge-info-text); border: 1px solid var(--alert-info-border); }
 }
 
 // ─── Spinner ───────────────────────────────────────────────────────
@@ -446,14 +473,14 @@ code {
 
 .test-ok {
   background: $color-success-bg;
-  color: #065f46;
-  border: 1px solid #a7f3d0;
+  color: var(--badge-success-text);
+  border: 1px solid var(--alert-success-border);
 }
 
 .test-fail {
   background: $color-danger-bg;
-  color: #991b1b;
-  border: 1px solid #fecaca;
+  color: var(--badge-danger-text);
+  border: 1px solid var(--alert-danger-border);
 }
 
 .test-latency {
@@ -548,7 +575,7 @@ code {
   flex-direction: column;
   gap: $spacing-xs;
   padding: $spacing-md;
-  background: $color-gray-50;
+  background: var(--bg-traffic-item);
   border-radius: $border-radius;
 }
 
@@ -600,7 +627,7 @@ code {
 // ─── Skeleton Loading ──────────────────────────────────────────────
 
 .skeleton {
-  background: linear-gradient(90deg, $color-gray-200 25%, $color-gray-100 50%, $color-gray-200 75%);
+  background: linear-gradient(90deg, var(--skeleton-base) 25%, var(--skeleton-highlight) 50%, var(--skeleton-base) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
   border-radius: $border-radius-sm;

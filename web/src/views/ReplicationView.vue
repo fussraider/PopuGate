@@ -187,5 +187,5 @@ onMounted(async () => {
 <style scoped lang="scss">
 @use '@/assets/scss/variables' as *;
 
-.ssh-key { display: block; word-break: break-all; font-size: $font-size-xs; background: $color-gray-100; padding: $spacing-sm; border-radius: $border-radius-sm; }
+.ssh-key { display: block; word-break: break-all; font-size: $font-size-xs; background: var(--bg-code); padding: $spacing-sm; border-radius: $border-radius-sm; }
 </style>

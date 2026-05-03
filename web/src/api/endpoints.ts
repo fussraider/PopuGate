@@ -27,6 +27,8 @@ import type {
   BackupInfo,
   OSType,
   ServiceStatus,
+  SchedulerTask,
+  SchedulerHistoryRecord,
 } from '@/types/models'
 
 // ─── Auth ──────────────────────────────────────────────────────
@@ -264,4 +266,23 @@ export const systemApi = {
 
 export const healthApi = {
   check: () => api.get<HealthStatus>('/health').then((r) => r.data),
+}
+
+// ─── Scheduler ─────────────────────────────────────────────────
+
+export const schedulerApi = {
+  listTasks: () =>
+    api.get<SchedulerTask[]>('/scheduler/tasks').then((r) => r.data),
+
+  updateTask: (name: string, data: { enabled?: boolean; schedule?: string }) =>
+    api.put(`/scheduler/tasks/${name}`, data).then((r) => r.data),
+
+  runTask: (name: string) =>
+    api.post<SchedulerHistoryRecord>(`/scheduler/tasks/${name}/run`).then((r) => r.data),
+
+  getTaskHistory: (name: string, limit = 20, offset = 0) =>
+    api.get<SchedulerHistoryRecord[]>(`/scheduler/tasks/${name}/history`, { params: { limit, offset } }).then((r) => r.data),
+
+  getAllHistory: (limit = 50, offset = 0) =>
+    api.get<SchedulerHistoryRecord[]>('/scheduler/history', { params: { limit, offset } }).then((r) => r.data),
 }

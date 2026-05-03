@@ -74,7 +74,7 @@ defineProps<{
   display: flex;
   gap: 0;
   padding: 10px 16px;
-  background: $color-gray-50;
+  background: var(--bg-table-header);
 }
 
 .skeleton-table-row {

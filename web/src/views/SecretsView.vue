@@ -244,7 +244,7 @@ onMounted(() => secretsStore.load())
 
 .quota-bar {
   height: 4px;
-  background: $color-gray-200;
+  background: var(--border-color);
   border-radius: 2px;
   margin-top: 4px;
 }
@@ -259,7 +259,7 @@ onMounted(() => secretsStore.load())
 .links-section {
   margin-top: 1rem;
   padding-top: 1rem;
-  border-top: 1px solid $color-gray-200;
+  border-top: 1px solid $border-color;
 }
 
 .input-group {

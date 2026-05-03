@@ -4,7 +4,7 @@
 $color-primary: #6366f1;
 $color-primary-light: #818cf8;
 $color-primary-dark: #4f46e5;
-$color-primary-bg: #eef2ff;
+$color-primary-bg: var(--color-primary-bg);
 
 // Neutrals
 $color-white: #ffffff;
@@ -21,28 +21,28 @@ $color-gray-900: #111827;
 
 // Semantic
 $color-success: #10b981;
-$color-success-bg: #d1fae5;
+$color-success-bg: var(--color-success-bg);
 $color-warning: #f59e0b;
-$color-warning-bg: #fef3c7;
+$color-warning-bg: var(--color-warning-bg);
 $color-danger: #ef4444;
-$color-danger-bg: #fee2e2;
+$color-danger-bg: var(--color-danger-bg);
 $color-info: #3b82f6;
-$color-info-bg: #dbeafe;
+$color-info-bg: var(--color-info-bg);
 
 // Background
-$bg-body: $color-gray-50;
-$bg-card: $color-white;
-$bg-sidebar: $color-gray-900;
-$bg-input: $color-white;
+$bg-body: var(--bg-body);
+$bg-card: var(--bg-card);
+$bg-sidebar: var(--bg-sidebar);
+$bg-input: var(--bg-input);
 
 // Text
-$text-primary: $color-gray-900;
-$text-secondary: $color-gray-600;
-$text-muted: $color-gray-400;
-$text-inverse: $color-white;
+$text-primary: var(--text-primary);
+$text-secondary: var(--text-secondary);
+$text-muted: var(--text-muted);
+$text-inverse: var(--text-inverse);
 
 // Border
-$border-color: $color-gray-200;
+$border-color: var(--border-color);
 $border-radius: 8px;
 $border-radius-lg: 12px;
 $border-radius-sm: 6px;
@@ -92,10 +92,10 @@ $transition-slow: 350ms ease;
 
 // ─── Shadows ─────────────────────────────────────────────────────
 
-$shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
-$shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
-$shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
-$shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+$shadow-sm: var(--shadow-sm);
+$shadow-md: var(--shadow-md);
+$shadow-lg: var(--shadow-lg);
+$shadow-xl: var(--shadow-xl);
 
 // ─── Z-index ─────────────────────────────────────────────────────
 

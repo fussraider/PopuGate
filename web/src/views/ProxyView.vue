@@ -24,26 +24,34 @@
       </div>
 
       <div class="actions-grid mb-lg">
-        <button class="btn btn-success" :disabled="proxyStore.loading || proxyStore.status?.running"
-                @click="proxyStore.start()">
-          <Loader2 v-if="proxyStore.activeAction === 'start'" :size="16" class="animate-spin" />
-          <Play v-else :size="16" /> {{ t('dashboard.start') }}
-        </button>
-        <button class="btn btn-danger" :disabled="proxyStore.loading || !proxyStore.status?.running"
-                @click="proxyStore.stop()">
-          <Loader2 v-if="proxyStore.activeAction === 'stop'" :size="16" class="animate-spin" />
-          <Square v-else :size="16" /> {{ t('dashboard.stop') }}
-        </button>
-        <button class="btn btn-warning" :disabled="proxyStore.loading"
-                @click="proxyStore.restart()">
-          <Loader2 v-if="proxyStore.activeAction === 'restart'" :size="16" class="animate-spin" />
-          <RotateCw v-else :size="16" /> {{ t('dashboard.restart') }}
-        </button>
-        <button class="btn btn-ghost" :disabled="proxyStore.loading"
-                @click="proxyStore.reload()">
-          <Loader2 v-if="proxyStore.activeAction === 'reload'" :size="16" class="animate-spin" />
-          <RefreshCw v-else :size="16" /> {{ t('proxy_view.reload_config') }}
-        </button>
+        <Tooltip :text="t('dashboard.start_hint')">
+          <button class="btn btn-success" :disabled="proxyStore.loading || proxyStore.status?.running"
+                  @click="proxyStore.start()">
+            <Loader2 v-if="proxyStore.activeAction === 'start'" :size="16" class="animate-spin" />
+            <Play v-else :size="16" /> {{ t('dashboard.start') }}
+          </button>
+        </Tooltip>
+        <Tooltip :text="t('dashboard.stop_hint')">
+          <button class="btn btn-danger" :disabled="proxyStore.loading || !proxyStore.status?.running"
+                  @click="proxyStore.stop()">
+            <Loader2 v-if="proxyStore.activeAction === 'stop'" :size="16" class="animate-spin" />
+            <Square v-else :size="16" /> {{ t('dashboard.stop') }}
+          </button>
+        </Tooltip>
+        <Tooltip :text="t('dashboard.restart_hint')">
+          <button class="btn btn-warning" :disabled="proxyStore.loading"
+                  @click="proxyStore.restart()">
+            <Loader2 v-if="proxyStore.activeAction === 'restart'" :size="16" class="animate-spin" />
+            <RotateCw v-else :size="16" /> {{ t('dashboard.restart') }}
+          </button>
+        </Tooltip>
+        <Tooltip :text="t('dashboard.reload_hint')">
+          <button class="btn btn-outline" :disabled="proxyStore.loading"
+                  @click="proxyStore.reload()">
+            <Loader2 v-if="proxyStore.activeAction === 'reload'" :size="16" class="animate-spin" />
+            <RefreshCw v-else :size="16" /> {{ t('dashboard.reload') }}
+          </button>
+        </Tooltip>
       </div>
     </div>
 
@@ -73,6 +81,7 @@ import { useProxyStore } from '@/stores/proxy'
 import { ansiToHtml } from '@/utils/ansi'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import ToggleSwitch from '@/components/common/ToggleSwitch.vue'
+import Tooltip from '@/components/common/Tooltip.vue'
 import { Play, Square, RotateCw, RefreshCw, Loader2 } from '@lucide/vue'
 
 const { t } = useI18n()

@@ -34,6 +34,7 @@ export interface Settings {
   replication_restart_on_change: boolean
   replication_log: string
   debug: boolean
+  backup_retention_days: number
   telemt_version: string
   telemt_commit: string
   telemt_repo: string
@@ -278,4 +279,25 @@ export interface LoginResponse {
 export interface AuthTokens {
   accessToken: string
   refreshToken: string
+}
+
+export interface SchedulerTask {
+  name: string
+  default_schedule: string
+  effective_schedule: string
+  enabled: boolean
+  is_overridden: boolean
+  timeout: string
+  last_run: SchedulerHistoryRecord | null
+}
+
+export interface SchedulerHistoryRecord {
+  id: number
+  task_name: string
+  started_at: number
+  finished_at: number
+  duration_ms: number
+  status: 'success' | 'error'
+  error: string
+  output: string
 }

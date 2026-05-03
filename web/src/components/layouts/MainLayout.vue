@@ -42,6 +42,7 @@
           <h2>{{ pageTitle }}</h2>
         </div>
         <div class="topbar-actions">
+          <ThemeToggle />
           <LanguageSwitcher />
           <button class="btn btn-ghost btn-sm" @click="handleLogout"><LogOut :size="16" /> {{ t('common.logout') }}</button>
         </div>
@@ -65,11 +66,12 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import Toast from '@/components/common/Toast.vue'
+import ThemeToggle from '@/components/common/ThemeToggle.vue'
 import LanguageSwitcher from '@/components/common/LanguageSwitcher.vue'
 import {
   LayoutDashboard, KeyRound, GitBranch, Server, Play,
   Container, Globe, TrendingUp, Bot, RefreshCw, Package,
-  Save, Settings, Monitor, Menu, LogOut, X,
+  Save, Settings, Monitor, Menu, LogOut, X, CalendarClock,
 } from '@lucide/vue'
 
 const { t } = useI18n()
@@ -98,6 +100,7 @@ const navItems = computed(() => [
   { path: '/bot',         icon: Bot,             label: t('common.bot'),         group: 'integrations' },
   { path: '/replication', icon: RefreshCw,       label: t('common.replication'), group: 'integrations' },
   { path: '/updates',     icon: Package,         label: t('common.updates'),     group: 'system' },
+  { path: '/scheduler',   icon: CalendarClock,   label: t('common.scheduler'),   group: 'system' },
   { path: '/backups',     icon: Save,            label: t('common.backups'),     group: 'system' },
   { path: '/settings',    icon: Settings,        label: t('common.settings'),    group: 'system' },
   { path: '/system',      icon: Monitor,         label: t('common.system'),      group: 'system' },
@@ -152,7 +155,7 @@ async function handleLogout() {
   bottom: 0;
   width: $sidebar-width;
   background: $bg-sidebar;
-  color: $text-inverse;
+  color: $color-white;
   z-index: $z-fixed;
   display: flex;
   flex-direction: column;
@@ -187,7 +190,7 @@ async function handleLogout() {
   align-items: center;
   gap: $spacing-sm;
   text-decoration: none;
-  color: $text-inverse;
+  color: $color-white;
   font-weight: $font-weight-bold;
   font-size: $font-size-lg;
 }
@@ -202,7 +205,7 @@ async function handleLogout() {
   display: none;
   background: none;
   border: none;
-  color: $text-inverse;
+  color: $color-white;
   cursor: pointer;
   padding: $spacing-xs;
 
@@ -227,7 +230,7 @@ async function handleLogout() {
 
   &:hover {
     background: rgba(255, 255, 255, 0.05);
-    color: $text-inverse;
+    color: $color-white;
   }
 
   &.active {

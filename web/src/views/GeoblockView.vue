@@ -124,7 +124,7 @@ onMounted(async () => {
   padding: $spacing-sm $spacing-md;
   background: $color-info-bg;
   border-radius: $border-radius;
-  border: 1px solid #bfdbfe;
+  border: 1px solid var(--alert-info-border);
 }
-.help-block-title { font-size: $font-size-sm; color: #1e40af; }
+.help-block-title { font-size: $font-size-sm; color: var(--badge-info-text); }
 </style>

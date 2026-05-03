@@ -92,6 +92,7 @@ func runServer(cmd *cobra.Command, args []string) {
 	quotaStore := store.NewQuotaAlertStore(db)
 	geoblockCache := store.NewGeoblockCacheStore(db)
 	backupStore := store.NewBackupStore(dataDir)
+	schedulerStore := store.NewSchedulerStore(db)
 
 	// Get JWT secret (auto-generated on first run)
 	jwtSecret, err := settingsStore.GetJWTSecret(context.Background())
@@ -225,6 +226,50 @@ func runServer(cmd *cobra.Command, args []string) {
 
 	// Setup router
 	cachedJWTProvider := api.NewCachedJWTSecretProvider(settingsStore, 5*time.Minute)
+
+	// Prepare scheduler tasks (wire Fn callbacks)
+	sched, tasks := prepareSchedulerTasks(trafficSvc, healthSvc, replSvc, blocklistStore, settingsStore, secretStore, backupStore, &activeBot, &botMu, updateSvc, telemtUpdateSvc, telemtCfg, notifyFn)
+
+	// Load overrides and start scheduler with execution tracking
+	overrides, _ := schedulerStore.GetOverrides(ctx)
+	overrideMap := make(map[string]scheduler.TaskOverride)
+	for _, o := range overrides {
+		overrideMap[o.TaskName] = o
+	}
+	sched.StartWith(tasks, overrideMap, schedulerStore)
+	defer sched.Stop()
+
+	// Create scheduler service (needs live scheduler + store)
+	schedulerSvc := service.NewSchedulerService(schedulerStore, sched)
+
+	// Wire scheduler status callback for bot
+	botDeps.GetSchedulerTasks = func(ctx context.Context) []string {
+		statuses := sched.GetTaskStatuses()
+		var lines []string
+		lines = append(lines, "📋 *Scheduled Tasks*")
+		for _, t := range statuses {
+			status := "✅"
+			if !t.Enabled {
+				status = "❌"
+			}
+			schedule := t.EffectiveSchedule
+			lastRun := ""
+			if rec, _ := schedulerStore.GetLatestHistory(ctx, t.Name); rec != nil {
+				if rec.Status == "success" {
+					lastRun = " ✅"
+				} else {
+					errMsg := rec.Error
+					if len(errMsg) > 40 {
+						errMsg = errMsg[:40] + "..."
+					}
+					lastRun = fmt.Sprintf(" ❌ %s", errMsg)
+				}
+			}
+			lines = append(lines, fmt.Sprintf("%s `%s` (%s)%s", status, t.Name, schedule, lastRun))
+		}
+		return lines
+	}
+
 	router := api.SetupRouter(api.RouterConfig{
 		Debug:           isDebug,
 		JWTSecret:       cachedJWTProvider,
@@ -249,11 +294,8 @@ func runServer(cmd *cobra.Command, args []string) {
 		UpdateSvc:       updateSvc,
 		TelemtUpdateSvc: telemtUpdateSvc,
 		TelemtCfg:       telemtCfg,
+		SchedulerSvc:    schedulerSvc,
 	})
-
-	// Start scheduler
-	sched := setupScheduler(trafficSvc, healthSvc, replSvc, blocklistStore, settingsStore, secretStore, &activeBot, &botMu, updateSvc, telemtUpdateSvc, telemtCfg, notifyFn)
-	defer sched.Stop()
 
 	// HTTP server
 	srv := &http.Server{
@@ -311,20 +353,21 @@ func startBotIfNeeded(ctx context.Context, settingsStore *store.SettingsStore, d
 	logger.WithScope("bot").Infof("started")
 }
 
-func setupScheduler(
+func prepareSchedulerTasks(
 	trafficSvc *service.TrafficService,
 	healthSvc *service.HealthService,
 	replSvc *service.ReplicationService,
 	blocklist *store.TokenBlocklistStore,
 	settings *store.SettingsStore,
 	secrets *store.SecretStore,
+	backupStore *store.BackupStore,
 	activeBot **bot.Bot,
 	botMu *sync.Mutex,
 	updateSvc *service.UpdateService,
 	telemtUpdateSvc *service.TelemtUpdateService,
 	telemtCfg *service.DBTelemtConfig,
 	notify service.NotifyFunc,
-) *scheduler.Scheduler {
+) (*scheduler.Scheduler, []scheduler.Task) {
 	sched := scheduler.New()
 	tasks := scheduler.DefaultTasks()
 
@@ -370,6 +413,25 @@ func setupScheduler(
 			if blocklist != nil {
 				tasks[i].Fn = blocklist.Cleanup
 			}
+		case "daily-backup":
+			if backupStore != nil {
+				tasks[i].Fn = func(ctx context.Context) error {
+					_, err := backupStore.Create(ctx)
+					return err
+				}
+			}
+		case "backup-cleanup":
+			if backupStore != nil {
+				tasks[i].Fn = func(ctx context.Context) error {
+					s, _ := settings.Load(ctx)
+					days := 7
+					if s != nil && s.BackupRetentionDays > 0 {
+						days = s.BackupRetentionDays
+					}
+					_, err := backupStore.CleanOld(ctx, time.Duration(days)*24*time.Hour)
+					return err
+				}
+			}
 		case "telegram-report":
 			tasks[i].Fn = func(ctx context.Context) error {
 				botMu.Lock()
@@ -411,8 +473,7 @@ func setupScheduler(
 		}
 	}
 
-	sched.Start(tasks)
-	return sched
+	return sched, tasks
 }
 
 func sendPeriodicReport(ctx context.Context, b *bot.Bot, settings *store.SettingsStore, secrets *store.SecretStore, trafficSvc *service.TrafficService) error {

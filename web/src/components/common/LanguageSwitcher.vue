@@ -34,7 +34,7 @@ function setLanguage(lang: string) {
 .language-switcher {
   display: flex;
   gap: $spacing-xs;
-  background: rgba(0, 0, 0, 0.1);
+  background: var(--bg-code);
   padding: 4px;
   border-radius: $border-radius;
 }
@@ -52,7 +52,7 @@ function setLanguage(lang: string) {
 
   &:hover {
     color: $text-primary;
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--bg-table-hover);
   }
 
   &.active {

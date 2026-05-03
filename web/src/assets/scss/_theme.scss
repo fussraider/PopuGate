@@ -1,0 +1,137 @@
+// ─── Theme CSS Custom Properties ──────────────────────────────────────
+// Light defaults on :root, dark overrides on [data-theme="dark"].
+// SCSS variables in _variables.scss reference these via var(--xxx).
+
+:root {
+  // Brand
+  --color-primary-bg: #eef2ff;
+
+  // Semantic backgrounds
+  --color-success-bg: #d1fae5;
+  --color-warning-bg: #fef3c7;
+  --color-danger-bg: #fee2e2;
+  --color-info-bg: #dbeafe;
+
+  // Surfaces
+  --bg-body: #f9fafb;
+  --bg-card: #ffffff;
+  --bg-sidebar: #111827;
+  --bg-input: #ffffff;
+  --bg-code: #f3f4f6;
+  --bg-table-header: #f9fafb;
+  --bg-table-hover: #f9fafb;
+  --bg-traffic-item: #f9fafb;
+
+  // Text
+  --text-primary: #111827;
+  --text-secondary: #4b5563;
+  --text-muted: #9ca3af;
+  --text-inverse: #ffffff;
+
+  // Borders
+  --border-color: #e5e7eb;
+
+  // Badge text
+  --badge-success-text: #065f46;
+  --badge-warning-text: #92400e;
+  --badge-danger-text: #991b1b;
+  --badge-info-text: #1e40af;
+
+  // Alert borders
+  --alert-success-border: #a7f3d0;
+  --alert-warning-border: #fde68a;
+  --alert-danger-border: #fecaca;
+  --alert-info-border: #bfdbfe;
+
+  // Skeleton shimmer
+  --skeleton-base: #e5e7eb;
+  --skeleton-highlight: #f3f4f6;
+
+  // Buttons
+  --btn-primary-bg: #6366f1;
+  --btn-primary-hover: #4f46e5;
+  --btn-success-bg: #10b981;
+  --btn-success-hover: #059669;
+  --btn-danger-bg: #ef4444;
+  --btn-danger-hover: #dc2626;
+  --btn-warning-bg: #f59e0b;
+  --btn-warning-hover: #d97706;
+  --btn-ghost-color: #6366f1;
+  --btn-ghost-hover-bg: #eef2ff;
+
+  // Focus ring
+  --focus-ring: 0 0 0 3px rgba(99, 102, 241, 0.2);
+
+  // Shadows
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+}
+
+[data-theme="dark"] {
+  // Brand
+  --color-primary-bg: rgba(99, 102, 241, 0.15);
+
+  // Semantic backgrounds
+  --color-success-bg: rgba(16, 185, 129, 0.15);
+  --color-warning-bg: rgba(245, 158, 11, 0.15);
+  --color-danger-bg: rgba(239, 68, 68, 0.15);
+  --color-info-bg: rgba(59, 130, 246, 0.15);
+
+  // Surfaces — sidebar darkest, body base, cards elevated
+  --bg-body: #12141a;
+  --bg-card: #1c1f2e;
+  --bg-sidebar: #0d0f14;
+  --bg-input: #1c1f2e;
+  --bg-code: #252838;
+  --bg-table-header: #171a24;
+  --bg-table-hover: rgba(255, 255, 255, 0.04);
+  --bg-traffic-item: #171a24;
+
+  // Text
+  --text-primary: #e5e7eb;
+  --text-secondary: #9ca3af;
+  --text-muted: #6b7280;
+  --text-inverse: #111827;
+
+  // Borders
+  --border-color: #2d3140;
+
+  // Badge text
+  --badge-success-text: #6ee7b7;
+  --badge-warning-text: #fcd34d;
+  --badge-danger-text: #fca5a5;
+  --badge-info-text: #93c5fd;
+
+  // Alert borders
+  --alert-success-border: rgba(16, 185, 129, 0.3);
+  --alert-warning-border: rgba(245, 158, 11, 0.3);
+  --alert-danger-border: rgba(239, 68, 68, 0.3);
+  --alert-info-border: rgba(59, 130, 246, 0.3);
+
+  // Skeleton shimmer
+  --skeleton-base: #22252f;
+  --skeleton-highlight: #2d3140;
+
+  // Buttons — deeper shades for dark backgrounds
+  --btn-primary-bg: #4f46e5;
+  --btn-primary-hover: #4338ca;
+  --btn-success-bg: #059669;
+  --btn-success-hover: #047857;
+  --btn-danger-bg: #dc2626;
+  --btn-danger-hover: #b91c1c;
+  --btn-warning-bg: #d97706;
+  --btn-warning-hover: #b45309;
+  --btn-ghost-color: #a5b4fc;
+  --btn-ghost-hover-bg: rgba(99, 102, 241, 0.12);
+
+  // Focus ring
+  --focus-ring: 0 0 0 3px rgba(129, 140, 248, 0.25);
+
+  // Shadows
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -2px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -4px rgba(0, 0, 0, 0.3);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.4);
+}

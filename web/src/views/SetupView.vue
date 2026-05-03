@@ -123,9 +123,9 @@ async function handleSetup() {
   text-align: center;
 
   &.alert-success {
-    background: rgba(16, 185, 129, 0.1);
-    color: #10b981;
-    border: 1px solid rgba(16, 185, 129, 0.2);
+    background: var(--color-success-bg);
+    color: var(--color-success);
+    border: 1px solid var(--alert-success-border);
   }
 }
 </style>

@@ -29,12 +29,13 @@ type Dependencies struct {
 	Instances *store.InstanceStore
 
 	// Callbacks for actions that need service layer (set by caller)
-	GetPublicIP      func(ctx context.Context) string
-	IsProxyRunning   func(ctx context.Context) bool
-	GetUptime        func(ctx context.Context) string
-	GetEngineVersion func() string
-	RestartProxy     func(ctx context.Context) error
-	GenerateQR       func(ctx context.Context, link string) ([]byte, error)
+	GetPublicIP       func(ctx context.Context) string
+	IsProxyRunning    func(ctx context.Context) bool
+	GetUptime         func(ctx context.Context) string
+	GetEngineVersion  func() string
+	RestartProxy      func(ctx context.Context) error
+	GenerateQR        func(ctx context.Context, link string) ([]byte, error)
+	GetSchedulerTasks func(ctx context.Context) []string
 }
 
 // Bot represents the Telegram bot.
@@ -304,6 +305,8 @@ func (b *Bot) handleUpdate(ctx context.Context, update TelegramUpdate) {
 		response = b.cmdSetLimit(ctx, text)
 	case text == "/upstreams":
 		response = b.cmdUpstreams(ctx)
+	case text == "/tasks":
+		response = b.cmdTasks(ctx)
 	case text == "/help":
 		response = b.cmdHelp()
 	default:
@@ -324,7 +327,7 @@ func isKnownCommand(cmd string) bool {
 	switch cmd {
 	case "/status", "/secrets", "/link", "/add", "/remove", "/rotate",
 		"/restart", "/enable", "/disable", "/health", "/traffic",
-		"/update", "/limits", "/setlimit", "/upstreams", "/help":
+		"/update", "/limits", "/setlimit", "/upstreams", "/tasks", "/help":
 		return true
 	}
 	return false

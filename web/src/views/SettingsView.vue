@@ -119,6 +119,16 @@
         </label>
       </div>
 
+      <!-- Backup -->
+      <div class="card mb-lg">
+        <h3 class="mb-md">{{ t('settings_view.backup_title') }}</h3>
+        <p class="text-muted text-sm mb-md">{{ t('settings_view.backup_desc') }}</p>
+        <div class="form-group" style="max-width: 200px;">
+          <label class="form-label">{{ t('settings_view.backup_retention') }}</label>
+          <input v-model.number="form.backup_retention_days" class="input" type="number" min="1" />
+        </div>
+      </div>
+
       <!-- Actions -->
       <div class="card">
         <div class="flex justify-between items-center">

@@ -18,7 +18,6 @@ defineProps<{ text: string }>()
   position: relative;
   display: inline-flex;
   align-items: center;
-  cursor: help;
 
   &:hover .tooltip-box {
     visibility: visible;

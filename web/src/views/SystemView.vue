@@ -181,7 +181,7 @@ onMounted(async () => {
 
 .service-details {
   padding: $spacing-md;
-  background: rgba(0, 0, 0, 0.02);
+  background: var(--bg-table-hover);
   border-radius: $border-radius;
   border: 1px solid $border-color;
 }

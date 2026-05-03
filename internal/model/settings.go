@@ -60,6 +60,9 @@ type Settings struct {
 	ReplicationLog             string `json:"replication_log"`
 	Debug                      bool   `json:"debug"`
 
+	// Backup
+	BackupRetentionDays int `json:"backup_retention_days"`
+
 	// telemt engine
 	TelemtVersion string `json:"telemt_version"`
 	TelemtCommit  string `json:"telemt_commit"`
@@ -118,6 +121,7 @@ func DefaultSettings() Settings {
 		ReplicationRestartOnChange: true,
 		ReplicationLog:             "",
 		Debug:                      false,
+		BackupRetentionDays:        7,
 	}
 }
 
@@ -155,6 +159,9 @@ func (s *Settings) Validate() {
 	}
 	if s.ReplicationSSHPort < 1 || s.ReplicationSSHPort > 65535 {
 		s.ReplicationSSHPort = 22
+	}
+	if s.BackupRetentionDays < 1 {
+		s.BackupRetentionDays = 7
 	}
 }
 

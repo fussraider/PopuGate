@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestIsSafeFilename(t *testing.T) {
@@ -403,5 +404,52 @@ func TestBackupStore_CreateAndRestore_Roundtrip(t *testing.T) {
 	}
 	if string(data) != "fake db" {
 		t.Errorf("restored content mismatch: got %q", data)
+	}
+}
+
+func TestBackupStore_CleanOld_RemovesOldFiles(t *testing.T) {
+	tmpDir := t.TempDir()
+	s := NewBackupStore(tmpDir)
+	backupsDir := filepath.Join(tmpDir, "backups")
+
+	// Create an old backup file
+	oldFile := filepath.Join(backupsDir, "popugate-20200101-000000.tar.gz")
+	os.WriteFile(oldFile, []byte("old"), 0644)
+	os.Chtimes(oldFile, time.Now().Add(-48*time.Hour), time.Now().Add(-48*time.Hour))
+
+	// Create a recent backup file
+	recentFile := filepath.Join(backupsDir, "popugate-20260503-000000.tar.gz")
+	os.WriteFile(recentFile, []byte("recent"), 0644)
+
+	deleted, err := s.CleanOld(context.Background(), 24*time.Hour)
+	if err != nil {
+		t.Fatalf("CleanOld: %v", err)
+	}
+	if deleted != 1 {
+		t.Fatalf("expected 1 deleted, got %d", deleted)
+	}
+
+	if _, err := os.Stat(oldFile); !os.IsNotExist(err) {
+		t.Error("old file should be deleted")
+	}
+	if _, err := os.Stat(recentFile); err != nil {
+		t.Error("recent file should still exist")
+	}
+}
+
+func TestBackupStore_CleanOld_NoOldFiles(t *testing.T) {
+	tmpDir := t.TempDir()
+	s := NewBackupStore(tmpDir)
+	backupsDir := filepath.Join(tmpDir, "backups")
+
+	recentFile := filepath.Join(backupsDir, "popugate-20260503-000000.tar.gz")
+	os.WriteFile(recentFile, []byte("recent"), 0644)
+
+	deleted, err := s.CleanOld(context.Background(), 24*time.Hour)
+	if err != nil {
+		t.Fatalf("CleanOld: %v", err)
+	}
+	if deleted != 0 {
+		t.Fatalf("expected 0 deleted, got %d", deleted)
 	}
 }

@@ -20,3 +20,11 @@ func FormatBytes(b int64) string {
 func intToBool(i int) bool {
 	return i == 1
 }
+
+// boolToInt converts a bool to a SQLite integer.
+func boolToInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
+}

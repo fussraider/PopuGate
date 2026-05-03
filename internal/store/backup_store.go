@@ -150,6 +150,39 @@ func isSafeFilename(name string) bool {
 	return name == filepath.Base(name) && !strings.Contains(name, "..")
 }
 
+// CleanOld removes backup files older than maxAge. Returns the number of deleted files.
+func (s *BackupStore) CleanOld(ctx context.Context, maxAge time.Duration) (int, error) {
+	select {
+	case <-ctx.Done():
+		return 0, ctx.Err()
+	default:
+	}
+
+	entries, err := os.ReadDir(s.backupsDir)
+	if err != nil {
+		return 0, fmt.Errorf("read backups dir: %w", err)
+	}
+
+	cutoff := time.Now().Add(-maxAge)
+	deleted := 0
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".tar.gz") {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		if info.ModTime().Before(cutoff) {
+			if err := os.Remove(filepath.Join(s.backupsDir, e.Name())); err != nil {
+				return deleted, fmt.Errorf("remove %s: %w", e.Name(), err)
+			}
+			deleted++
+		}
+	}
+	return deleted, nil
+}
+
 // GetPath returns the full path to a backup file.
 func (s *BackupStore) GetPath(filename string) string {
 	return filepath.Join(s.backupsDir, filename)

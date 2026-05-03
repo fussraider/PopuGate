@@ -42,6 +42,8 @@ var allowedConfigKeys = map[string]bool{
 	"replication_restart_on_change": true, "replication_log": true,
 	// System
 	"debug": true,
+	// Backup
+	"backup_retention_days": true,
 	// telemt engine
 	"telemt_version": true, "telemt_commit": true, "telemt_repo": true,
 }

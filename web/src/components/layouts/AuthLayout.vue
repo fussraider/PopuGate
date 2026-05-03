@@ -2,6 +2,7 @@
   <div class="auth-layout">
     <div class="auth-card">
       <div class="auth-header">
+        <ThemeToggle />
         <LanguageSwitcher />
       </div>
       <router-view />
@@ -12,6 +13,7 @@
 
 <script setup lang="ts">
 import Toast from '@/components/common/Toast.vue'
+import ThemeToggle from '@/components/common/ThemeToggle.vue'
 import LanguageSwitcher from '@/components/common/LanguageSwitcher.vue'
 </script>
 

@@ -15,7 +15,11 @@ export interface Settings {
   masking_enabled: boolean
   masking_host: string
   masking_port: number
+  masking_relay_max_bytes: number
   unknown_sni_action: 'mask' | 'drop'
+  proxy_secret_url: string
+  proxy_config_v4_url: string
+  proxy_config_v6_url: string
   telegram_enabled: boolean
   telegram_bot_token: string
   telegram_chat_id: string
@@ -23,6 +27,8 @@ export interface Settings {
   telegram_alerts_enabled: boolean
   telegram_server_label: string
   auto_update_enabled: boolean
+  secret_auto_rotate_days: number
+  maintenance_mode: boolean
   replication_enabled: boolean
   replication_role: 'standalone' | 'master' | 'slave'
   replication_sync_interval: number
@@ -51,6 +57,8 @@ export interface Secret {
   quota_bytes: number
   expires_at: string
   notes: string
+  tags?: string
+  archived_at?: number
   traffic_in?: number
   traffic_out?: number
 }
@@ -306,4 +314,28 @@ export interface TrafficHistoryRecord {
   timestamp: number
   bytes_in: number
   bytes_out: number
+}
+
+export interface AuditEntry {
+  id: number
+  action: string
+  user: string
+  detail: string
+  timestamp: number
+}
+
+export interface SecretTemplate {
+  id?: number
+  name: string
+  max_conns: number
+  max_ips: number
+  quota_bytes: number
+  expires_days: number
+  notes: string
+  tags: string
+}
+
+export interface SecretImportItem {
+  label: string
+  secret_key: string
 }

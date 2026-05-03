@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -84,6 +85,7 @@ func (h *InstanceHandler) Add(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	auditLog(c, "instance.create", fmt.Sprintf("port=%d label=%s", req.Port, req.Label))
 	c.JSON(http.StatusCreated, inst)
 }
 
@@ -119,6 +121,7 @@ func (h *InstanceHandler) Remove(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
+	auditLog(c, "instance.delete", fmt.Sprintf("port=%s", c.Param("port")))
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 

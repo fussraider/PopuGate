@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -139,6 +140,7 @@ func (h *TelemtUpdateHandler) Apply(c *gin.Context) {
 		return
 	}
 
+	auditLog(c, "engine.update", fmt.Sprintf("version=%s", req.Version))
 	c.JSON(http.StatusOK, gin.H{
 		"ok":      true,
 		"message": "engine updated successfully",

@@ -89,6 +89,16 @@ const routes = [
         component: () => import('@/views/SchedulerView.vue'),
       },
       {
+        path: 'audit',
+        name: 'Audit',
+        component: () => import('@/views/AuditView.vue'),
+      },
+      {
+        path: 'templates',
+        name: 'Templates',
+        component: () => import('@/views/TemplatesView.vue'),
+      },
+      {
         path: 'settings',
         name: 'Settings',
         component: () => import('@/views/SettingsView.vue'),

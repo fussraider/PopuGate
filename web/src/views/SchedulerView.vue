@@ -69,10 +69,10 @@
           <Loader2 v-if="schedulerStore.running === item.name" :size="16" class="animate-spin" />
           <Play v-else :size="16" />
         </button>
-        <button class="btn btn-ghost btn-sm" :title="t('scheduler.edit_schedule')" @click="openEditSchedule(item)">
+        <button class="btn btn-ghost btn-sm" v-tooltip="t('scheduler.edit_schedule')" @click="openEditSchedule(item)">
           <Pencil :size="16" />
         </button>
-        <button class="btn btn-ghost btn-sm" :title="t('scheduler.view_history')" @click="openHistory(item)">
+        <button class="btn btn-ghost btn-sm" v-tooltip="t('scheduler.view_history')" @click="openHistory(item)">
           <History :size="16" />
         </button>
       </template>

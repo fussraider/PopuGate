@@ -31,10 +31,16 @@ type Settings struct {
 	BlocklistCountries string `json:"blocklist_countries"`
 
 	// Traffic masking
-	MaskingEnabled   bool   `json:"masking_enabled"`
-	MaskingHost      string `json:"masking_host"`
-	MaskingPort      int    `json:"masking_port"`
-	UnknownSNIAction string `json:"unknown_sni_action"`
+	MaskingEnabled       bool   `json:"masking_enabled"`
+	MaskingHost          string `json:"masking_host"`
+	MaskingPort          int    `json:"masking_port"`
+	MaskingRelayMaxBytes int64  `json:"masking_relay_max_bytes"`
+	UnknownSNIAction     string `json:"unknown_sni_action"`
+
+	// Custom Telegram infrastructure URLs (for restricted regions)
+	ProxySecretURL   string `json:"proxy_secret_url"`
+	ProxyConfigV4URL string `json:"proxy_config_v4_url"`
+	ProxyConfigV6URL string `json:"proxy_config_v6_url"`
 
 	// Telegram
 	TelegramEnabled       bool   `json:"telegram_enabled"`
@@ -45,7 +51,11 @@ type Settings struct {
 	TelegramServerLabel   string `json:"telegram_server_label"`
 
 	// Auto-update
-	AutoUpdateEnabled bool `json:"auto_update_enabled"`
+	AutoUpdateEnabled    bool `json:"auto_update_enabled"`
+	SecretAutoRotateDays int  `json:"secret_auto_rotate_days"`
+
+	// Maintenance
+	MaintenanceMode bool `json:"maintenance_mode"`
 
 	// Replication
 	ReplicationEnabled         bool   `json:"replication_enabled"`
@@ -122,6 +132,8 @@ func DefaultSettings() Settings {
 		ReplicationLog:             "",
 		Debug:                      false,
 		BackupRetentionDays:        7,
+		SecretAutoRotateDays:       0,
+		MaintenanceMode:            false,
 	}
 }
 
@@ -162,6 +174,9 @@ func (s *Settings) Validate() {
 	}
 	if s.BackupRetentionDays < 1 {
 		s.BackupRetentionDays = 7
+	}
+	if s.SecretAutoRotateDays < 0 {
+		s.SecretAutoRotateDays = 0
 	}
 }
 

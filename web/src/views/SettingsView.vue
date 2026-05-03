@@ -78,6 +78,30 @@
               <option value="drop">{{ t('settings_view.drop_action') }}</option>
             </select>
           </div>
+          <div class="form-group">
+            <label class="form-label">{{ t('settings_view.mask_relay_max') }}</label>
+            <input v-model.number="form.masking_relay_max_bytes" class="input" type="number" min="0" :placeholder="t('settings_view.unlimited_tip')" />
+          </div>
+        </div>
+      </div>
+
+      <!-- Custom Telegram URLs -->
+      <div class="card mb-lg">
+        <h3 class="mb-md">{{ t('settings_view.custom_tg_title') }}</h3>
+        <p class="text-muted text-sm mb-md">{{ t('settings_view.custom_tg_desc') }}</p>
+        <div class="settings-grid">
+          <div class="form-group">
+            <label class="form-label">{{ t('settings_view.proxy_secret_url') }}</label>
+            <input v-model="form.proxy_secret_url" class="input" :placeholder="t('settings_view.url_placeholder')" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">{{ t('settings_view.proxy_config_v4_url') }}</label>
+            <input v-model="form.proxy_config_v4_url" class="input" :placeholder="t('settings_view.url_placeholder')" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">{{ t('settings_view.proxy_config_v6_url') }}</label>
+            <input v-model="form.proxy_config_v6_url" class="input" :placeholder="t('settings_view.url_placeholder')" />
+          </div>
         </div>
       </div>
 
@@ -103,6 +127,10 @@
             <label class="form-label">{{ t('settings_view.telemt_commit') }}</label>
             <input v-model="form.telemt_commit" class="input" :placeholder="t('settings_view.telemt_commit_placeholder')" />
           </div>
+          <div class="form-group">
+            <label class="form-label">{{ t('settings_view.telemt_repo') }}</label>
+            <input v-model="form.telemt_repo" class="input" :placeholder="t('settings_view.telemt_repo_placeholder')" />
+          </div>
         </div>
       </div>
 
@@ -113,10 +141,18 @@
           <input v-model="form.auto_update_enabled" type="checkbox" />
           {{ t('settings_view.auto_update') }}
         </label>
-        <label class="checkbox-label">
+        <label class="checkbox-label mb-md">
+          <input v-model="form.maintenance_mode" type="checkbox" />
+          {{ t('settings_view.maintenance_mode') }}
+        </label>
+        <label class="checkbox-label mb-md">
           <input v-model="form.debug" type="checkbox" />
           {{ t('settings_view.debug_mode') }}
         </label>
+        <div class="form-group" style="max-width: 200px;">
+          <label class="form-label">{{ t('settings_view.auto_rotate_days') }}</label>
+          <input v-model.number="form.secret_auto_rotate_days" class="input" type="number" min="0" :placeholder="t('settings_view.disabled_placeholder')" />
+        </div>
       </div>
 
       <!-- Backup -->

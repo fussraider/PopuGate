@@ -80,6 +80,7 @@ func (h *UpdateHandler) Apply(c *gin.Context) {
 		resp["container_name"] = result.ContainerName
 	}
 
+	auditLog(c, "system.update", "system update applied")
 	c.JSON(http.StatusOK, resp)
 
 	go func() {

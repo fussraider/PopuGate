@@ -58,6 +58,7 @@ func (h *BackupHandler) Create(c *gin.Context) {
 		return
 	}
 
+	auditLog(c, "backup.create", "backup created")
 	c.JSON(http.StatusOK, gin.H{
 		"ok":         true,
 		"filename":   backup.Filename,
@@ -98,6 +99,7 @@ func (h *BackupHandler) Restore(c *gin.Context) {
 		return
 	}
 
+	auditLog(c, "backup.restore", fmt.Sprintf("file=%s", req.Filename))
 	c.JSON(http.StatusOK, gin.H{
 		"ok":      true,
 		"warning": "Database and configuration files were overwritten. Restart the proxy engine to apply changes.",
@@ -129,6 +131,7 @@ func (h *BackupHandler) Delete(c *gin.Context) {
 		return
 	}
 
+	auditLog(c, "backup.delete", fmt.Sprintf("file=%s", filename))
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 

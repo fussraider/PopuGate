@@ -25,20 +25,20 @@
         </StatusBadge>
       </template>
       <template #actions="{ item }">
-        <button class="btn btn-ghost btn-sm" :title="t('upstreams.test')"
+        <button class="btn btn-ghost btn-sm" v-tooltip="t('upstreams.test')"
                 :disabled="store.testing === item.name" @click="testUpstream(item.name)">
           <Loader2 v-if="store.testing === item.name" :size="16" class="animate-spin" />
           <FlaskConical v-else :size="16" />
         </button>
-        <button class="btn btn-ghost btn-sm" :title="t('upstreams.edit')" @click="openEditModal(item)">
+        <button class="btn btn-ghost btn-sm" v-tooltip="t('upstreams.edit')" @click="openEditModal(item)">
           <Pencil :size="16" />
         </button>
-        <button class="btn btn-ghost btn-sm" :title="item.enabled ? t('secrets.disable') : t('secrets.enable')"
+        <button class="btn btn-ghost btn-sm" v-tooltip="item.enabled ? t('secrets.disable') : t('secrets.enable')"
                 :disabled="store.toggling === item.name" @click="store.toggle(item.name, !item.enabled)">
           <Loader2 v-if="store.toggling === item.name" :size="16" class="animate-spin" />
           <component v-else :is="item.enabled ? Pause : Play" :size="16" />
         </button>
-        <button class="btn btn-ghost btn-sm" :title="t('upstreams.delete')" @click="handleRemove(item.name)">
+        <button class="btn btn-ghost btn-sm" v-tooltip="t('upstreams.delete')" @click="handleRemove(item.name)">
           <Trash2 :size="16" />
         </button>
       </template>

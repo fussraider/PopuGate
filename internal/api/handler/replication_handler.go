@@ -89,6 +89,7 @@ func (h *ReplicationHandler) Setup(c *gin.Context) {
 		return
 	}
 
+	auditLog(c, "replication.setup", fmt.Sprintf("role=%s", req.Role))
 	c.JSON(http.StatusOK, gin.H{"ok": true, "role": req.Role})
 }
 
@@ -136,6 +137,7 @@ func (h *ReplicationHandler) AddSlave(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	auditLog(c, "replication.add_slave", fmt.Sprintf("host=%s", req.Host))
 	c.JSON(http.StatusCreated, slave)
 }
 
@@ -156,6 +158,7 @@ func (h *ReplicationHandler) RemoveSlave(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
+	auditLog(c, "replication.remove_slave", fmt.Sprintf("host=%s", host))
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
@@ -204,6 +207,7 @@ func (h *ReplicationHandler) Sync(c *gin.Context) {
 	for _, r := range results {
 		output = append(output, syncResult{Host: r.Host, FilesSent: r.FilesSent, Error: r.Error})
 	}
+	auditLog(c, "replication.sync", "all slaves")
 	c.JSON(http.StatusOK, gin.H{"ok": true, "results": output})
 }
 

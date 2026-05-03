@@ -28,12 +28,18 @@ var allowedConfigKeys = map[string]bool{
 	"geoblock_mode": true, "blocklist_countries": true,
 	// Traffic masking
 	"masking_enabled": true, "masking_host": true, "masking_port": true,
-	"unknown_sni_action": true,
+	"masking_relay_max_bytes": true,
+	"unknown_sni_action":      true,
+	// Custom Telegram URLs (restricted regions)
+	"proxy_secret_url": true, "proxy_config_v4_url": true, "proxy_config_v6_url": true,
 	// Telegram
 	"telegram_enabled": true, "telegram_bot_token": true, "telegram_chat_id": true,
 	"telegram_interval": true, "telegram_alerts_enabled": true, "telegram_server_label": true,
 	// Auto-update
-	"auto_update_enabled": true,
+	"auto_update_enabled":     true,
+	"secret_auto_rotate_days": true,
+	// Maintenance
+	"maintenance_mode": true,
 	// Replication
 	"replication_enabled": true, "replication_role": true,
 	"replication_sync_interval": true, "replication_ssh_port": true,
@@ -129,6 +135,7 @@ func (h *ConfigHandler) Update(c *gin.Context) {
 		applied = append(applied, k)
 	}
 
+	auditLog(c, "settings.update", "updated settings")
 	c.JSON(http.StatusOK, gin.H{"ok": true, "applied": applied, "rejected": rejected})
 }
 

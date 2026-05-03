@@ -35,8 +35,8 @@ func TestBuildConfig_Basic(t *testing.T) {
 	if cfg.Server.Port != 443 {
 		t.Errorf("Server.Port = %d, want 443", cfg.Server.Port)
 	}
-	if cfg.Server.MetricsPort != 9091 {
-		t.Errorf("Server.MetricsPort = %d, want 9091", cfg.Server.MetricsPort)
+	if cfg.Server.MetricsListen != "127.0.0.1:9091" {
+		t.Errorf("Server.MetricsListen = %q, want %q", cfg.Server.MetricsListen, "127.0.0.1:9091")
 	}
 
 	// Only enabled secrets should be in Users map
@@ -301,7 +301,7 @@ func TestRenderTOML(t *testing.T) {
 			Port:             443,
 			ListenAddrIPv4:   "0.0.0.0",
 			ListenAddrIPv6:   "::",
-			MetricsPort:      9091,
+			MetricsListen:    "127.0.0.1:9091",
 			MetricsWhitelist: []string{"127.0.0.1"},
 		},
 		Timeouts: TimeoutsConfig{
@@ -339,7 +339,7 @@ func TestRenderTOML(t *testing.T) {
 		`ad_tag = "test_tag"`,
 		`user1 = "aa11bb22cc33dd44ee55ff6677889900"`,
 		"port = 443",
-		"metrics_port = 9091",
+		`metrics_listen = "127.0.0.1:9091"`,
 	}
 	for _, check := range checks {
 		if !strings.Contains(toml, check) {

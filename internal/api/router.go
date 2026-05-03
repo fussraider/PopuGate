@@ -33,6 +33,7 @@ type RouterConfig struct {
 	Docker    *dockerutil.DockerClient
 	// Services
 	SecretSvc       *service.SecretService
+	TemplateSvc     *service.TemplateService
 	UpstreamSvc     *service.UpstreamService
 	ContainerSvc    *service.ContainerService
 	DockerSvc       *service.DockerService
@@ -45,6 +46,7 @@ type RouterConfig struct {
 	TelemtUpdateSvc *service.TelemtUpdateService
 	TelemtCfg       *service.DBTelemtConfig
 	SchedulerSvc    *service.SchedulerService
+	AuditSvc        *service.AuditService
 	CORSOrigins     []string // defaults to ["*"] if empty
 }
 
@@ -96,6 +98,12 @@ func SetupRouter(cfg RouterConfig) *gin.Engine {
 	// Protected endpoints
 	protected := r.Group("/api/v1")
 	protected.Use(AuthMiddleware(cfg.JWTSecret, cfg.Blocklist))
+	if cfg.AuditSvc != nil {
+		protected.Use(func(c *gin.Context) {
+			handler.SetAuditSvc(c, cfg.AuditSvc)
+			c.Next()
+		})
+	}
 	{
 		// Config
 		configHandler := handler.NewConfigHandler(cfg.Settings)
@@ -103,10 +111,19 @@ func SetupRouter(cfg RouterConfig) *gin.Engine {
 		protected.PUT("/config", configHandler.Update)
 		protected.GET("/config/:key", configHandler.GetKey)
 
-		// Secrets
+		// Secrets — static paths before :label
 		secretHandler := handler.NewSecretHandler(cfg.SecretSvc, cfg.Settings)
 		protected.GET("/secrets", secretHandler.List)
 		protected.POST("/secrets", secretHandler.Add)
+		protected.GET("/secrets/search", secretHandler.Search)
+		protected.GET("/secrets/top", secretHandler.Top)
+		protected.GET("/secrets/export", secretHandler.Export)
+		protected.POST("/secrets/import", secretHandler.Import)
+		protected.POST("/secrets/bulk-extend", secretHandler.BulkExtend)
+		protected.POST("/secrets/bulk-rotate", secretHandler.BulkRotate)
+		protected.POST("/secrets/reset-traffic", secretHandler.ResetAllTraffic)
+		protected.POST("/secrets/disable-expired", secretHandler.DisableExpired)
+		// Secrets — per-label paths
 		protected.GET("/secrets/:label", secretHandler.Get)
 		protected.DELETE("/secrets/:label", secretHandler.Remove)
 		protected.POST("/secrets/:label/rotate", secretHandler.Rotate)
@@ -116,8 +133,13 @@ func SetupRouter(cfg RouterConfig) *gin.Engine {
 		protected.GET("/secrets/:label/link", secretHandler.GetLink)
 		protected.GET("/secrets/:label/qr", secretHandler.GetQR)
 		protected.PUT("/secrets/:label/notes", secretHandler.UpdateNotes)
+		protected.PUT("/secrets/:label/rename", secretHandler.Rename)
+		protected.POST("/secrets/:label/extend", secretHandler.Extend)
+		protected.PUT("/secrets/:label/tags", secretHandler.SetTags)
+		protected.POST("/secrets/:label/archive", secretHandler.Archive)
+		protected.POST("/secrets/:label/unarchive", secretHandler.Unarchive)
+		protected.POST("/secrets/:label/clone", secretHandler.Clone)
 		protected.POST("/secrets/:label/reset-traffic", secretHandler.ResetTraffic)
-		protected.POST("/secrets/reset-traffic", secretHandler.ResetAllTraffic)
 
 		// Upstreams
 		upstreamHandler := handler.NewUpstreamHandler(cfg.UpstreamSvc)
@@ -229,6 +251,22 @@ func SetupRouter(cfg RouterConfig) *gin.Engine {
 			protected.POST("/scheduler/tasks/:name/run", schedulerHandler.RunNow)
 			protected.GET("/scheduler/tasks/:name/history", schedulerHandler.History)
 			protected.GET("/scheduler/history", schedulerHandler.AllHistory)
+		}
+
+		// Audit
+		if cfg.AuditSvc != nil {
+			auditHandler := handler.NewAuditHandler(cfg.AuditSvc)
+			protected.GET("/audit", auditHandler.List)
+		}
+
+		// Templates
+		if cfg.TemplateSvc != nil {
+			templateHandler := handler.NewTemplateHandler(cfg.TemplateSvc)
+			protected.GET("/templates", templateHandler.List)
+			protected.POST("/templates", templateHandler.Create)
+			protected.GET("/templates/:name", templateHandler.Get)
+			protected.DELETE("/templates/:name", templateHandler.Delete)
+			protected.POST("/templates/:name/apply", templateHandler.Apply)
 		}
 	}
 

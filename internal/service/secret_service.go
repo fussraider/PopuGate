@@ -201,9 +201,9 @@ func (s *SecretService) GetLink(ctx context.Context, label, serverIP string, por
 	webLink := telemt.BuildWebLink(serverIP, port, fullSecret)
 
 	return &model.SecretWithLink{
-		Secret:   *sec,
-		TGLink:   tgLink,
-		WebLink:  webLink,
+		Secret:  *sec,
+		TGLink:  tgLink,
+		WebLink: webLink,
 	}, nil
 }
 
@@ -250,4 +250,211 @@ func (s *SecretService) GetQRCode(ctx context.Context, label, serverIP string, p
 // GetEnabledLabels returns labels of all enabled secrets.
 func (s *SecretService) GetEnabledLabels(ctx context.Context) ([]string, error) {
 	return s.secrets.ListEnabledLabels(ctx)
+}
+
+// Rename changes a secret's label.
+func (s *SecretService) Rename(ctx context.Context, oldLabel, newLabel string) error {
+	if err := model.ValidateLabel(newLabel); err != nil {
+		return fmt.Errorf("invalid new label: %w", err)
+	}
+
+	existing, err := s.secrets.GetByLabel(ctx, oldLabel)
+	if err != nil {
+		return err
+	}
+	if existing == nil {
+		return fmt.Errorf("secret '%s' not found", oldLabel)
+	}
+
+	dup, err := s.secrets.GetByLabel(ctx, newLabel)
+	if err != nil {
+		return err
+	}
+	if dup != nil {
+		return fmt.Errorf("secret '%s' already exists", newLabel)
+	}
+
+	return s.secrets.RenameLabel(ctx, oldLabel, newLabel)
+}
+
+// Extend sets a new expiry for a secret. If days > 0, it sets expiry to now+days
+// and optionally re-enables the secret.
+func (s *SecretService) Extend(ctx context.Context, label string, days int) error {
+	if days <= 0 {
+		return fmt.Errorf("days must be positive")
+	}
+
+	sec, err := s.secrets.GetByLabel(ctx, label)
+	if err != nil {
+		return err
+	}
+	if sec == nil {
+		return fmt.Errorf("secret '%s' not found", label)
+	}
+
+	expiresAt := time.Now().AddDate(0, 0, days).Format(time.RFC3339)
+	reenable := !sec.Enabled
+	return s.secrets.ExtendExpiry(ctx, label, expiresAt, reenable)
+}
+
+// DisableExpired disables all secrets whose expiry is in the past.
+// Returns the count of disabled secrets.
+func (s *SecretService) DisableExpired(ctx context.Context) (int, error) {
+	return s.secrets.DisableExpired(ctx)
+}
+
+// SetTags updates the tags for a secret.
+func (s *SecretService) SetTags(ctx context.Context, label, tags string) error {
+	sec, err := s.secrets.GetByLabel(ctx, label)
+	if err != nil {
+		return err
+	}
+	if sec == nil {
+		return fmt.Errorf("secret '%s' not found", label)
+	}
+	return s.secrets.UpdateTags(ctx, label, tags)
+}
+
+// Archive marks a secret as archived.
+func (s *SecretService) Archive(ctx context.Context, label string) error {
+	sec, err := s.secrets.GetByLabel(ctx, label)
+	if err != nil {
+		return err
+	}
+	if sec == nil {
+		return fmt.Errorf("secret '%s' not found", label)
+	}
+	return s.secrets.Archive(ctx, label)
+}
+
+// Unarchive removes the archived status from a secret.
+func (s *SecretService) Unarchive(ctx context.Context, label string) error {
+	sec, err := s.secrets.GetByLabel(ctx, label)
+	if err != nil {
+		return err
+	}
+	if sec == nil {
+		return fmt.Errorf("secret '%s' not found", label)
+	}
+	return s.secrets.Unarchive(ctx, label)
+}
+
+// Clone creates a copy of a secret with a new label and key.
+func (s *SecretService) Clone(ctx context.Context, srcLabel, newLabel string) (*model.Secret, error) {
+	if err := model.ValidateLabel(newLabel); err != nil {
+		return nil, err
+	}
+	existing, err := s.secrets.GetByLabel(ctx, newLabel)
+	if err != nil {
+		return nil, err
+	}
+	if existing != nil {
+		return nil, fmt.Errorf("secret '%s' already exists", newLabel)
+	}
+
+	count, err := s.secrets.Count(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if count >= model.MaxSecrets {
+		return nil, fmt.Errorf("maximum %d secrets reached", model.MaxSecrets)
+	}
+
+	// Verify source exists
+	src, err := s.secrets.GetByLabel(ctx, srcLabel)
+	if err != nil {
+		return nil, err
+	}
+	if src == nil {
+		return nil, fmt.Errorf("secret '%s' not found", srcLabel)
+	}
+
+	newKey, err := telemt.GenerateSecret()
+	if err != nil {
+		return nil, fmt.Errorf("generate secret: %w", err)
+	}
+
+	return s.secrets.CloneSecret(ctx, srcLabel, newLabel, newKey)
+}
+
+// BulkExtend extends expiry for multiple secrets.
+func (s *SecretService) BulkExtend(ctx context.Context, labels []string, days int) (int, error) {
+	if days <= 0 {
+		return 0, fmt.Errorf("days must be positive")
+	}
+	expiresAt := time.Now().AddDate(0, 0, days).Format(time.RFC3339)
+	return s.secrets.BulkExtendExpiry(ctx, labels, expiresAt, true)
+}
+
+// BulkRotate rotates keys for multiple secrets.
+func (s *SecretService) BulkRotate(ctx context.Context, labels []string) (int, []string, error) {
+	keys := make(map[string]string)
+	for _, label := range labels {
+		key, err := telemt.GenerateSecret()
+		if err != nil {
+			return 0, nil, fmt.Errorf("generate key for %s: %w", label, err)
+		}
+		keys[label] = key
+	}
+	updated, err := s.secrets.BulkRotateKeys(ctx, labels, keys)
+	return updated, labels, err
+}
+
+// Search returns secrets matching a text query.
+func (s *SecretService) Search(ctx context.Context, query string) ([]model.Secret, error) {
+	if query == "" {
+		return s.List(ctx)
+	}
+	return s.secrets.Search(ctx, query)
+}
+
+// Top returns secrets ordered by traffic.
+func (s *SecretService) Top(ctx context.Context, limit int) ([]model.Secret, error) {
+	return s.secrets.Top(ctx, limit)
+}
+
+// ExportJSON returns all secrets as a JSON-serializable slice.
+func (s *SecretService) ExportJSON(ctx context.Context) ([]model.Secret, error) {
+	return s.secrets.List(ctx)
+}
+
+// ImportSecrets creates multiple secrets from an import list.
+func (s *SecretService) ImportSecrets(ctx context.Context, entries []model.Secret) (int, []string, error) {
+	count, err := s.secrets.Count(ctx)
+	if err != nil {
+		return 0, nil, err
+	}
+	if count+len(entries) > model.MaxSecrets {
+		return 0, nil, fmt.Errorf("import would exceed max %d secrets", model.MaxSecrets)
+	}
+
+	var created []string
+	imported := 0
+	for _, e := range entries {
+		if e.Label == "" {
+			continue
+		}
+		if err := model.ValidateLabel(e.Label); err != nil {
+			continue
+		}
+		existing, err := s.secrets.GetByLabel(ctx, e.Label)
+		if err != nil {
+			continue
+		}
+		if existing != nil {
+			continue
+		}
+		if e.SecretKey == "" {
+			e.SecretKey, _ = telemt.GenerateSecret()
+		} else if !telemt.ValidateSecretKey(e.SecretKey) {
+			continue
+		}
+		e.Enabled = true
+		e.CreatedAt = time.Now().Unix()
+		if err := s.secrets.Create(ctx, &e); err == nil {
+			imported++
+			created = append(created, e.Label)
+		}
+	}
+	return imported, created, nil
 }

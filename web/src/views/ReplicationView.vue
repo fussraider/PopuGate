@@ -69,14 +69,14 @@
           </StatusBadge>
         </template>
         <template #actions="{ item }">
-          <button class="btn btn-ghost btn-sm" :title="t('replication.test')" @click="testSlave(item.host)">
+          <button class="btn btn-ghost btn-sm" v-tooltip="t('replication.test')" @click="testSlave(item.host)">
             <FlaskConical :size="16" />
           </button>
-          <button class="btn btn-ghost btn-sm" :title="t('replication.sync')" :disabled="replicationStore.syncing"
+          <button class="btn btn-ghost btn-sm" v-tooltip="t('replication.sync')" :disabled="replicationStore.syncing"
                   @click="replicationStore.sync(item.host)">
             <RefreshCw :size="16" :class="{ 'animate-spin': replicationStore.syncing }" />
           </button>
-          <button class="btn btn-ghost btn-sm" :title="t('replication.remove')" @click="handleRemove(item.host)">
+          <button class="btn btn-ghost btn-sm" v-tooltip="t('replication.remove')" @click="handleRemove(item.host)">
             <Trash2 :size="16" class="text-danger" />
           </button>
         </template>

@@ -32,8 +32,11 @@ func setupSecretTestRouter(t *testing.T) (*gin.Engine, *SecretHandler) {
 	r.PUT("/api/v1/secrets/:label/limits", handler.SetLimits)
 	r.GET("/api/v1/secrets/:label/limits", handler.GetLimits)
 	r.PUT("/api/v1/secrets/:label/notes", handler.UpdateNotes)
+	r.PUT("/api/v1/secrets/:label/rename", handler.Rename)
+	r.POST("/api/v1/secrets/:label/extend", handler.Extend)
 	r.POST("/api/v1/secrets/:label/reset-traffic", handler.ResetTraffic)
 	r.POST("/api/v1/secrets/reset-traffic", handler.ResetAllTraffic)
+	r.POST("/api/v1/secrets/disable-expired", handler.DisableExpired)
 
 	return r, handler
 }
@@ -503,6 +506,121 @@ func TestSecretHandler_ResetAllTraffic(t *testing.T) {
 	r, _ := setupSecretTestRouter(t)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/secrets/reset-traffic", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp["ok"] != true {
+		t.Error("expected ok=true")
+	}
+}
+
+func TestSecretHandler_Rename(t *testing.T) {
+	r, _ := setupSecretTestRouter(t)
+
+	// Add a secret
+	body, _ := json.Marshal(map[string]string{"label": "old-name"})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/secrets", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("add: expected 201, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// Add second so old-name is not the last enabled
+	body, _ = json.Marshal(map[string]string{"label": "other"})
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/secrets", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	// Rename
+	body, _ = json.Marshal(map[string]string{"new_label": "new-name"})
+	req = httptest.NewRequest(http.MethodPut, "/api/v1/secrets/old-name/rename", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp["ok"] != true {
+		t.Error("expected ok=true")
+	}
+	if resp["new_label"] != "new-name" {
+		t.Errorf("expected new_label='new-name', got %v", resp["new_label"])
+	}
+}
+
+func TestSecretHandler_Rename_NotFound(t *testing.T) {
+	r, _ := setupSecretTestRouter(t)
+
+	body, _ := json.Marshal(map[string]string{"new_label": "new-name"})
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/secrets/ghost/rename", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestSecretHandler_Extend(t *testing.T) {
+	r, _ := setupSecretTestRouter(t)
+
+	// Add a secret
+	body, _ := json.Marshal(map[string]string{"label": "ext-user"})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/secrets", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	// Extend
+	body, _ = json.Marshal(map[string]int{"days": 30})
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/secrets/ext-user/extend", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp["ok"] != true {
+		t.Error("expected ok=true")
+	}
+}
+
+func TestSecretHandler_Extend_InvalidDays(t *testing.T) {
+	r, _ := setupSecretTestRouter(t)
+
+	body, _ := json.Marshal(map[string]int{"days": 0})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/secrets/some/extend", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestSecretHandler_DisableExpired(t *testing.T) {
+	r, _ := setupSecretTestRouter(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/secrets/disable-expired", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -92,6 +93,7 @@ func (h *GeoblockHandler) Add(c *gin.Context) {
 		}
 	}
 
+	auditLog(c, "geoblock.add", fmt.Sprintf("country=%s", req.Country))
 	c.JSON(http.StatusOK, gin.H{"ok": true, "country": req.Country})
 }
 
@@ -135,6 +137,7 @@ func (h *GeoblockHandler) Remove(c *gin.Context) {
 		}
 	}
 
+	auditLog(c, "geoblock.remove", fmt.Sprintf("country=%s", req.Country))
 	c.JSON(http.StatusOK, gin.H{"ok": true, "country": req.Country})
 }
 
@@ -162,6 +165,7 @@ func (h *GeoblockHandler) Clear(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
+	auditLog(c, "geoblock.clear", "all countries removed")
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
@@ -202,6 +206,7 @@ func (h *GeoblockHandler) SetMode(c *gin.Context) {
 		}
 	}
 
+	auditLog(c, "geoblock.set_mode", fmt.Sprintf("mode=%s", req.Mode))
 	c.JSON(http.StatusOK, gin.H{"ok": true, "mode": req.Mode})
 }
 

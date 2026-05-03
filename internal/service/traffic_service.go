@@ -356,3 +356,13 @@ func (s *TrafficService) CheckExpirations(ctx context.Context) {
 		}
 	}
 }
+
+// ResetAllQuotas resets traffic counters for all users (monthly quota reset).
+func (s *TrafficService) ResetAllQuotas(ctx context.Context) {
+	if s.secrets == nil {
+		return
+	}
+	if err := s.secrets.ResetAllTraffic(ctx); err != nil {
+		quotaLog.Warnf("failed to reset all quotas: %v", err)
+	}
+}

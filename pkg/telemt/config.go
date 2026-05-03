@@ -19,6 +19,7 @@ type TelemtConfig struct {
 	Censorship CensorshipConfig `toml:"censorship"`
 	Access     AccessConfig     `toml:"access"`
 	Upstreams  []UpstreamConfig `toml:"upstreams,omitempty"`
+	Telegram   TelegramConfig   `toml:"telegram,omitempty"`
 }
 
 type GeneralConfig struct {
@@ -47,7 +48,7 @@ type ServerConfig struct {
 	ListenAddrIPv6            string   `toml:"listen_addr_ipv6"`
 	ProxyProtocol             bool     `toml:"proxy_protocol"`
 	ProxyProtocolTrustedCIDRs []string `toml:"proxy_protocol_trusted_cidrs,omitempty"`
-	MetricsPort               int      `toml:"metrics_port"`
+	MetricsListen             string   `toml:"metrics_listen"`
 	MetricsWhitelist          []string `toml:"metrics_whitelist"`
 }
 
@@ -59,12 +60,19 @@ type TimeoutsConfig struct {
 }
 
 type CensorshipConfig struct {
-	TLSDomain        string `toml:"tls_domain"`
-	UnknownSNIAction string `toml:"unknown_sni_action"`
-	Mask             bool   `toml:"mask"`
-	MaskPort         int    `toml:"mask_port"`
-	MaskHost         string `toml:"mask_host,omitempty"`
-	FakeCertLen      int    `toml:"fake_cert_len"`
+	TLSDomain         string `toml:"tls_domain"`
+	UnknownSNIAction  string `toml:"unknown_sni_action"`
+	Mask              bool   `toml:"mask"`
+	MaskPort          int    `toml:"mask_port"`
+	MaskHost          string `toml:"mask_host,omitempty"`
+	MaskRelayMaxBytes int64  `toml:"mask_relay_max_bytes,omitempty"`
+	FakeCertLen       int    `toml:"fake_cert_len"`
+}
+
+type TelegramConfig struct {
+	ProxySecretURL   string `toml:"proxy_secret_url,omitempty"`
+	ProxyConfigV4URL string `toml:"proxy_config_v4_url,omitempty"`
+	ProxyConfigV6URL string `toml:"proxy_config_v6_url,omitempty"`
 }
 
 type AccessConfig struct {
@@ -145,7 +153,7 @@ func BuildConfig(params *ConfigParams) *TelemtConfig {
 			ListenAddrIPv4:   "0.0.0.0",
 			ListenAddrIPv6:   "::",
 			ProxyProtocol:    s.ProxyProtocol,
-			MetricsPort:      s.ProxyMetricsPort,
+			MetricsListen:    fmt.Sprintf("127.0.0.1:%d", s.ProxyMetricsPort),
 			MetricsWhitelist: metricsWhitelist,
 		},
 		Timeouts: TimeoutsConfig{
@@ -155,11 +163,12 @@ func BuildConfig(params *ConfigParams) *TelemtConfig {
 			ClientAck:       90,
 		},
 		Censorship: CensorshipConfig{
-			TLSDomain:        s.ProxyDomain,
-			UnknownSNIAction: s.UnknownSNIAction,
-			Mask:             s.MaskingEnabled,
-			MaskPort:         s.MaskingPort,
-			FakeCertLen:      s.FakeCertLen,
+			TLSDomain:         s.ProxyDomain,
+			UnknownSNIAction:  s.UnknownSNIAction,
+			Mask:              s.MaskingEnabled,
+			MaskPort:          s.MaskingPort,
+			FakeCertLen:       s.FakeCertLen,
+			MaskRelayMaxBytes: s.MaskingRelayMaxBytes,
 		},
 		Access: AccessConfig{
 			ReplayCheckLen:   65536,
@@ -177,6 +186,15 @@ func BuildConfig(params *ConfigParams) *TelemtConfig {
 	// Masking host
 	if s.MaskingEnabled && s.MaskingHost != "" {
 		cfg.Censorship.MaskHost = s.MaskingHost
+	}
+
+	// Telegram custom URLs (for restricted regions)
+	if s.ProxySecretURL != "" || s.ProxyConfigV4URL != "" || s.ProxyConfigV6URL != "" {
+		cfg.Telegram = TelegramConfig{
+			ProxySecretURL:   s.ProxySecretURL,
+			ProxyConfigV4URL: s.ProxyConfigV4URL,
+			ProxyConfigV6URL: s.ProxyConfigV6URL,
+		}
 	}
 
 	// Proxy protocol trusted CIDRs
@@ -245,10 +263,8 @@ func WriteConfigTOML(cfg *TelemtConfig, path string) error {
 		return fmt.Errorf("create config dir: %w", err)
 	}
 
-	// Generate TOML content using our custom renderer (to match bash output format)
 	content := renderTOML(cfg)
 
-	// Atomic write: temp file then rename
 	tmpPath := path + ".tmp"
 	if err := os.WriteFile(tmpPath, []byte(content), 0644); err != nil {
 		return fmt.Errorf("write temp config: %w", err)
@@ -263,7 +279,6 @@ func WriteConfigTOML(cfg *TelemtConfig, path string) error {
 }
 
 // renderTOML produces a TOML string matching the format the bash script generated.
-// This ensures byte-compatibility with the telemt Rust engine's expectations.
 func renderTOML(cfg *TelemtConfig) string {
 	var b strings.Builder
 
@@ -293,7 +308,7 @@ func renderTOML(cfg *TelemtConfig) string {
 	// [general.links]
 	b.WriteString("[general.links]\n")
 	b.WriteString(fmt.Sprintf("show = %s\n", formatStringArray(cfg.General.Links.Show)))
-	b.WriteString(fmt.Sprintf("# public_host = \"\"\n"))
+	b.WriteString("# public_host = \"\"\n")
 	b.WriteString(fmt.Sprintf("# public_port = %d\n", cfg.Server.Port))
 	b.WriteString("\n")
 
@@ -306,7 +321,7 @@ func renderTOML(cfg *TelemtConfig) string {
 	if cfg.Server.ProxyProtocol && len(cfg.Server.ProxyProtocolTrustedCIDRs) > 0 {
 		b.WriteString(fmt.Sprintf("proxy_protocol_trusted_cidrs = %s\n", formatStringArray(cfg.Server.ProxyProtocolTrustedCIDRs)))
 	}
-	b.WriteString(fmt.Sprintf("metrics_port = %d\n", cfg.Server.MetricsPort))
+	b.WriteString(fmt.Sprintf("metrics_listen = %q\n", cfg.Server.MetricsListen))
 	b.WriteString(fmt.Sprintf("metrics_whitelist = %s\n", formatStringArray(cfg.Server.MetricsWhitelist)))
 	b.WriteString("\n")
 
@@ -328,6 +343,9 @@ func renderTOML(cfg *TelemtConfig) string {
 		b.WriteString(fmt.Sprintf("mask_host = %q\n", cfg.Censorship.MaskHost))
 	}
 	b.WriteString(fmt.Sprintf("fake_cert_len = %d\n", cfg.Censorship.FakeCertLen))
+	if cfg.Censorship.MaskRelayMaxBytes > 0 {
+		b.WriteString(fmt.Sprintf("mask_relay_max_bytes = %d\n", cfg.Censorship.MaskRelayMaxBytes))
+	}
 	b.WriteString("# Note: geo-blocking is enforced at the host firewall level (iptables/nftables),\n")
 	b.WriteString("# not via telemt config.\n\n")
 
@@ -396,6 +414,21 @@ func renderTOML(cfg *TelemtConfig) string {
 		}
 		if up.Interface != "" {
 			b.WriteString(fmt.Sprintf("interface = %q\n", up.Interface))
+		}
+		b.WriteString("\n")
+	}
+
+	// [telegram] — custom URLs for restricted regions
+	if cfg.Telegram.ProxySecretURL != "" || cfg.Telegram.ProxyConfigV4URL != "" || cfg.Telegram.ProxyConfigV6URL != "" {
+		b.WriteString("[telegram]\n")
+		if cfg.Telegram.ProxySecretURL != "" {
+			b.WriteString(fmt.Sprintf("proxy_secret_url = %q\n", cfg.Telegram.ProxySecretURL))
+		}
+		if cfg.Telegram.ProxyConfigV4URL != "" {
+			b.WriteString(fmt.Sprintf("proxy_config_v4_url = %q\n", cfg.Telegram.ProxyConfigV4URL))
+		}
+		if cfg.Telegram.ProxyConfigV6URL != "" {
+			b.WriteString(fmt.Sprintf("proxy_config_v6_url = %q\n", cfg.Telegram.ProxyConfigV6URL))
 		}
 		b.WriteString("\n")
 	}

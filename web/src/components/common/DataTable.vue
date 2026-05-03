@@ -9,6 +9,10 @@
         <table class="table">
           <thead>
             <tr>
+              <th v-if="selectable" class="checkbox-col">
+                <input type="checkbox" :checked="allSelected" :indeterminate="someSelected && !allSelected"
+                       @change="toggleAll" />
+              </th>
               <th v-for="col in columns" :key="col.key">
                 <slot :name="`header-${col.key}`" :column="col">
                   {{ col.header }}
@@ -19,6 +23,9 @@
           </thead>
           <TransitionGroup name="row" tag="tbody">
             <tr v-for="item in items" :key="rowKeyFn(item)">
+              <td v-if="selectable" class="checkbox-col">
+                <input type="checkbox" :checked="isSelected(item)" @change="toggleItem(item)" />
+              </td>
               <td v-for="col in columns" :key="col.key">
                 <slot :name="`cell-${col.key}`" :item="item" :value="item[col.key]">
                   {{ item[col.key] }}
@@ -36,7 +43,7 @@
 </template>
 
 <script setup lang="ts">
-import { type Component, type FunctionalComponent } from 'vue'
+import { computed, type Component, type FunctionalComponent } from 'vue'
 import SkeletonLoader from './SkeletonLoader.vue'
 import EmptyState from './EmptyState.vue'
 
@@ -56,12 +63,56 @@ const props = withDefaults(defineProps<{
   emptyMessage?: string
   rowKey: string | ((item: any) => string | number)
   skeletonRows?: number
+  selectable?: boolean
+  selectedKeys?: Set<string | number>
 }>(), {
   skeletonRows: 5,
+  selectable: false,
 })
+
+const emit = defineEmits<{
+  'update:selected-keys': [keys: Set<string | number>]
+}>()
 
 function rowKeyFn(item: any): string | number {
   return typeof props.rowKey === 'function' ? props.rowKey(item) : item[props.rowKey]
+}
+
+function isSelected(item: any): boolean {
+  return props.selectedKeys?.has(rowKeyFn(item)) ?? false
+}
+
+const allSelected = computed(() => {
+  if (!props.items?.length || !props.selectedKeys) return false
+  return props.items.every((item) => props.selectedKeys!.has(rowKeyFn(item)))
+})
+
+const someSelected = computed(() => {
+  if (!props.items?.length || !props.selectedKeys) return false
+  return props.items.some((item) => props.selectedKeys!.has(rowKeyFn(item)))
+})
+
+function toggleAll() {
+  if (!props.selectedKeys) return
+  const next = new Set(props.selectedKeys)
+  if (allSelected.value) {
+    for (const item of props.items) next.delete(rowKeyFn(item))
+  } else {
+    for (const item of props.items) next.add(rowKeyFn(item))
+  }
+  emit('update:selected-keys', next)
+}
+
+function toggleItem(item: any) {
+  if (!props.selectedKeys) return
+  const next = new Set(props.selectedKeys)
+  const key = rowKeyFn(item)
+  if (next.has(key)) {
+    next.delete(key)
+  } else {
+    next.add(key)
+  }
+  emit('update:selected-keys', next)
 }
 </script>
 
@@ -88,5 +139,16 @@ function rowKeyFn(item: any): string | number {
 .row-leave-to {
   opacity: 0;
   transform: translateX(10px);
+}
+
+.checkbox-col {
+  width: 40px;
+  text-align: center;
+
+  input[type="checkbox"] {
+    cursor: pointer;
+    width: 16px;
+    height: 16px;
+  }
 }
 </style>

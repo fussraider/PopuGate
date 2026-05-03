@@ -80,6 +80,7 @@ func (h *ProxyHandler) Start(c *gin.Context) {
 		})
 	}
 
+	auditLog(c, "proxy.start", "proxy started")
 	c.JSON(http.StatusOK, gin.H{"ok": true, "links": links})
 }
 
@@ -97,6 +98,7 @@ func (h *ProxyHandler) Stop(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
+	auditLog(c, "proxy.stop", "proxy stopped")
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
@@ -114,6 +116,7 @@ func (h *ProxyHandler) Restart(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
+	auditLog(c, "proxy.restart", "proxy restarted")
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 

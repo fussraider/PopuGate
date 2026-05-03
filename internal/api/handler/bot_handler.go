@@ -76,6 +76,7 @@ func (h *BotHandler) Setup(c *gin.Context) {
 	// Start the bot with new config
 	h.startBot(c.Request.Context(), req.BotToken, req.ChatID)
 
+	auditLog(c, "bot.setup", "bot configured")
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
@@ -177,6 +178,7 @@ func (h *BotHandler) Toggle(c *gin.Context) {
 		h.mu.Unlock()
 	}
 
+	auditLog(c, "bot.toggle", fmt.Sprintf("enabled=%v", *req.Enabled))
 	c.JSON(http.StatusOK, gin.H{"ok": true, "enabled": req.Enabled})
 }
 

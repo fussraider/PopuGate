@@ -20,6 +20,8 @@ type Secret struct {
 	QuotaBytes int64  `json:"quota_bytes" db:"quota_bytes"`
 	ExpiresAt  string `json:"expires_at" db:"expires_at"`
 	Notes      string `json:"notes" db:"notes"`
+	Tags       string `json:"tags" db:"tags"`
+	ArchivedAt int64  `json:"archived_at" db:"archived_at"`
 
 	// Computed fields (not in DB)
 	TrafficIn  int64 `json:"traffic_in,omitempty" db:"-"`

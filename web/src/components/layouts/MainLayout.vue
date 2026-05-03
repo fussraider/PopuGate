@@ -72,6 +72,7 @@ import {
   LayoutDashboard, KeyRound, GitBranch, Server, Play,
   Container, Globe, TrendingUp, Bot, RefreshCw, Package,
   Save, Settings, Monitor, Menu, LogOut, X, CalendarClock,
+  FileText, LayoutTemplate,
 } from '@lucide/vue'
 
 const { t } = useI18n()
@@ -95,8 +96,10 @@ const navItems = computed(() => [
   { path: '/upstreams',   icon: GitBranch,       label: t('common.upstreams'),   group: 'proxy' },
   { path: '/docker',      icon: Container,       label: t('common.docker'),      group: 'proxy' },
   { path: '/secrets',     icon: KeyRound,        label: t('common.secrets'),     group: 'security' },
+  { path: '/templates',   icon: LayoutTemplate,  label: t('common.templates'),   group: 'security' },
   { path: '/geoblock',    icon: Globe,           label: t('common.geoblock'),    group: 'security' },
   { path: '/traffic',     icon: TrendingUp,      label: t('common.traffic'),     group: 'monitoring' },
+  { path: '/audit',       icon: FileText,        label: t('common.audit'),       group: 'monitoring' },
   { path: '/bot',         icon: Bot,             label: t('common.bot'),         group: 'integrations' },
   { path: '/replication', icon: RefreshCw,       label: t('common.replication'), group: 'integrations' },
   { path: '/updates',     icon: Package,         label: t('common.updates'),     group: 'system' },

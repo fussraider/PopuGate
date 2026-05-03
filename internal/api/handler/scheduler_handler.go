@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -75,6 +76,7 @@ func (h *SchedulerHandler) Update(c *gin.Context) {
 		return
 	}
 
+	auditLog(c, "scheduler.update", fmt.Sprintf("task=%s", name))
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
@@ -98,6 +100,7 @@ func (h *SchedulerHandler) RunNow(c *gin.Context) {
 		return
 	}
 
+	auditLog(c, "scheduler.run_now", fmt.Sprintf("task=%s", name))
 	c.JSON(http.StatusOK, rec)
 }
 

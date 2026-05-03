@@ -105,6 +105,8 @@ func runServer(cmd *cobra.Command, args []string) {
 	geoblockCache := store.NewGeoblockCacheStore(db)
 	backupStore := store.NewBackupStore(dataDir)
 	schedulerStore := store.NewSchedulerStore(db)
+	auditStore := store.NewAuditStore(db)
+	templateStore := store.NewTemplateStore(db)
 
 	// Get JWT secret (auto-generated on first run)
 	jwtSecret, err := settingsStore.GetJWTSecret(context.Background())
@@ -239,8 +241,11 @@ func runServer(cmd *cobra.Command, args []string) {
 	// Setup router
 	cachedJWTProvider := api.NewCachedJWTSecretProvider(settingsStore, 5*time.Minute)
 
+	// Create services needed by scheduler
+	auditSvc := service.NewAuditService(auditStore)
+
 	// Prepare scheduler tasks (wire Fn callbacks)
-	sched, tasks := prepareSchedulerTasks(trafficSvc, healthSvc, replSvc, blocklistStore, settingsStore, secretStore, backupStore, &activeBot, &botMu, updateSvc, telemtUpdateSvc, telemtCfg, notifyFn, trafficStore)
+	sched, tasks := prepareSchedulerTasks(trafficSvc, healthSvc, replSvc, blocklistStore, settingsStore, secretStore, backupStore, &activeBot, &botMu, updateSvc, telemtUpdateSvc, telemtCfg, notifyFn, trafficStore, secretSvc, auditSvc)
 
 	// Load overrides and start scheduler with execution tracking
 	overrides, _ := schedulerStore.GetOverrides(ctx)
@@ -253,6 +258,7 @@ func runServer(cmd *cobra.Command, args []string) {
 
 	// Create scheduler service (needs live scheduler + store)
 	schedulerSvc := service.NewSchedulerService(schedulerStore, sched)
+	templateSvc := service.NewTemplateService(templateStore, secretStore)
 
 	// Wire scheduler status callback for bot
 	botDeps.GetSchedulerTasks = func(ctx context.Context) []string {
@@ -307,6 +313,8 @@ func runServer(cmd *cobra.Command, args []string) {
 		TelemtUpdateSvc: telemtUpdateSvc,
 		TelemtCfg:       telemtCfg,
 		SchedulerSvc:    schedulerSvc,
+		AuditSvc:        auditSvc,
+		TemplateSvc:     templateSvc,
 	})
 
 	// HTTP server
@@ -380,6 +388,8 @@ func prepareSchedulerTasks(
 	telemtCfg *service.DBTelemtConfig,
 	notify service.NotifyFunc,
 	trafficStore *store.TrafficStore,
+	secretSvc *service.SecretService,
+	auditSvc *service.AuditService,
 ) (*scheduler.Scheduler, []scheduler.Task) {
 	sched := scheduler.New()
 	tasks := scheduler.DefaultTasks()
@@ -486,6 +496,42 @@ func prepareSchedulerTasks(
 		case "history-cleanup":
 			tasks[i].Fn = func(ctx context.Context) error {
 				return trafficStore.CleanOldHistory(ctx, 30*24*time.Hour)
+			}
+		case "quota-reset":
+			if trafficSvc != nil {
+				tasks[i].Fn = func(ctx context.Context) error {
+					trafficSvc.ResetAllQuotas(ctx)
+					if auditSvc != nil {
+						auditSvc.Log(ctx, "system", "quota-reset", "monthly quota reset completed")
+					}
+					return nil
+				}
+			}
+		case "auto-rotate":
+			if secretSvc != nil {
+				tasks[i].Fn = func(ctx context.Context) error {
+					s, _ := settings.Load(ctx)
+					if s == nil || s.SecretAutoRotateDays <= 0 {
+						return nil
+					}
+					all, err := secrets.List(ctx)
+					if err != nil {
+						return err
+					}
+					cutoff := time.Now().AddDate(0, 0, -s.SecretAutoRotateDays).Unix()
+					rotated := 0
+					for _, sec := range all {
+						if sec.Enabled && sec.CreatedAt > 0 && sec.CreatedAt < cutoff {
+							if _, err := secretSvc.Rotate(ctx, sec.Label); err == nil {
+								rotated++
+							}
+						}
+					}
+					if rotated > 0 && auditSvc != nil {
+						auditSvc.Log(ctx, "system", "auto-rotate", fmt.Sprintf("rotated %d secret(s)", rotated))
+					}
+					return nil
+				}
 			}
 		}
 	}

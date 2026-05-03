@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/fussraider/PopuGate/internal/model"
 	"github.com/fussraider/PopuGate/internal/service"
 	"github.com/fussraider/PopuGate/internal/store"
 	"github.com/fussraider/PopuGate/pkg/netutil"
@@ -70,6 +71,7 @@ func (h *SecretHandler) Add(c *gin.Context) {
 		return
 	}
 
+	auditLog(c, "secret.create", fmt.Sprintf("label=%s", req.Label))
 	c.JSON(http.StatusCreated, sec)
 }
 
@@ -117,6 +119,7 @@ func (h *SecretHandler) Remove(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	auditLog(c, "secret.delete", fmt.Sprintf("label=%s", label))
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
@@ -137,6 +140,7 @@ func (h *SecretHandler) Rotate(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	auditLog(c, "secret.rotate", fmt.Sprintf("label=%s", label))
 	c.JSON(http.StatusOK, sec)
 }
 
@@ -168,6 +172,7 @@ func (h *SecretHandler) Toggle(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	auditLog(c, "secret.toggle", fmt.Sprintf("label=%s enabled=%v", label, *req.Enabled))
 	c.JSON(http.StatusOK, gin.H{"ok": true, "enabled": *req.Enabled})
 }
 
@@ -221,6 +226,7 @@ func (h *SecretHandler) SetLimits(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	auditLog(c, "secret.set_limits", fmt.Sprintf("label=%s", label))
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
@@ -364,6 +370,7 @@ func (h *SecretHandler) UpdateNotes(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	auditLog(c, "secret.update_notes", fmt.Sprintf("label=%s", label))
 	c.JSON(http.StatusOK, gin.H{"ok": true, "notes": req.Notes})
 }
 
@@ -383,6 +390,7 @@ func (h *SecretHandler) ResetTraffic(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
+	auditLog(c, "secret.reset_traffic", fmt.Sprintf("label=%s", label))
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
@@ -400,6 +408,161 @@ func (h *SecretHandler) ResetAllTraffic(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
+	auditLog(c, "secret.reset_all_traffic", "all secrets")
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+type renameSecretRequest struct {
+	NewLabel string `json:"new_label" binding:"required,alphanumdash,max=32"`
+}
+
+// Rename handles PUT /api/v1/secrets/:label/rename
+// @Summary      Rename a secret
+// @Description  Change the label of an existing secret
+// @Tags         secrets
+// @Accept       json
+// @Produce      json
+// @Param        label  path  string               true  "Current secret label"
+// @Param        body   body  renameSecretRequest  true  "New label"
+// @Success      200  {object}  map[string]string
+// @Failure      400  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /secrets/{label}/rename [put]
+func (h *SecretHandler) Rename(c *gin.Context) {
+	label := c.Param("label")
+	var req renameSecretRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		HandleBindError(c, err)
+		return
+	}
+
+	if err := h.secrets.Rename(c.Request.Context(), label, req.NewLabel); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	auditLog(c, "secret.rename", fmt.Sprintf("%s -> %s", label, req.NewLabel))
+	c.JSON(http.StatusOK, gin.H{"ok": true, "old_label": label, "new_label": req.NewLabel})
+}
+
+type extendSecretRequest struct {
+	Days int `json:"days" binding:"required,min=1"`
+}
+
+// Extend handles POST /api/v1/secrets/:label/extend
+// @Summary      Extend secret expiry
+// @Description  Extend a secret's expiry by the given number of days. Re-enables the secret if it was disabled.
+// @Tags         secrets
+// @Accept       json
+// @Produce      json
+// @Param        label  path  string                true  "Secret label"
+// @Param        body   body  extendSecretRequest   true  "Days to extend"
+// @Success      200  {object}  map[string]string
+// @Failure      400  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /secrets/{label}/extend [post]
+func (h *SecretHandler) Extend(c *gin.Context) {
+	label := c.Param("label")
+	var req extendSecretRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		HandleBindError(c, err)
+		return
+	}
+
+	if err := h.secrets.Extend(c.Request.Context(), label, req.Days); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	auditLog(c, "secret.extend", fmt.Sprintf("label=%s days=%d", label, req.Days))
+	c.JSON(http.StatusOK, gin.H{"ok": true, "label": label, "extended_days": req.Days})
+}
+
+// DisableExpired handles POST /api/v1/secrets/disable-expired
+// @Summary      Disable expired secrets
+// @Description  Disable all secrets whose expiry date has passed
+// @Tags         secrets
+// @Produce      json
+// @Success      200  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /secrets/disable-expired [post]
+func (h *SecretHandler) DisableExpired(c *gin.Context) {
+	count, err := h.secrets.DisableExpired(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		return
+	}
+	auditLog(c, "secret.disable_expired", fmt.Sprintf("disabled=%d", count))
+	c.JSON(http.StatusOK, gin.H{"ok": true, "disabled": count})
+}
+
+type setTagsRequest struct {
+	Tags string `json:"tags" binding:"max=500"`
+}
+
+// SetTags handles PUT /api/v1/secrets/:label/tags
+// @Summary      Set secret tags
+// @Description  Set comma-separated tags for a secret
+// @Tags         secrets
+// @Accept       json
+// @Produce      json
+// @Param        label  path  string          true  "Secret label"
+// @Param        body   body  setTagsRequest  true  "Tags"
+// @Success      200  {object}  map[string]string
+// @Failure      400  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /secrets/{label}/tags [put]
+func (h *SecretHandler) SetTags(c *gin.Context) {
+	label := c.Param("label")
+	var req setTagsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		HandleBindError(c, err)
+		return
+	}
+	if err := h.secrets.SetTags(c.Request.Context(), label, req.Tags); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	auditLog(c, "secret.set_tags", fmt.Sprintf("label=%s tags=%s", label, req.Tags))
+	c.JSON(http.StatusOK, gin.H{"ok": true, "tags": req.Tags})
+}
+
+// Archive handles POST /api/v1/secrets/:label/archive
+// @Summary      Archive a secret
+// @Description  Archive a secret to hide it from normal listings
+// @Tags         secrets
+// @Produce      json
+// @Param        label  path  string  true  "Secret label"
+// @Success      200  {object}  map[string]string
+// @Failure      400  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /secrets/{label}/archive [post]
+func (h *SecretHandler) Archive(c *gin.Context) {
+	label := c.Param("label")
+	if err := h.secrets.Archive(c.Request.Context(), label); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	auditLog(c, "secret.archive", fmt.Sprintf("label=%s", label))
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+// Unarchive handles POST /api/v1/secrets/:label/unarchive
+// @Summary      Unarchive a secret
+// @Description  Restore an archived secret to normal listings
+// @Tags         secrets
+// @Produce      json
+// @Param        label  path  string  true  "Secret label"
+// @Success      200  {object}  map[string]string
+// @Failure      400  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /secrets/{label}/unarchive [post]
+func (h *SecretHandler) Unarchive(c *gin.Context) {
+	label := c.Param("label")
+	if err := h.secrets.Unarchive(c.Request.Context(), label); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	auditLog(c, "secret.unarchive", fmt.Sprintf("label=%s", label))
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
@@ -424,4 +587,213 @@ func parseHumanBytes(s string) int64 {
 		return amount
 	}
 	return -1 // unknown unit
+}
+
+type cloneSecretRequest struct {
+	NewLabel string `json:"new_label" binding:"required,alphanumdash,max=32"`
+}
+
+// Clone handles POST /api/v1/secrets/:label/clone
+// @Summary      Clone a secret
+// @Description  Create a copy of a secret with a new label and generated key
+// @Tags         secrets
+// @Accept       json
+// @Produce      json
+// @Param        label  path  string              true  "Source secret label"
+// @Param        body   body  cloneSecretRequest  true  "New label"
+// @Success      201  {object}  object
+// @Failure      400  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /secrets/{label}/clone [post]
+func (h *SecretHandler) Clone(c *gin.Context) {
+	label := c.Param("label")
+	var req cloneSecretRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		HandleBindError(c, err)
+		return
+	}
+
+	sec, err := h.secrets.Clone(c.Request.Context(), label, req.NewLabel)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	auditLog(c, "secret.clone", fmt.Sprintf("source=%s new=%s", label, req.NewLabel))
+	c.JSON(http.StatusCreated, sec)
+}
+
+type bulkExtendRequest struct {
+	Labels []string `json:"labels" binding:"required,min=1"`
+	Days   int      `json:"days" binding:"required,min=1"`
+}
+
+// BulkExtend handles POST /api/v1/secrets/bulk-extend
+// @Summary      Bulk extend secrets
+// @Description  Extend expiry for multiple secrets at once
+// @Tags         secrets
+// @Accept       json
+// @Produce      json
+// @Param        body  body  bulkExtendRequest  true  "Labels and days"
+// @Success      200  {object}  map[string]string
+// @Failure      400  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /secrets/bulk-extend [post]
+func (h *SecretHandler) BulkExtend(c *gin.Context) {
+	var req bulkExtendRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		HandleBindError(c, err)
+		return
+	}
+
+	updated, err := h.secrets.BulkExtend(c.Request.Context(), req.Labels, req.Days)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	auditLog(c, "secret.bulk_extend", fmt.Sprintf("count=%d days=%d", len(req.Labels), req.Days))
+	c.JSON(http.StatusOK, gin.H{"ok": true, "updated": updated})
+}
+
+type bulkRotateRequest struct {
+	Labels []string `json:"labels" binding:"required,min=1"`
+}
+
+// BulkRotate handles POST /api/v1/secrets/bulk-rotate
+// @Summary      Bulk rotate secrets
+// @Description  Rotate keys for multiple secrets at once
+// @Tags         secrets
+// @Accept       json
+// @Produce      json
+// @Param        body  body  bulkRotateRequest  true  "Labels"
+// @Success      200  {object}  map[string]string
+// @Failure      400  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /secrets/bulk-rotate [post]
+func (h *SecretHandler) BulkRotate(c *gin.Context) {
+	var req bulkRotateRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		HandleBindError(c, err)
+		return
+	}
+
+	updated, labels, err := h.secrets.BulkRotate(c.Request.Context(), req.Labels)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	auditLog(c, "secret.bulk_rotate", fmt.Sprintf("count=%d labels=%v", len(req.Labels), req.Labels))
+	c.JSON(http.StatusOK, gin.H{"ok": true, "updated": updated, "labels": labels})
+}
+
+// Search handles GET /api/v1/secrets/search
+// @Summary      Search secrets
+// @Description  Search secrets by label or notes
+// @Tags         secrets
+// @Produce      json
+// @Param        q  query  string  true  "Search query"
+// @Success      200  {array}  object
+// @Failure      400  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /secrets/search [get]
+func (h *SecretHandler) Search(c *gin.Context) {
+	query := c.Query("q")
+	if query == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "query parameter 'q' is required"})
+		return
+	}
+
+	secrets, err := h.secrets.Search(c.Request.Context(), query)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		return
+	}
+	c.JSON(http.StatusOK, secrets)
+}
+
+// Top handles GET /api/v1/secrets/top
+// @Summary      Top secrets by traffic
+// @Description  Get secrets ordered by total traffic usage
+// @Tags         secrets
+// @Produce      json
+// @Param        limit  query  int  false  "Number of results (default 10)"
+// @Success      200  {array}  object
+// @Failure      500  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /secrets/top [get]
+func (h *SecretHandler) Top(c *gin.Context) {
+	limit := 10
+	if v := c.Query("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			if n > 100 {
+				n = 100
+			}
+			limit = n
+		}
+	}
+
+	secrets, err := h.secrets.Top(c.Request.Context(), limit)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		return
+	}
+	c.JSON(http.StatusOK, secrets)
+}
+
+// Export handles GET /api/v1/secrets/export
+// @Summary      Export secrets
+// @Description  Export all secrets as JSON
+// @Tags         secrets
+// @Produce      json
+// @Success      200  {array}  object
+// @Failure      500  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /secrets/export [get]
+func (h *SecretHandler) Export(c *gin.Context) {
+	secrets, err := h.secrets.ExportJSON(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		return
+	}
+	c.JSON(http.StatusOK, secrets)
+}
+
+type importSecretsRequest struct {
+	Secrets []importSecretEntry `json:"secrets" binding:"required,min=1"`
+}
+
+type importSecretEntry struct {
+	Label     string `json:"label" binding:"required"`
+	SecretKey string `json:"secret_key"`
+}
+
+// Import handles POST /api/v1/secrets/import
+// @Summary      Import secrets
+// @Description  Import multiple secrets at once
+// @Tags         secrets
+// @Accept       json
+// @Produce      json
+// @Param        body  body  importSecretsRequest  true  "Secrets to import"
+// @Success      200  {object}  map[string]string
+// @Failure      400  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /secrets/import [post]
+func (h *SecretHandler) Import(c *gin.Context) {
+	var req importSecretsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		HandleBindError(c, err)
+		return
+	}
+
+	entries := make([]model.Secret, len(req.Secrets))
+	for i, e := range req.Secrets {
+		entries[i] = model.Secret{Label: e.Label, SecretKey: e.SecretKey}
+	}
+
+	imported, created, err := h.secrets.ImportSecrets(c.Request.Context(), entries)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	auditLog(c, "secret.import", fmt.Sprintf("count=%d", len(req.Secrets)))
+	c.JSON(http.StatusOK, gin.H{"ok": true, "imported": imported, "created": created})
 }

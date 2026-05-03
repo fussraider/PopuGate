@@ -30,6 +30,9 @@ import type {
   SchedulerTask,
   SchedulerHistoryRecord,
   TrafficHistoryRecord,
+  AuditEntry,
+  SecretTemplate,
+  SecretImportItem,
 } from '@/types/models'
 
 // ─── Auth ──────────────────────────────────────────────────────
@@ -108,6 +111,45 @@ export const secretsApi = {
     label
       ? api.post(`/secrets/${label}/reset-traffic`)
       : api.post('/secrets/reset-traffic'),
+
+  setTags: (label: string, tags: string) =>
+    api.put(`/secrets/${label}/tags`, { tags }),
+
+  archive: (label: string) =>
+    api.post(`/secrets/${label}/archive`),
+
+  unarchive: (label: string) =>
+    api.post(`/secrets/${label}/unarchive`),
+
+  clone: (label: string, newLabel: string) =>
+    api.post<Secret>(`/secrets/${label}/clone`, { new_label: newLabel }).then((r) => r.data),
+
+  rename: (label: string, newLabel: string) =>
+    api.put(`/secrets/${label}/rename`, { new_label: newLabel }),
+
+  extend: (label: string, days: number) =>
+    api.post<Secret>(`/secrets/${label}/extend`, { days }).then((r) => r.data),
+
+  disableExpired: () =>
+    api.post<{ ok: boolean; disabled: number }>('/secrets/disable-expired').then((r) => r.data),
+
+  bulkExtend: (labels: string[], days: number) =>
+    api.post<{ ok: boolean; updated: number }>('/secrets/bulk-extend', { labels, days }).then((r) => r.data),
+
+  bulkRotate: (labels: string[]) =>
+    api.post<{ ok: boolean; updated: number; labels: string[] }>('/secrets/bulk-rotate', { labels }).then((r) => r.data),
+
+  search: (query: string) =>
+    api.get<Secret[]>('/secrets/search', { params: { q: query } }).then((r) => r.data),
+
+  top: (limit = 10) =>
+    api.get<Secret[]>('/secrets/top', { params: { limit } }).then((r) => r.data),
+
+  exportAll: () =>
+    api.get<Secret[]>('/secrets/export').then((r) => r.data),
+
+  importSecrets: (secrets: SecretImportItem[]) =>
+    api.post<{ ok: boolean; imported: number; created: string[] }>('/secrets/import', { secrets }).then((r) => r.data),
 }
 
 // ─── Upstreams ─────────────────────────────────────────────────
@@ -290,4 +332,30 @@ export const schedulerApi = {
 
   getAllHistory: (limit = 50, offset = 0) =>
     api.get<SchedulerHistoryRecord[]>('/scheduler/history', { params: { limit, offset } }).then((r) => r.data),
+}
+
+// ─── Audit ─────────────────────────────────────────────────────
+
+export const auditApi = {
+  list: (limit = 100, offset = 0) =>
+    api.get<AuditEntry[]>('/audit', { params: { limit, offset } }).then((r) => r.data),
+}
+
+// ─── Templates ──────────────────────────────────────────────────
+
+export const templatesApi = {
+  list: () =>
+    api.get<SecretTemplate[]>('/templates').then((r) => r.data),
+
+  get: (name: string) =>
+    api.get<SecretTemplate>(`/templates/${name}`).then((r) => r.data),
+
+  create: (data: Omit<SecretTemplate, 'id'>) =>
+    api.post<SecretTemplate>('/templates', data).then((r) => r.data),
+
+  remove: (name: string) =>
+    api.delete(`/templates/${name}`),
+
+  apply: (templateName: string, secretLabel: string) =>
+    api.post(`/templates/${templateName}/apply`, { label: secretLabel }).then((r) => r.data),
 }

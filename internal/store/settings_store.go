@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"strconv"
+	"time"
 
 	"github.com/fussraider/PopuGate/internal/model"
 )
@@ -59,7 +60,11 @@ func (s *SettingsStore) Load(ctx context.Context) (*model.Settings, error) {
 	settings.MaskingEnabled = getBool(kv, "masking_enabled")
 	settings.MaskingHost = getString(kv, "masking_host", "")
 	settings.MaskingPort = getInt(kv, "masking_port", 443)
+	settings.MaskingRelayMaxBytes = getInt64(kv, "masking_relay_max_bytes", 0)
 	settings.UnknownSNIAction = getString(kv, "unknown_sni_action", "mask")
+	settings.ProxySecretURL = getString(kv, "proxy_secret_url", "")
+	settings.ProxyConfigV4URL = getString(kv, "proxy_config_v4_url", "")
+	settings.ProxyConfigV6URL = getString(kv, "proxy_config_v6_url", "")
 	// Telegram
 	settings.TelegramEnabled = getBool(kv, "telegram_enabled")
 	settings.TelegramBotToken = getString(kv, "telegram_bot_token", "")
@@ -69,6 +74,8 @@ func (s *SettingsStore) Load(ctx context.Context) (*model.Settings, error) {
 	settings.TelegramServerLabel = getString(kv, "telegram_server_label", "PopuGate")
 	// Auto-update
 	settings.AutoUpdateEnabled = getBool(kv, "auto_update_enabled")
+	settings.SecretAutoRotateDays = getInt(kv, "secret_auto_rotate_days", 0)
+	settings.MaintenanceMode = getBool(kv, "maintenance_mode")
 	// Replication
 	settings.ReplicationEnabled = getBool(kv, "replication_enabled")
 	settings.ReplicationRole = getString(kv, "replication_role", "standalone")
@@ -169,6 +176,18 @@ func getInt(m map[string]string, key string, def int) int {
 	return n
 }
 
+func getInt64(m map[string]string, key string, def int64) int64 {
+	v, ok := m[key]
+	if !ok || v == "" {
+		return def
+	}
+	n, err := strconv.ParseInt(v, 10, 64)
+	if err != nil {
+		return def
+	}
+	return n
+}
+
 func getString(m map[string]string, key, def string) string {
 	v, ok := m[key]
 	if !ok {
@@ -188,4 +207,16 @@ func generateRandomHex(n int) (string, error) {
 		return "", fmt.Errorf("generate random bytes: %w", err)
 	}
 	return hex.EncodeToString(b), nil
+}
+
+func parseExpiry(s string) (time.Time, error) {
+	for _, layout := range []string{time.RFC3339, "2006-01-02T15:04:05Z", "2006-01-02"} {
+		if t, err := time.Parse(layout, s); err == nil {
+			return t, nil
+		}
+	}
+	if n, err := strconv.ParseInt(s, 10, 64); err == nil && n > 0 {
+		return time.Unix(n, 0), nil
+	}
+	return time.Time{}, fmt.Errorf("cannot parse expiry: %s", s)
 }

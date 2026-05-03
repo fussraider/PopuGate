@@ -21,7 +21,7 @@
       <template #cell-size="{ item }">{{ formatBytes(item.size) }}</template>
       <template #cell-created="{ item }">{{ new Date(item.created_at).toLocaleString() }}</template>
       <template #actions="{ item }">
-        <button class="btn btn-ghost btn-sm" :title="t('backups.download')" @click="handleDownload(item.filename)">
+        <button class="btn btn-ghost btn-sm" v-tooltip="t('backups.download')" @click="handleDownload(item.filename)">
           <Download :size="16" />
         </button>
         <button class="btn btn-warning btn-sm" :disabled="backupStore.restoring" @click="handleRestore(item.filename)">

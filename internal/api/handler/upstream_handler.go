@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"net"
 	"net/http"
 	"strings"
@@ -95,6 +96,7 @@ func (h *UpstreamHandler) Update(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	auditLog(c, "upstream.update", fmt.Sprintf("name=%s", name))
 	c.JSON(http.StatusOK, u)
 }
 
@@ -141,6 +143,7 @@ func (h *UpstreamHandler) Add(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	auditLog(c, "upstream.create", fmt.Sprintf("name=%s", req.Name))
 	c.JSON(http.StatusCreated, u)
 }
 
@@ -160,6 +163,7 @@ func (h *UpstreamHandler) Remove(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	auditLog(c, "upstream.delete", fmt.Sprintf("name=%s", name))
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
@@ -191,6 +195,7 @@ func (h *UpstreamHandler) Toggle(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	auditLog(c, "upstream.toggle", fmt.Sprintf("name=%s enabled=%v", name, *req.Enabled))
 	c.JSON(http.StatusOK, gin.H{"ok": true, "enabled": *req.Enabled})
 }
 

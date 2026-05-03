@@ -3,9 +3,9 @@ package handler
 import (
 	"net/http"
 
-	"github.com/gin-gonic/gin"
-
 	"github.com/fussraider/PopuGate/internal/service"
+
+	"github.com/gin-gonic/gin"
 )
 
 // SystemHandler handles system-level endpoints.
@@ -44,6 +44,7 @@ func (h *SystemHandler) InstallService(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
+	auditLog(c, "system.install_service", "service installed")
 	c.JSON(http.StatusOK, gin.H{"ok": true, "message": "systemd service installed and enabled"})
 }
 
@@ -62,6 +63,7 @@ func (h *SystemHandler) UninstallService(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
+	auditLog(c, "system.uninstall_service", "service uninstalled")
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
@@ -94,6 +96,7 @@ func (h *SystemHandler) RestartService(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
+	auditLog(c, "system.restart_service", "service restarted")
 	c.JSON(http.StatusOK, gin.H{"ok": true, "message": "service restarting"})
 }
 

@@ -24,6 +24,14 @@ func NewUpdateHandler(svc *service.UpdateService) *UpdateHandler {
 }
 
 // Check handles GET /api/v1/update/check
+// @Summary      Check for PopuGate updates
+// @Description  Checks remote source for new PopuGate releases and returns update availability status
+// @Tags         update
+// @Accept       json
+// @Produce      json
+// @Success      200  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /update/check [get]
 func (h *UpdateHandler) Check(c *gin.Context) {
 	status, err := h.updateSvc.Check(c.Request.Context())
 	if err != nil {
@@ -39,8 +47,15 @@ func (h *UpdateHandler) Check(c *gin.Context) {
 }
 
 // Apply handles POST /api/v1/update/apply
-// In binary mode: downloads and installs the update, then triggers a restart.
-// In Docker mode: pulls new image, then spawns sidecar to recreate the container.
+// @Summary      Apply PopuGate update
+// @Description  Downloads and installs the latest PopuGate update, then triggers a restart. In binary mode: replaces the binary. In Docker mode: pulls a new image and recreates the container.
+// @Tags         update
+// @Accept       json
+// @Produce      json
+// @Success      200  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /update/apply [post]
 func (h *UpdateHandler) Apply(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()

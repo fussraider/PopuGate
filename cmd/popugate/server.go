@@ -1,3 +1,15 @@
+// @title           PopuGate API
+// @version         1.0
+// @description     PopuGate is a Telegram MTProto proxy manager with a REST API.
+// @contact.name    PopuGate Support
+// @contact.url     https://github.com/fussraider/PopuGate
+// @license.name    MIT
+// @license.url     https://github.com/fussraider/PopuGate/blob/main/LICENSE
+// @host      localhost:8080
+// @BasePath  /api/v1
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
 package main
 
 import (
@@ -228,7 +240,7 @@ func runServer(cmd *cobra.Command, args []string) {
 	cachedJWTProvider := api.NewCachedJWTSecretProvider(settingsStore, 5*time.Minute)
 
 	// Prepare scheduler tasks (wire Fn callbacks)
-	sched, tasks := prepareSchedulerTasks(trafficSvc, healthSvc, replSvc, blocklistStore, settingsStore, secretStore, backupStore, &activeBot, &botMu, updateSvc, telemtUpdateSvc, telemtCfg, notifyFn)
+	sched, tasks := prepareSchedulerTasks(trafficSvc, healthSvc, replSvc, blocklistStore, settingsStore, secretStore, backupStore, &activeBot, &botMu, updateSvc, telemtUpdateSvc, telemtCfg, notifyFn, trafficStore)
 
 	// Load overrides and start scheduler with execution tracking
 	overrides, _ := schedulerStore.GetOverrides(ctx)
@@ -367,6 +379,7 @@ func prepareSchedulerTasks(
 	telemtUpdateSvc *service.TelemtUpdateService,
 	telemtCfg *service.DBTelemtConfig,
 	notify service.NotifyFunc,
+	trafficStore *store.TrafficStore,
 ) (*scheduler.Scheduler, []scheduler.Task) {
 	sched := scheduler.New()
 	tasks := scheduler.DefaultTasks()
@@ -469,6 +482,10 @@ func prepareSchedulerTasks(
 					}
 					return nil
 				}
+			}
+		case "history-cleanup":
+			tasks[i].Fn = func(ctx context.Context) error {
+				return trafficStore.CleanOldHistory(ctx, 30*24*time.Hour)
 			}
 		}
 	}

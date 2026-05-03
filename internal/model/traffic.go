@@ -17,18 +17,18 @@ type UserTraffic struct {
 
 // LiveMetrics holds parsed Prometheus metrics from the telemt engine.
 type LiveMetrics struct {
-	UptimeSeconds         float64            `json:"uptime_seconds"`
-	ConnsCurrent          float64            `json:"conns_current"`
-	ConnsTotal            float64            `json:"conns_total"`
-	ConnsBadTotal         float64            `json:"conns_bad_total"`
-	ConnsMECurrent        float64            `json:"conns_me_current"`
-	ConnsDirectCurrent    float64            `json:"conns_direct_current"`
-	UpstreamAttemptTotal  float64            `json:"upstream_attempt_total"`
-	UpstreamSuccessTotal  float64            `json:"upstream_success_total"`
-	UpstreamFailTotal     float64            `json:"upstream_fail_total"`
-	MEWritersActive       float64            `json:"me_writers_active"`
-	MEWritersWarm         float64            `json:"me_writers_warm"`
-	UserMetrics           map[string]*UserLiveMetrics `json:"users"`
+	UptimeSeconds        float64                     `json:"uptime_seconds"`
+	ConnsCurrent         float64                     `json:"conns_current"`
+	ConnsTotal           float64                     `json:"conns_total"`
+	ConnsBadTotal        float64                     `json:"conns_bad_total"`
+	ConnsMECurrent       float64                     `json:"conns_me_current"`
+	ConnsDirectCurrent   float64                     `json:"conns_direct_current"`
+	UpstreamAttemptTotal float64                     `json:"upstream_attempt_total"`
+	UpstreamSuccessTotal float64                     `json:"upstream_success_total"`
+	UpstreamFailTotal    float64                     `json:"upstream_fail_total"`
+	MEWritersActive      float64                     `json:"me_writers_active"`
+	MEWritersWarm        float64                     `json:"me_writers_warm"`
+	UserMetrics          map[string]*UserLiveMetrics `json:"users"`
 }
 
 // UserLiveMetrics holds per-user live Prometheus metrics.
@@ -49,4 +49,11 @@ type GlobalTraffic struct {
 type TrafficReport struct {
 	Global GlobalTraffic `json:"global"`
 	Users  []UserTraffic `json:"users"`
+}
+
+// TrafficHistoryRecord is a single timestamped traffic snapshot.
+type TrafficHistoryRecord struct {
+	Timestamp int64 `json:"timestamp"`
+	BytesIn   int64 `json:"bytes_in"`
+	BytesOut  int64 `json:"bytes_out"`
 }

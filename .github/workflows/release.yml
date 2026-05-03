@@ -16,9 +16,30 @@ jobs:
       - name: Run tests
         run: go test ./... -v
 
-  build:
+  swagger:
     runs-on: ubuntu-latest
     needs: test
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.26'
+
+      - name: Generate Swagger docs
+        run: |
+          go install github.com/swaggo/swag/cmd/swag@v1.16.4
+          swag init -g cmd/popugate/server.go -o docs/ --parseInternal
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: swagger-docs
+          path: |
+            docs/swagger.json
+            docs/swagger.yaml
+
+  build:
+    runs-on: ubuntu-latest
+    needs: [test, swagger]
     strategy:
       matrix:
         include:
@@ -31,6 +52,12 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version: '1.26'
+
+      - name: Download swagger docs
+        uses: actions/download-artifact@v8
+        with:
+          name: swagger-docs
+          path: docs
 
       - name: Build
         env:
@@ -160,7 +187,7 @@ jobs:
             COMMIT=${{ github.sha }}
 
   release:
-    needs: [build, build-web]
+    needs: [build, build-web, swagger]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -176,17 +203,29 @@ jobs:
           name: dist
           path: web-dist
 
+      - uses: actions/download-artifact@v8
+        with:
+          name: swagger-docs
+          path: swagger-docs
+
       - name: Package web dist
         run: tar -czf artifacts/popugate-web-dist.tar.gz -C web-dist .
 
+      - name: Move swagger docs to artifacts
+        run: |
+          mv swagger-docs/swagger.json artifacts/swagger.json
+          mv swagger-docs/swagger.yaml artifacts/swagger.yaml
+
       - name: Generate checksums
         working-directory: artifacts
-        run: sha256sum popugate-* > checksums.txt
+        run: sha256sum popugate-* swagger.* > checksums.txt
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
           files: |
             artifacts/popugate-*
+            artifacts/swagger.json
+            artifacts/swagger.yaml
             artifacts/checksums.txt
           generate_release_notes: true

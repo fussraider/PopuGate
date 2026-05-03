@@ -22,6 +22,14 @@ func NewUpstreamHandler(upstreams *service.UpstreamService) *UpstreamHandler {
 }
 
 // List handles GET /api/v1/upstreams
+// @Summary      List upstreams
+// @Description  Retrieve all configured upstream proxies
+// @Tags         upstreams
+// @Produce      json
+// @Success      200  {array}   object
+// @Failure      500  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /upstreams [get]
 func (h *UpstreamHandler) List(c *gin.Context) {
 	upstreams, err := h.upstreams.List(c.Request.Context())
 	if err != nil {
@@ -32,30 +40,41 @@ func (h *UpstreamHandler) List(c *gin.Context) {
 }
 
 type addUpstreamRequest struct {
-	Name     string `json:"name" binding:"required"`
-	Type     string `json:"type" binding:"required"` // direct, socks5, socks4
+	Name     string `json:"name" binding:"required,alphanumdash,max=32"`
+	Type     string `json:"type" binding:"required,oneof=direct socks5 socks4"` // direct, socks5, socks4
 	Address  string `json:"address"`
 	Username string `json:"username"`
 	Password string `json:"password"`
-	Weight   int    `json:"weight"`
+	Weight   int    `json:"weight" binding:"omitempty,min=1,max=100"`
 	Iface    string `json:"iface"`
 }
 
 type updateUpstreamRequest struct {
-	Type     string `json:"type" binding:"required"`
+	Type     string `json:"type" binding:"required,oneof=direct socks5 socks4"`
 	Address  string `json:"address"`
 	Username string `json:"username"`
 	Password string `json:"password"`
-	Weight   int    `json:"weight"`
+	Weight   int    `json:"weight" binding:"omitempty,min=1,max=100"`
 	Iface    string `json:"iface"`
 }
 
 // Update handles PUT /api/v1/upstreams/:name
+// @Summary      Update an upstream
+// @Description  Update the configuration of an existing upstream proxy
+// @Tags         upstreams
+// @Accept       json
+// @Produce      json
+// @Param        name  path  string                true  "Upstream name"
+// @Param        body  body  updateUpstreamRequest  true  "Upstream configuration"
+// @Success      200  {object}  object
+// @Failure      400  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /upstreams/{name} [put]
 func (h *UpstreamHandler) Update(c *gin.Context) {
 	name := c.Param("name")
 	var req updateUpstreamRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		HandleBindError(c, err)
 		return
 	}
 
@@ -80,7 +99,7 @@ func (h *UpstreamHandler) Update(c *gin.Context) {
 }
 
 type testUpstreamRequest struct {
-	Type     string `json:"type" binding:"required"`
+	Type     string `json:"type" binding:"required,oneof=direct socks5 socks4"`
 	Address  string `json:"address"`
 	Username string `json:"username"`
 	Password string `json:"password"`
@@ -88,10 +107,20 @@ type testUpstreamRequest struct {
 }
 
 // Add handles POST /api/v1/upstreams
+// @Summary      Add an upstream
+// @Description  Create a new upstream proxy configuration
+// @Tags         upstreams
+// @Accept       json
+// @Produce      json
+// @Param        body  body  addUpstreamRequest  true  "Upstream to add"
+// @Success      201  {object}  object
+// @Failure      400  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /upstreams [post]
 func (h *UpstreamHandler) Add(c *gin.Context) {
 	var req addUpstreamRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		HandleBindError(c, err)
 		return
 	}
 
@@ -116,6 +145,15 @@ func (h *UpstreamHandler) Add(c *gin.Context) {
 }
 
 // Remove handles DELETE /api/v1/upstreams/:name
+// @Summary      Remove an upstream
+// @Description  Delete an upstream proxy configuration by name
+// @Tags         upstreams
+// @Produce      json
+// @Param        name  path  string  true  "Upstream name"
+// @Success      200  {object}  map[string]string
+// @Failure      400  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /upstreams/{name} [delete]
 func (h *UpstreamHandler) Remove(c *gin.Context) {
 	name := c.Param("name")
 	if err := h.upstreams.Remove(c.Request.Context(), name); err != nil {
@@ -130,11 +168,22 @@ type upstreamToggleRequest struct {
 }
 
 // Toggle handles PUT /api/v1/upstreams/:name/toggle
+// @Summary      Toggle an upstream
+// @Description  Enable or disable an upstream proxy by name
+// @Tags         upstreams
+// @Accept       json
+// @Produce      json
+// @Param        name  path  string                 true  "Upstream name"
+// @Param        body  body  upstreamToggleRequest   true  "Enabled state"
+// @Success      200  {object}  map[string]string
+// @Failure      400  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /upstreams/{name}/toggle [put]
 func (h *UpstreamHandler) Toggle(c *gin.Context) {
 	name := c.Param("name")
 	var req upstreamToggleRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		HandleBindError(c, err)
 		return
 	}
 
@@ -146,6 +195,15 @@ func (h *UpstreamHandler) Toggle(c *gin.Context) {
 }
 
 // Test handles POST /api/v1/upstreams/:name/test
+// @Summary      Test an upstream
+// @Description  Run a connectivity test against an existing upstream by name
+// @Tags         upstreams
+// @Produce      json
+// @Param        name  path  string  true  "Upstream name"
+// @Success      200  {object}  map[string]interface{}
+// @Failure      400  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /upstreams/{name}/test [post]
 func (h *UpstreamHandler) Test(c *gin.Context) {
 	name := c.Param("name")
 	result, err := h.upstreams.Test(c.Request.Context(), name)
@@ -156,11 +214,21 @@ func (h *UpstreamHandler) Test(c *gin.Context) {
 	c.JSON(http.StatusOK, result)
 }
 
-// TestConfig handles POST /api/v1/upstreams/test — tests raw upstream data without saving.
+// TestConfig handles POST /api/v1/upstreams/test
+// @Summary      Test upstream configuration
+// @Description  Test raw upstream configuration without saving it
+// @Tags         upstreams
+// @Accept       json
+// @Produce      json
+// @Param        body  body  testUpstreamRequest  true  "Upstream configuration to test"
+// @Success      200  {object}  map[string]interface{}
+// @Failure      400  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /upstreams/test [post]
 func (h *UpstreamHandler) TestConfig(c *gin.Context) {
 	var req testUpstreamRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		HandleBindError(c, err)
 		return
 	}
 
@@ -187,6 +255,14 @@ type netIface struct {
 }
 
 // Interfaces handles GET /api/v1/upstreams/interfaces
+// @Summary      List network interfaces
+// @Description  Retrieve the host's active network interfaces and their addresses
+// @Tags         upstreams
+// @Produce      json
+// @Success      200  {array}   netIface
+// @Failure      500  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /upstreams/interfaces [get]
 func (h *UpstreamHandler) Interfaces(c *gin.Context) {
 	ifaces, err := net.Interfaces()
 	if err != nil {

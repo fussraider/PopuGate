@@ -4,6 +4,10 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
+
+	_ "github.com/fussraider/PopuGate/docs"
 
 	"github.com/fussraider/PopuGate/internal/api/handler"
 	"github.com/fussraider/PopuGate/internal/bot"
@@ -72,6 +76,9 @@ func SetupRouter(cfg RouterConfig) *gin.Engine {
 	healthHandler := handler.NewHealthHandler()
 	healthHandler.SetHealthService(cfg.HealthSvc)
 	r.GET("/api/v1/health", healthHandler.Check)
+
+	// Swagger UI (no auth)
+	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	// Auth endpoints (no auth, rate-limited)
 	authLimiter := NewIPRateLimiter(rate.Every(0), 10) // 10 requests per second per IP
@@ -168,6 +175,7 @@ func SetupRouter(cfg RouterConfig) *gin.Engine {
 		trafficHandler.SetTrafficService(cfg.TrafficSvc)
 		protected.GET("/traffic", trafficHandler.Get)
 		protected.GET("/traffic/live", trafficHandler.GetLive)
+		protected.GET("/traffic/history", trafficHandler.GetHistory)
 		protected.GET("/traffic/:label", trafficHandler.GetUser)
 
 		// Bot

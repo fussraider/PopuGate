@@ -21,6 +21,14 @@ func NewInstanceHandler(instances *store.InstanceStore) *InstanceHandler {
 }
 
 // List handles GET /api/v1/instances
+// @Summary      List instances
+// @Description  Retrieve all proxy instances
+// @Tags         instances
+// @Produce      json
+// @Success      200  {array}   object
+// @Failure      500  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /instances [get]
 func (h *InstanceHandler) List(c *gin.Context) {
 	instances, err := h.instances.List(c.Request.Context())
 	if err != nil {
@@ -31,16 +39,26 @@ func (h *InstanceHandler) List(c *gin.Context) {
 }
 
 type addInstanceRequest struct {
-	Port        int    `json:"port" binding:"required"`
-	MetricsPort int    `json:"metrics_port"`
-	Label       string `json:"label"`
+	Port        int    `json:"port" binding:"required,min=1,max=65535"`
+	MetricsPort int    `json:"metrics_port" binding:"omitempty,min=1,max=65535"`
+	Label       string `json:"label" binding:"omitempty,alphanumdash,max=32"`
 }
 
 // Add handles POST /api/v1/instances
+// @Summary      Add an instance
+// @Description  Create a new proxy instance with a port, optional metrics port, and label
+// @Tags         instances
+// @Accept       json
+// @Produce      json
+// @Param        body  body  addInstanceRequest  true  "Instance configuration"
+// @Success      201  {object}  object
+// @Failure      400  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /instances [post]
 func (h *InstanceHandler) Add(c *gin.Context) {
 	var req addInstanceRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		HandleBindError(c, err)
 		return
 	}
 
@@ -70,6 +88,16 @@ func (h *InstanceHandler) Add(c *gin.Context) {
 }
 
 // Remove handles DELETE /api/v1/instances/:port
+// @Summary      Remove an instance
+// @Description  Delete a proxy instance by port. The last instance cannot be removed.
+// @Tags         instances
+// @Produce      json
+// @Param        port  path  int  true  "Instance port"
+// @Success      200  {object}  map[string]string
+// @Failure      400  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /instances/{port} [delete]
 func (h *InstanceHandler) Remove(c *gin.Context) {
 	port, err := strconv.Atoi(c.Param("port"))
 	if err != nil {

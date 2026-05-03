@@ -1,10 +1,21 @@
 # PopuGate
 
+[![Build](https://github.com/fussraider/PopuGate/actions/workflows/build.yml/badge.svg)](https://github.com/fussraider/PopuGate/actions/workflows/build.yml)
+[![Release](https://github.com/fussraider/PopuGate/actions/workflows/release.yml/badge.svg)](https://github.com/fussraider/PopuGate/actions/workflows/release.yml)
+[![GitHub release](https://img.shields.io/github/v/release/fussraider/PopuGate?include_prereleases)](https://github.com/fussraider/PopuGate/releases)
+[![Go Report Card](https://goreportcard.com/badge/github.com/fussraider/PopuGate)](https://goreportcard.com/report/github.com/fussraider/PopuGate)
+[![Go Version](https://img.shields.io/badge/Go-1.26-blue)](https://go.dev/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Swagger](https://img.shields.io/badge/API-Swagger-green)](https://github.com/fussraider/PopuGate/releases/latest)
+[![GHCR](https://img.shields.io/badge/ghcr.io-fussraider%2Fpopugate-blue)](https://github.com/fussraider/PopuGate/pkgs/container/popugate)
+
 ## Описание проекта
 
-PopuGate — это современный менеджер прокси-серверов Telegram MTProto. В его основе лежит высокопроизводительный движок **telemt 3.x** (написанный на Rust и работающий в Docker), которым управляет мощный бэкенд на языке Go (с REST API). Также для него предусмотрен удобный фротенд на Vue 3, TypeScript и SCSS (реализован в виде отдельного проекта/репозитория).
+PopuGate — это современный менеджер прокси-серверов Telegram MTProto. В его основе лежит высокопроизводительный движок **telemt 3.x** (написанный на Rust и работающий в Docker), которым управляет мощный бэкенд на языке Go (с REST API). Также для него предусмотрен удобный фронтенд на Vue 3, TypeScript и SCSS (исходный код находится в директории `web/` данного репозитория).
 
 PopuGate предоставляет огромный функционал для управления, мониторинга и масштабирования MTProto прокси с удобным пользовательским интерфейсом.
+
+> **Дисклеймер:** PopuGate вдохновлен проектом [MTProxyMax](https://github.com/SamNet-dev/MTProxyMax) — спасибо автору за идею. Проект разрабатывается с активным использованием нейросетей (AI-assisted development) и может содержать недоработки — он находится в стадии активной разработки. Буду признателен за bug-репорты и pull requests.
 
 ### Основные возможности
 - **Индивидуальный контроль доступа**: Гибкое управление пользователями, генерация секретов (ключей доступа) и добавление заметок.

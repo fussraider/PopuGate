@@ -323,6 +323,7 @@ func DefaultTasks() []Task {
 		{Name: "token-cleanup", Schedule: "0 0 */1 * * *"},                              // every hour
 		{Name: "daily-backup", Schedule: "0 0 3 * * *", Timeout: 5 * time.Minute},       // daily at 3:00
 		{Name: "backup-cleanup", Schedule: "0 30 3 * * *"},                              // daily at 3:30
+		{Name: "history-cleanup", Schedule: "0 0 4 * * *"},                              // daily at 4:00
 	}
 }
 

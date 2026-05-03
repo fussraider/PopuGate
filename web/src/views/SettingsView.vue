@@ -129,7 +129,17 @@
         </div>
       </div>
 
-      <!-- Actions -->
+      <!-- Resources -->
+    <div class="card mb-lg">
+      <div class="flex items-center gap-md">
+        <a href="/swagger/index.html" target="_blank" rel="noopener" class="btn btn-secondary btn-sm flex items-center gap-xs">
+          <BookOpen :size="16" />
+          {{ t('settings_view.api_docs') }}
+        </a>
+      </div>
+    </div>
+
+    <!-- Actions -->
       <div class="card">
         <div class="flex justify-between items-center">
           <h3>{{ t('settings_view.save_settings') }}</h3>
@@ -153,7 +163,7 @@
 import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useConfigStore } from '@/stores/config'
-import { Loader2 } from '@lucide/vue'
+import { Loader2, BookOpen } from '@lucide/vue'
 import type { Settings } from '@/types/models'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 

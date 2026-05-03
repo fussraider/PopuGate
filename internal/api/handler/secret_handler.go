@@ -24,6 +24,14 @@ func NewSecretHandler(secrets *service.SecretService, settings *store.SettingsSt
 }
 
 // List handles GET /api/v1/secrets
+// @Summary      List secrets
+// @Description  Retrieve all registered secrets
+// @Tags         secrets
+// @Produce      json
+// @Success      200  {array}   object
+// @Failure      500  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /secrets [get]
 func (h *SecretHandler) List(c *gin.Context) {
 	secrets, err := h.secrets.List(c.Request.Context())
 	if err != nil {
@@ -34,15 +42,25 @@ func (h *SecretHandler) List(c *gin.Context) {
 }
 
 type addSecretRequest struct {
-	Label  string `json:"label" binding:"required"`
-	Secret string `json:"secret"` // Optional, auto-generated if empty
+	Label  string `json:"label" binding:"required,alphanumdash,max=32"`
+	Secret string `json:"secret" binding:"omitempty,hexadecimal,len=32"`
 }
 
 // Add handles POST /api/v1/secrets
+// @Summary      Add a secret
+// @Description  Create a new secret with a unique label and optional hex secret value
+// @Tags         secrets
+// @Accept       json
+// @Produce      json
+// @Param        body  body  addSecretRequest  true  "Secret to add"
+// @Success      201  {object}  object
+// @Failure      400  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /secrets [post]
 func (h *SecretHandler) Add(c *gin.Context) {
 	var req addSecretRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		HandleBindError(c, err)
 		return
 	}
 
@@ -56,6 +74,16 @@ func (h *SecretHandler) Add(c *gin.Context) {
 }
 
 // Get handles GET /api/v1/secrets/:label
+// @Summary      Get a secret
+// @Description  Retrieve a single secret by its label
+// @Tags         secrets
+// @Produce      json
+// @Param        label  path  string  true  "Secret label"
+// @Success      200  {object}  object
+// @Failure      404  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /secrets/{label} [get]
 func (h *SecretHandler) Get(c *gin.Context) {
 	label := c.Param("label")
 	sec, err := h.secrets.Get(c.Request.Context(), label)
@@ -71,6 +99,16 @@ func (h *SecretHandler) Get(c *gin.Context) {
 }
 
 // Remove handles DELETE /api/v1/secrets/:label
+// @Summary      Remove a secret
+// @Description  Delete a secret by its label. Use force=true to remove even if in use.
+// @Tags         secrets
+// @Produce      json
+// @Param        label  path  string  true  "Secret label"
+// @Param        force  query  bool   false  "Force removal"
+// @Success      200  {object}  map[string]string
+// @Failure      400  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /secrets/{label} [delete]
 func (h *SecretHandler) Remove(c *gin.Context) {
 	label := c.Param("label")
 	force := c.Query("force") == "true"
@@ -83,6 +121,15 @@ func (h *SecretHandler) Remove(c *gin.Context) {
 }
 
 // Rotate handles POST /api/v1/secrets/:label/rotate
+// @Summary      Rotate a secret
+// @Description  Generate a new secret value for the given label
+// @Tags         secrets
+// @Produce      json
+// @Param        label  path  string  true  "Secret label"
+// @Success      200  {object}  object
+// @Failure      400  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /secrets/{label}/rotate [post]
 func (h *SecretHandler) Rotate(c *gin.Context) {
 	label := c.Param("label")
 	sec, err := h.secrets.Rotate(c.Request.Context(), label)
@@ -98,11 +145,22 @@ type secretToggleRequest struct {
 }
 
 // Toggle handles PUT /api/v1/secrets/:label/toggle
+// @Summary      Toggle a secret
+// @Description  Enable or disable a secret by label
+// @Tags         secrets
+// @Accept       json
+// @Produce      json
+// @Param        label  path  string              true  "Secret label"
+// @Param        body   body  secretToggleRequest  true  "Enabled state"
+// @Success      200  {object}  map[string]string
+// @Failure      400  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /secrets/{label}/toggle [put]
 func (h *SecretHandler) Toggle(c *gin.Context) {
 	label := c.Param("label")
 	var req secretToggleRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		HandleBindError(c, err)
 		return
 	}
 
@@ -114,19 +172,30 @@ func (h *SecretHandler) Toggle(c *gin.Context) {
 }
 
 type setLimitsRequest struct {
-	MaxConns   *int   `json:"max_conns"`
-	MaxIPs     *int   `json:"max_ips"`
-	Quota      string `json:"quota"`       // Human-readable: "5G", "500M"
-	QuotaBytes *int64 `json:"quota_bytes"` // Or raw bytes
-	ExpiresAt  string `json:"expires_at"`  // ISO 8601 or "0"
+	MaxConns   *int   `json:"max_conns" binding:"omitempty,min=-1"`
+	MaxIPs     *int   `json:"max_ips" binding:"omitempty,min=-1"`
+	Quota      string `json:"quota"`                                  // Human-readable: "5G", "500M"
+	QuotaBytes *int64 `json:"quota_bytes" binding:"omitempty,min=-1"` // Or raw bytes
+	ExpiresAt  string `json:"expires_at"`                             // ISO 8601 or "0"
 }
 
 // SetLimits handles PUT /api/v1/secrets/:label/limits
+// @Summary      Set secret limits
+// @Description  Configure connection, IP, quota, and expiry limits for a secret
+// @Tags         secrets
+// @Accept       json
+// @Produce      json
+// @Param        label  path  string             true  "Secret label"
+// @Param        body   body  setLimitsRequest   true  "Limits configuration"
+// @Success      200  {object}  map[string]string
+// @Failure      400  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /secrets/{label}/limits [put]
 func (h *SecretHandler) SetLimits(c *gin.Context) {
 	label := c.Param("label")
 	var req setLimitsRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		HandleBindError(c, err)
 		return
 	}
 
@@ -156,6 +225,16 @@ func (h *SecretHandler) SetLimits(c *gin.Context) {
 }
 
 // GetLimits handles GET /api/v1/secrets/:label/limits
+// @Summary      Get secret limits
+// @Description  Retrieve the current limits (connections, IPs, quota, expiry) for a secret
+// @Tags         secrets
+// @Produce      json
+// @Param        label  path  string  true  "Secret label"
+// @Success      200  {object}  map[string]interface{}
+// @Failure      404  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /secrets/{label}/limits [get]
 func (h *SecretHandler) GetLimits(c *gin.Context) {
 	label := c.Param("label")
 	sec, err := h.secrets.Get(c.Request.Context(), label)
@@ -177,6 +256,16 @@ func (h *SecretHandler) GetLimits(c *gin.Context) {
 }
 
 // GetLink handles GET /api/v1/secrets/:label/link
+// @Summary      Get proxy link
+// @Description  Generate the Telegram proxy link for a given secret label
+// @Tags         secrets
+// @Produce      json
+// @Param        label  path  string  true  "Secret label"
+// @Success      200  {object}  map[string]string
+// @Failure      400  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /secrets/{label}/link [get]
 func (h *SecretHandler) GetLink(c *gin.Context) {
 	label := c.Param("label")
 	settings, err := h.settings.Load(c.Request.Context())
@@ -203,8 +292,17 @@ func (h *SecretHandler) GetLink(c *gin.Context) {
 }
 
 // GetQR handles GET /api/v1/secrets/:label/qr
-// Returns a PNG image of the QR code for the proxy link.
-// Optional query param: ?size=512 (default 256)
+// @Summary      Get QR code
+// @Description  Generate a PNG QR code image for the proxy link associated with the secret
+// @Tags         secrets
+// @Produce      image/png
+// @Param        label  path  string  true  "Secret label"
+// @Param        size   query  int    false  "QR code image size in pixels (64-2048, default 256)"
+// @Success      200  {file}  binary
+// @Failure      400  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /secrets/{label}/qr [get]
 func (h *SecretHandler) GetQR(c *gin.Context) {
 	label := c.Param("label")
 	settings, err := h.settings.Load(c.Request.Context())
@@ -239,15 +337,26 @@ func (h *SecretHandler) GetQR(c *gin.Context) {
 }
 
 type updateNotesRequest struct {
-	Notes string `json:"notes"`
+	Notes string `json:"notes" binding:"max=500"`
 }
 
 // UpdateNotes handles PUT /api/v1/secrets/:label/notes
+// @Summary      Update secret notes
+// @Description  Set or update the notes field for a secret
+// @Tags         secrets
+// @Accept       json
+// @Produce      json
+// @Param        label  path  string              true  "Secret label"
+// @Param        body   body  updateNotesRequest   true  "Notes content"
+// @Success      200  {object}  map[string]string
+// @Failure      400  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /secrets/{label}/notes [put]
 func (h *SecretHandler) UpdateNotes(c *gin.Context) {
 	label := c.Param("label")
 	var req updateNotesRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		HandleBindError(c, err)
 		return
 	}
 
@@ -259,6 +368,15 @@ func (h *SecretHandler) UpdateNotes(c *gin.Context) {
 }
 
 // ResetTraffic handles POST /api/v1/secrets/:label/reset-traffic
+// @Summary      Reset secret traffic
+// @Description  Reset traffic counters for a specific secret
+// @Tags         secrets
+// @Produce      json
+// @Param        label  path  string  true  "Secret label"
+// @Success      200  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /secrets/{label}/reset-traffic [post]
 func (h *SecretHandler) ResetTraffic(c *gin.Context) {
 	label := c.Param("label")
 	if err := h.secrets.ResetTraffic(c.Request.Context(), label); err != nil {
@@ -269,6 +387,14 @@ func (h *SecretHandler) ResetTraffic(c *gin.Context) {
 }
 
 // ResetAllTraffic handles POST /api/v1/secrets/reset-traffic
+// @Summary      Reset all traffic
+// @Description  Reset traffic counters for all secrets
+// @Tags         secrets
+// @Produce      json
+// @Success      200  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /secrets/reset-traffic [post]
 func (h *SecretHandler) ResetAllTraffic(c *gin.Context) {
 	if err := h.secrets.ResetAllTraffic(c.Request.Context()); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})

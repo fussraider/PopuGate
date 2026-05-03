@@ -2,10 +2,12 @@ package bot
 
 import (
 	"fmt"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestTelegramAPIURL_ContainsToken(t *testing.T) {
@@ -183,4 +185,145 @@ func TestArgs(t *testing.T) {
 			t.Errorf("args(%q) = %q, want %q", tt.input, got, tt.want)
 		}
 	}
+}
+
+func TestNew(t *testing.T) {
+	deps := &Dependencies{}
+	b := New("tok123", "998877", "my-server", deps)
+
+	if b.token != "tok123" {
+		t.Errorf("token = %q, want %q", b.token, "tok123")
+	}
+	if b.chatID != "998877" {
+		t.Errorf("chatID = %q, want %q", b.chatID, "998877")
+	}
+	if b.label != "my-server" {
+		t.Errorf("label = %q, want %q", b.label, "my-server")
+	}
+	if b.client == nil {
+		t.Error("client is nil")
+	}
+	if b.deps == nil {
+		t.Error("deps is nil")
+	}
+	if b.deps != deps {
+		t.Error("deps pointer mismatch")
+	}
+
+	// Verify the client has a reasonable timeout.
+	if b.client.Timeout != 35*time.Second {
+		t.Errorf("client timeout = %v, want %v", b.client.Timeout, 35*time.Second)
+	}
+}
+
+func TestIsKnownCommand(t *testing.T) {
+	tests := []struct {
+		cmd  string
+		want bool
+	}{
+		// All known commands
+		{"/status", true},
+		{"/secrets", true},
+		{"/link", true},
+		{"/add", true},
+		{"/remove", true},
+		{"/rotate", true},
+		{"/restart", true},
+		{"/enable", true},
+		{"/disable", true},
+		{"/health", true},
+		{"/traffic", true},
+		{"/update", true},
+		{"/limits", true},
+		{"/setlimit", true},
+		{"/upstreams", true},
+		{"/tasks", true},
+		{"/help", true},
+
+		// Unknown commands
+		{"/unknown", false},
+		{"/start", false},
+		{"", false},
+		{"status", false},
+		{"/Status", false},
+		{"/STATUS", false},
+		{"/HELP", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.cmd, func(t *testing.T) {
+			got := isKnownCommand(tt.cmd)
+			if got != tt.want {
+				t.Errorf("isKnownCommand(%q) = %v, want %v", tt.cmd, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestFormatBytes(t *testing.T) {
+	tests := []struct {
+		name string
+		n    int64
+		want string
+	}{
+		{"zero", 0, "0 B"},
+		{"500 bytes", 500, "500 B"},
+		{"1 KB", 1024, "1.0 KB"},
+		{"1.5 KB", 1536, "1.5 KB"},
+		{"1.0 MB", 1024 * 1024, "1.0 MB"},
+		{"1.5 MB", int64(1.5 * 1024 * 1024), "1.5 MB"},
+		{"2.0 GB", 2 * 1024 * 1024 * 1024, "2.0 GB"},
+		{"max int64", math.MaxInt64, "8589934592.0 GB"},
+		{"just below KB", 1023, "1023 B"},
+		{"just below MB", 1024*1024 - 1, "1024.0 KB"},
+		{"just below GB", 1024*1024*1024 - 1, "1024.0 MB"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := formatBytes(tt.n)
+			if got != tt.want {
+				t.Errorf("formatBytes(%d) = %q, want %q", tt.n, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestEscapeURL(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"plain text", "hello", "hello"},
+		{"spaces", "hello world", "hello+world"},
+		{"markdown chars", "*bold* _italic_ `code`", "%2Abold%2A+_italic_+%60code%60"},
+		{"special chars", "a&b=c", "a%26b%3Dc"},
+		{"empty string", "", ""},
+		{"newline", "line1\nline2", "line1%0Aline2"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := escapeURL(tt.input)
+			if got != tt.want {
+				t.Errorf("escapeURL(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestIsRunning(t *testing.T) {
+	b := New("token", "123", "test", nil)
+
+	if b.IsRunning() {
+		t.Error("new bot should not be running")
+	}
+}
+
+func TestStop_NilCancel(t *testing.T) {
+	b := New("token", "123", "test", nil)
+
+	// cancel is nil on a freshly constructed Bot — Stop must not panic
+	b.Stop()
 }

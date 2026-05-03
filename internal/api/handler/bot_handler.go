@@ -30,17 +30,28 @@ func NewBotHandler(settings *store.SettingsStore, deps *bot.Dependencies) *BotHa
 }
 
 type botSetupRequest struct {
-	BotToken string `json:"token" binding:"required"`
-	ChatID   string `json:"chat_id" binding:"required"`
-	Interval int    `json:"interval" binding:"required"`
-	Label    string `json:"label" binding:"required"`
+	BotToken string `json:"token" binding:"required,min=10"`
+	ChatID   string `json:"chat_id" binding:"required,numeric"`
+	Interval int    `json:"interval" binding:"required,min=1"`
+	Label    string `json:"label" binding:"required,max=64"`
 }
 
 // Setup handles POST /api/v1/bot/setup
+// @Summary      Setup Telegram bot
+// @Description  Configures and starts the Telegram notification bot with the provided token, chat ID, interval, and label
+// @Tags         bot
+// @Accept       json
+// @Produce      json
+// @Param        body  body  object{token=string,chat_id=string,interval=int,label=string}  true  "Bot configuration"
+// @Success      200  {object}  map[string]string
+// @Failure      400  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /bot/setup [post]
 func (h *BotHandler) Setup(c *gin.Context) {
 	var req botSetupRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		HandleBindError(c, err)
 		return
 	}
 
@@ -69,6 +80,16 @@ func (h *BotHandler) Setup(c *gin.Context) {
 }
 
 // Test handles POST /api/v1/bot/test
+// @Summary      Test bot notification
+// @Description  Sends a test message via the configured Telegram bot
+// @Tags         bot
+// @Accept       json
+// @Produce      json
+// @Success      200  {object}  map[string]string
+// @Failure      400  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /bot/test [post]
 func (h *BotHandler) Test(c *gin.Context) {
 	settings, _ := h.settings.Load(c.Request.Context())
 	if settings.TelegramBotToken == "" || settings.TelegramChatID == "" {
@@ -87,6 +108,14 @@ func (h *BotHandler) Test(c *gin.Context) {
 }
 
 // Status handles GET /api/v1/bot/status
+// @Summary      Bot status
+// @Description  Returns the current Telegram bot status including enabled state, running state, and configuration
+// @Tags         bot
+// @Accept       json
+// @Produce      json
+// @Success      200  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /bot/status [get]
 func (h *BotHandler) Status(c *gin.Context) {
 	settings, _ := h.settings.Load(c.Request.Context())
 
@@ -107,10 +136,21 @@ type botToggleRequest struct {
 }
 
 // Toggle handles PUT /api/v1/bot/toggle
+// @Summary      Toggle bot on/off
+// @Description  Enables or disables the Telegram notification bot
+// @Tags         bot
+// @Accept       json
+// @Produce      json
+// @Param        body  body  object{enable=bool}  true  "Enable flag"
+// @Success      200  {object}  map[string]string
+// @Failure      400  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /bot/toggle [put]
 func (h *BotHandler) Toggle(c *gin.Context) {
 	var req botToggleRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		HandleBindError(c, err)
 		return
 	}
 
@@ -141,6 +181,16 @@ func (h *BotHandler) Toggle(c *gin.Context) {
 }
 
 // DetectChatID handles GET /api/v1/bot/detect-chat-id
+// @Summary      Detect Telegram chat ID
+// @Description  Queries Telegram API for recent messages to detect and auto-save the chat ID
+// @Tags         bot
+// @Accept       json
+// @Produce      json
+// @Success      200  {object}  map[string]string
+// @Failure      400  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /bot/detect-chat-id [get]
 func (h *BotHandler) DetectChatID(c *gin.Context) {
 	settings, _ := h.settings.Load(c.Request.Context())
 	if settings.TelegramBotToken == "" {

@@ -212,6 +212,77 @@ func TestSchedulerStore_CleanOldHistory(t *testing.T) {
 	}
 }
 
+func TestSchedulerStore_ListHistory(t *testing.T) {
+	db := testutil.OpenTestDB(t)
+	s := NewSchedulerStore(db)
+	ctx := context.Background()
+
+	now := time.Now().Unix()
+	tasks := []string{"task-a", "task-b", "task-c"}
+	for i, name := range tasks {
+		s.InsertHistory(ctx, &scheduler.ExecutionRecord{
+			TaskName:   name,
+			StartedAt:  now - int64(len(tasks)-i)*60,
+			FinishedAt: now - int64(len(tasks)-i)*60 + 1,
+			DurationMs: int64(i * 100),
+			Status:     "success",
+		})
+	}
+
+	records, err := s.ListHistory(ctx, 10, 0)
+	if err != nil {
+		t.Fatalf("ListHistory: %v", err)
+	}
+	if len(records) != 3 {
+		t.Fatalf("expected 3 records, got %d", len(records))
+	}
+
+	// Should be newest first
+	if records[0].StartedAt < records[1].StartedAt {
+		t.Error("expected newest first")
+	}
+}
+
+func TestSchedulerStore_ListHistory_Pagination(t *testing.T) {
+	db := testutil.OpenTestDB(t)
+	s := NewSchedulerStore(db)
+	ctx := context.Background()
+
+	now := time.Now().Unix()
+	for i := 0; i < 5; i++ {
+		s.InsertHistory(ctx, &scheduler.ExecutionRecord{
+			TaskName:   "pag-task",
+			StartedAt:  now - int64(5-i)*10,
+			FinishedAt: now - int64(5-i)*10 + 1,
+			DurationMs: int64(i),
+			Status:     "success",
+		})
+	}
+
+	// Page 1: limit=2, offset=0
+	page1, err := s.ListHistory(ctx, 2, 0)
+	if err != nil {
+		t.Fatalf("ListHistory page1: %v", err)
+	}
+	if len(page1) != 2 {
+		t.Fatalf("page1: expected 2, got %d", len(page1))
+	}
+
+	// Page 2: limit=2, offset=2
+	page2, err := s.ListHistory(ctx, 2, 2)
+	if err != nil {
+		t.Fatalf("ListHistory page2: %v", err)
+	}
+	if len(page2) != 2 {
+		t.Fatalf("page2: expected 2, got %d", len(page2))
+	}
+
+	// Pages should not overlap
+	if page1[0].ID == page2[0].ID {
+		t.Error("pages should have different records")
+	}
+}
+
 func TestSchedulerStore_HistoryWithError(t *testing.T) {
 	db := testutil.OpenTestDB(t)
 	s := NewSchedulerStore(db)

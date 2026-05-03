@@ -16,6 +16,12 @@ jobs:
         with:
           go-version: '1.26'
 
+      - name: Check swagger docs are up-to-date
+        run: |
+          go install github.com/swaggo/swag/cmd/swag@v1.16.4
+          swag init -g cmd/popugate/server.go -o docs/ --parseInternal
+          git diff --exit-code docs/ || (echo "::error::Swagger docs are stale. Run 'make swag' and commit the changes." && exit 1)
+
       - name: Run tests
         run: go test ./... -v
 

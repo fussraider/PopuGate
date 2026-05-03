@@ -28,6 +28,12 @@ func (h *HealthHandler) SetHealthService(svc *service.HealthService) {
 }
 
 // Check handles GET /api/v1/health
+// @Summary      Health check
+// @Description  Returns the health status of the service, including version, Docker, and container info
+// @Tags         health
+// @Produce      json
+// @Success      200  {object}  map[string]interface{}
+// @Router       /health [get]
 func (h *HealthHandler) Check(c *gin.Context) {
 	if h.healthSvc == nil {
 		c.JSON(http.StatusOK, gin.H{

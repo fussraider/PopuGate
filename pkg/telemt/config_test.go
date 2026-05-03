@@ -1,0 +1,565 @@
+package telemt
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/fussraider/PopuGate/internal/model"
+)
+
+func TestBuildConfig_Basic(t *testing.T) {
+	params := &ConfigParams{
+		Settings: &model.Settings{
+			ProxyPort:        443,
+			ProxyMetricsPort: 9091,
+			ProxyDomain:      "example.com",
+			MaskingEnabled:   false,
+			UnknownSNIAction: "accept",
+			ProxyProtocol:    false,
+			FakeCertLen:      32,
+		},
+		Secrets: []SecretEntry{
+			{Label: "user1", SecretKey: "aa11bb22cc33dd44ee55ff6677889900", Enabled: true},
+			{Label: "user2", SecretKey: "11223344556677889900aabbccddeeff", Enabled: false},
+		},
+	}
+
+	cfg := BuildConfig(params)
+	if cfg == nil {
+		t.Fatal("BuildConfig returned nil")
+	}
+
+	// Basic checks
+	if cfg.Server.Port != 443 {
+		t.Errorf("Server.Port = %d, want 443", cfg.Server.Port)
+	}
+	if cfg.Server.MetricsPort != 9091 {
+		t.Errorf("Server.MetricsPort = %d, want 9091", cfg.Server.MetricsPort)
+	}
+
+	// Only enabled secrets should be in Users map
+	if len(cfg.Access.Users) != 1 {
+		t.Fatalf("expected 1 user, got %d", len(cfg.Access.Users))
+	}
+	if _, ok := cfg.Access.Users["user1"]; !ok {
+		t.Error("user1 should be in Users")
+	}
+	if _, ok := cfg.Access.Users["user2"]; ok {
+		t.Error("user2 should not be in Users (disabled)")
+	}
+
+	// Secure mode should be true when masking is disabled
+	if !cfg.General.Modes.Secure {
+		t.Error("Secure mode should be true when masking is disabled")
+	}
+}
+
+func TestBuildConfig_WithMasking(t *testing.T) {
+	params := &ConfigParams{
+		Settings: &model.Settings{
+			ProxyPort:        443,
+			ProxyMetricsPort: 9091,
+			ProxyDomain:      "example.com",
+			MaskingEnabled:   true,
+			MaskingPort:      8443,
+			MaskingHost:      "mask.example.com",
+			UnknownSNIAction: "reject",
+			FakeCertLen:      64,
+		},
+	}
+
+	cfg := BuildConfig(params)
+
+	if cfg.Censorship.Mask != true {
+		t.Error("Mask should be true")
+	}
+	if cfg.Censorship.MaskPort != 8443 {
+		t.Errorf("MaskPort = %d, want 8443", cfg.Censorship.MaskPort)
+	}
+	if cfg.Censorship.MaskHost != "mask.example.com" {
+		t.Errorf("MaskHost = %q, want %q", cfg.Censorship.MaskHost, "mask.example.com")
+	}
+	if cfg.General.Modes.Secure {
+		t.Error("Secure mode should be false when masking is enabled")
+	}
+}
+
+func TestBuildConfig_WithProxyProtocol(t *testing.T) {
+	params := &ConfigParams{
+		Settings: &model.Settings{
+			ProxyPort:                 443,
+			ProxyMetricsPort:          9091,
+			ProxyProtocol:             true,
+			ProxyProtocolTrustedCIDRs: "10.0.0.0/8, 172.16.0.0/12",
+		},
+	}
+
+	cfg := BuildConfig(params)
+
+	if !cfg.Server.ProxyProtocol {
+		t.Error("ProxyProtocol should be true")
+	}
+	if len(cfg.Server.ProxyProtocolTrustedCIDRs) != 2 {
+		t.Fatalf("expected 2 CIDRs, got %d", len(cfg.Server.ProxyProtocolTrustedCIDRs))
+	}
+	if cfg.Server.ProxyProtocolTrustedCIDRs[0] != "10.0.0.0/8" {
+		t.Errorf("first CIDR = %q, want %q", cfg.Server.ProxyProtocolTrustedCIDRs[0], "10.0.0.0/8")
+	}
+}
+
+func TestBuildConfig_WithAdTag(t *testing.T) {
+	params := &ConfigParams{
+		Settings: &model.Settings{
+			ProxyPort:        443,
+			ProxyMetricsPort: 9091,
+			AdTag:            "test_ad_tag_123",
+		},
+	}
+
+	cfg := BuildConfig(params)
+	if cfg.General.AdTag != "test_ad_tag_123" {
+		t.Errorf("AdTag = %q, want %q", cfg.General.AdTag, "test_ad_tag_123")
+	}
+}
+
+func TestBuildConfig_SecretLimits(t *testing.T) {
+	params := &ConfigParams{
+		Settings: &model.Settings{
+			ProxyPort:        443,
+			ProxyMetricsPort: 9091,
+		},
+		Secrets: []SecretEntry{
+			{
+				Label:      "limited",
+				SecretKey:  "aa11bb22cc33dd44ee55ff6677889900",
+				Enabled:    true,
+				MaxConns:   10,
+				MaxIPs:     5,
+				QuotaBytes: 1073741824,
+				ExpiresAt:  "2026-12-31",
+			},
+		},
+	}
+
+	cfg := BuildConfig(params)
+
+	if cfg.Access.UserMaxTCPConns["limited"] != 10 {
+		t.Errorf("MaxConns = %d, want 10", cfg.Access.UserMaxTCPConns["limited"])
+	}
+	if cfg.Access.UserMaxUniqueIPs["limited"] != 5 {
+		t.Errorf("MaxIPs = %d, want 5", cfg.Access.UserMaxUniqueIPs["limited"])
+	}
+	if cfg.Access.UserDataQuota["limited"] != 1073741824 {
+		t.Errorf("QuotaBytes = %d, want 1073741824", cfg.Access.UserDataQuota["limited"])
+	}
+	if cfg.Access.UserExpirations["limited"] != "2026-12-31" {
+		t.Errorf("ExpiresAt = %q, want %q", cfg.Access.UserExpirations["limited"], "2026-12-31")
+	}
+}
+
+func TestBuildConfig_ZeroLimits(t *testing.T) {
+	params := &ConfigParams{
+		Settings: &model.Settings{
+			ProxyPort:        443,
+			ProxyMetricsPort: 9091,
+		},
+		Secrets: []SecretEntry{
+			{
+				Label:     "plain",
+				SecretKey: "aa11bb22cc33dd44ee55ff6677889900",
+				Enabled:   true,
+				MaxConns:  0,
+				MaxIPs:    0,
+				ExpiresAt: "0",
+			},
+		},
+	}
+
+	cfg := BuildConfig(params)
+
+	if _, ok := cfg.Access.UserMaxTCPConns["plain"]; ok {
+		t.Error("MaxConns=0 should not be in UserMaxTCPConns")
+	}
+	if _, ok := cfg.Access.UserMaxUniqueIPs["plain"]; ok {
+		t.Error("MaxIPs=0 should not be in UserMaxUniqueIPs")
+	}
+	if _, ok := cfg.Access.UserExpirations["plain"]; ok {
+		t.Error("ExpiresAt=0 should not be in UserExpirations")
+	}
+}
+
+func TestBuildConfig_Upstreams(t *testing.T) {
+	params := &ConfigParams{
+		Settings: &model.Settings{
+			ProxyPort:        443,
+			ProxyMetricsPort: 9091,
+		},
+		Upstreams: []UpstreamEntry{
+			{Type: model.UpstreamDirect, Weight: 10, Enabled: true},
+			{Type: model.UpstreamSOCKS5, Address: "socks5://proxy:1080", Username: "user", Password: "pass", Weight: 20, Enabled: true},
+			{Type: model.UpstreamSOCKS4, Address: "socks4://proxy:1080", Username: "userid", Weight: 5, Enabled: true},
+			{Type: model.UpstreamDirect, Weight: 10, Enabled: false},
+			{Type: model.UpstreamSOCKS5, Address: "extra:1080", Iface: "eth1", Weight: 15, Enabled: true},
+		},
+	}
+
+	cfg := BuildConfig(params)
+
+	// 4 enabled upstreams (direct disabled one excluded)
+	if len(cfg.Upstreams) != 4 {
+		t.Fatalf("expected 4 upstreams, got %d", len(cfg.Upstreams))
+	}
+
+	// Check direct has no address
+	if cfg.Upstreams[0].Address != "" {
+		t.Error("direct upstream should have empty address")
+	}
+
+	// Check SOCKS5
+	if cfg.Upstreams[1].Username != "user" {
+		t.Errorf("SOCKS5 username = %q, want %q", cfg.Upstreams[1].Username, "user")
+	}
+	if cfg.Upstreams[1].Password != "pass" {
+		t.Errorf("SOCKS5 password = %q, want %q", cfg.Upstreams[1].Password, "pass")
+	}
+
+	// Check SOCKS4
+	if cfg.Upstreams[2].UserID != "userid" {
+		t.Errorf("SOCKS4 user_id = %q, want %q", cfg.Upstreams[2].UserID, "userid")
+	}
+
+	// Check interface
+	if cfg.Upstreams[3].Interface != "eth1" {
+		t.Errorf("interface = %q, want %q", cfg.Upstreams[3].Interface, "eth1")
+	}
+}
+
+func TestBuildConfig_MetricsWhitelist(t *testing.T) {
+	params := &ConfigParams{
+		Settings: &model.Settings{
+			ProxyPort:        443,
+			ProxyMetricsPort: 9091,
+		},
+		ExtraMetricsWhitelist: []string{"172.17.0.1", "10.0.0.1"},
+	}
+
+	cfg := BuildConfig(params)
+
+	// Should have localhost + extra IPs
+	expected := []string{"127.0.0.1", "::1", "172.17.0.1", "10.0.0.1"}
+	if len(cfg.Server.MetricsWhitelist) != len(expected) {
+		t.Fatalf("expected %d whitelist entries, got %d", len(expected), len(cfg.Server.MetricsWhitelist))
+	}
+	for i, ip := range expected {
+		if cfg.Server.MetricsWhitelist[i] != ip {
+			t.Errorf("whitelist[%d] = %q, want %q", i, cfg.Server.MetricsWhitelist[i], ip)
+		}
+	}
+}
+
+func TestBuildConfig_LinksShow(t *testing.T) {
+	params := &ConfigParams{
+		Settings: &model.Settings{
+			ProxyPort:        443,
+			ProxyMetricsPort: 9091,
+		},
+		Secrets: []SecretEntry{
+			{Label: "a", Enabled: true},
+			{Label: "b", Enabled: false},
+			{Label: "c", Enabled: true},
+		},
+	}
+
+	cfg := BuildConfig(params)
+
+	if len(cfg.General.Links.Show) != 2 {
+		t.Fatalf("expected 2 enabled labels, got %d", len(cfg.General.Links.Show))
+	}
+	// Should contain "a" and "c"
+	found := map[string]bool{}
+	for _, l := range cfg.General.Links.Show {
+		found[l] = true
+	}
+	if !found["a"] || !found["c"] {
+		t.Errorf("expected 'a' and 'c' in Show, got %v", cfg.General.Links.Show)
+	}
+}
+
+func TestRenderTOML(t *testing.T) {
+	cfg := &TelemtConfig{
+		General: GeneralConfig{
+			FastMode:       true,
+			UseMiddleProxy: true,
+			LogLevel:       "normal",
+			AdTag:          "test_tag",
+			Modes:          ModesConfig{Classic: false, Secure: true, TLS: true},
+			Links:          LinksConfig{Show: []string{"user1"}},
+		},
+		Server: ServerConfig{
+			Port:             443,
+			ListenAddrIPv4:   "0.0.0.0",
+			ListenAddrIPv6:   "::",
+			MetricsPort:      9091,
+			MetricsWhitelist: []string{"127.0.0.1"},
+		},
+		Timeouts: TimeoutsConfig{
+			ClientHandshake: 30,
+			TGConnect:       10,
+			ClientKeepalive: 15,
+			ClientAck:       90,
+		},
+		Censorship: CensorshipConfig{
+			TLSDomain:        "example.com",
+			UnknownSNIAction: "accept",
+			Mask:             false,
+			MaskPort:         8443,
+			FakeCertLen:      32,
+		},
+		Access: AccessConfig{
+			ReplayCheckLen:   65536,
+			ReplayWindowSecs: 1800,
+			Users:            map[string]string{"user1": "aa11bb22cc33dd44ee55ff6677889900"},
+		},
+	}
+
+	toml := renderTOML(cfg)
+
+	// Check key sections exist
+	checks := []string{
+		"[general]",
+		"[general.modes]",
+		"[general.links]",
+		"[server]",
+		"[timeouts]",
+		"[censorship]",
+		"[access]",
+		"[access.users]",
+		`ad_tag = "test_tag"`,
+		`user1 = "aa11bb22cc33dd44ee55ff6677889900"`,
+		"port = 443",
+		"metrics_port = 9091",
+	}
+	for _, check := range checks {
+		if !strings.Contains(toml, check) {
+			t.Errorf("renderTOML missing: %q", check)
+		}
+	}
+}
+
+func TestRenderTOML_WithMaskingHost(t *testing.T) {
+	cfg := &TelemtConfig{
+		General:  GeneralConfig{Modes: ModesConfig{}, Links: LinksConfig{}},
+		Server:   ServerConfig{MetricsWhitelist: []string{}},
+		Timeouts: TimeoutsConfig{},
+		Censorship: CensorshipConfig{
+			Mask:     true,
+			MaskHost: "mask.example.com",
+		},
+		Access: AccessConfig{Users: map[string]string{}},
+	}
+
+	toml := renderTOML(cfg)
+	if !strings.Contains(toml, `mask_host = "mask.example.com"`) {
+		t.Error("mask_host should be present when Mask is true and MaskHost is set")
+	}
+}
+
+func TestRenderTOML_WithProxyProtocolCIDRs(t *testing.T) {
+	cfg := &TelemtConfig{
+		General: GeneralConfig{Modes: ModesConfig{}, Links: LinksConfig{}},
+		Server: ServerConfig{
+			ProxyProtocol:             true,
+			ProxyProtocolTrustedCIDRs: []string{"10.0.0.0/8"},
+			MetricsWhitelist:          []string{},
+		},
+		Timeouts:   TimeoutsConfig{},
+		Censorship: CensorshipConfig{},
+		Access:     AccessConfig{Users: map[string]string{}},
+	}
+
+	toml := renderTOML(cfg)
+	if !strings.Contains(toml, "proxy_protocol_trusted_cidrs") {
+		t.Error("proxy_protocol_trusted_cidrs should be present")
+	}
+}
+
+func TestRenderTOML_WithUpstreams(t *testing.T) {
+	cfg := &TelemtConfig{
+		General:  GeneralConfig{Modes: ModesConfig{}, Links: LinksConfig{}},
+		Server:   ServerConfig{MetricsWhitelist: []string{}},
+		Timeouts: TimeoutsConfig{},
+		Access:   AccessConfig{Users: map[string]string{}},
+		Upstreams: []UpstreamConfig{
+			{Type: "socks5", Weight: 10, Address: "proxy:1080", Username: "u", Password: "p"},
+		},
+	}
+
+	toml := renderTOML(cfg)
+	if !strings.Contains(toml, "[[upstreams]]") {
+		t.Error("upstreams section should be present")
+	}
+	if !strings.Contains(toml, `type = "socks5"`) {
+		t.Error("upstream type should be present")
+	}
+}
+
+func TestRenderTOML_UserLimits(t *testing.T) {
+	cfg := &TelemtConfig{
+		General:  GeneralConfig{Modes: ModesConfig{}, Links: LinksConfig{}},
+		Server:   ServerConfig{MetricsWhitelist: []string{}},
+		Timeouts: TimeoutsConfig{},
+		Access: AccessConfig{
+			Users:            map[string]string{"user1": "secret"},
+			UserMaxTCPConns:  map[string]int{"user1": 5},
+			UserMaxUniqueIPs: map[string]int{"user1": 3},
+			UserDataQuota:    map[string]int64{"user1": 1073741824},
+			UserExpirations:  map[string]string{"user1": "2026-12-31"},
+		},
+	}
+
+	toml := renderTOML(cfg)
+	checks := []string{
+		"[access.user_max_tcp_conns]",
+		"[access.user_max_unique_ips]",
+		"[access.user_data_quota]",
+		"[access.user_expirations]",
+		"user1 = 5",
+		"user1 = 3",
+		"user1 = 1073741824",
+		`user1 = "2026-12-31"`,
+	}
+	for _, check := range checks {
+		if !strings.Contains(toml, check) {
+			t.Errorf("renderTOML missing: %q", check)
+		}
+	}
+}
+
+func TestWriteConfigTOML(t *testing.T) {
+	cfg := &TelemtConfig{
+		General:    GeneralConfig{Modes: ModesConfig{}, Links: LinksConfig{}},
+		Server:     ServerConfig{MetricsWhitelist: []string{}},
+		Timeouts:   TimeoutsConfig{},
+		Censorship: CensorshipConfig{},
+		Access:     AccessConfig{Users: map[string]string{}},
+	}
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "subdir", "config.toml")
+
+	if err := WriteConfigTOML(cfg, path); err != nil {
+		t.Fatalf("WriteConfigTOML: %v", err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read file: %v", err)
+	}
+	if len(data) == 0 {
+		t.Error("config file is empty")
+	}
+	if !strings.Contains(string(data), "[general]") {
+		t.Error("config file missing [general]")
+	}
+}
+
+func TestFormatStringArray(t *testing.T) {
+	tests := []struct {
+		input []string
+		want  string
+	}{
+		{nil, "[]"},
+		{[]string{}, "[]"},
+		{[]string{"a"}, `["a"]`},
+		{[]string{"a", "b"}, `["a", "b"]`},
+	}
+
+	for _, tt := range tests {
+		got := formatStringArray(tt.input)
+		if got != tt.want {
+			t.Errorf("formatStringArray(%v) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
+}
+
+func TestGetEnabledLabels(t *testing.T) {
+	secrets := []SecretEntry{
+		{Label: "a", Enabled: true},
+		{Label: "b", Enabled: false},
+		{Label: "c", Enabled: true},
+	}
+
+	labels := getEnabledLabels(secrets)
+	if len(labels) != 2 {
+		t.Fatalf("expected 2 labels, got %d", len(labels))
+	}
+	if labels[0] != "a" || labels[1] != "c" {
+		t.Errorf("labels = %v, want [a c]", labels)
+	}
+
+	// Empty
+	labels = getEnabledLabels(nil)
+	if len(labels) != 0 {
+		t.Errorf("expected empty, got %v", labels)
+	}
+}
+
+func TestParseCIDRList(t *testing.T) {
+	tests := []struct {
+		input string
+		want  []string
+	}{
+		{"10.0.0.0/8", []string{"10.0.0.0/8"}},
+		{"10.0.0.0/8, 172.16.0.0/12", []string{"10.0.0.0/8", "172.16.0.0/12"}},
+		{"  10.0.0.0/8 , 172.16.0.0/12  ", []string{"10.0.0.0/8", "172.16.0.0/12"}},
+		{",,", nil},
+		{"", nil},
+	}
+
+	for _, tt := range tests {
+		got := parseCIDRList(tt.input)
+		if len(got) != len(tt.want) {
+			t.Errorf("parseCIDRList(%q) = %v, want %v", tt.input, got, tt.want)
+			continue
+		}
+		for i, v := range got {
+			if v != tt.want[i] {
+				t.Errorf("parseCIDRList(%q)[%d] = %q, want %q", tt.input, i, v, tt.want[i])
+			}
+		}
+	}
+}
+
+func TestSortedKeys(t *testing.T) {
+	m := map[string]string{"c": "3", "a": "1", "b": "2"}
+	keys := sortedKeys(m)
+	if len(keys) != 3 || keys[0] != "a" || keys[1] != "b" || keys[2] != "c" {
+		t.Errorf("sortedKeys = %v, want [a b c]", keys)
+	}
+}
+
+func TestSortedKeysInt(t *testing.T) {
+	m := map[string]int{"c": 3, "a": 1, "b": 2}
+	keys := sortedKeysInt(m)
+	if len(keys) != 3 || keys[0] != "a" || keys[1] != "b" || keys[2] != "c" {
+		t.Errorf("sortedKeysInt = %v, want [a b c]", keys)
+	}
+}
+
+func TestSortedKeysInt64(t *testing.T) {
+	m := map[string]int64{"c": 3, "a": 1, "b": 2}
+	keys := sortedKeysInt64(m)
+	if len(keys) != 3 || keys[0] != "a" || keys[1] != "b" || keys[2] != "c" {
+		t.Errorf("sortedKeysInt64 = %v, want [a b c]", keys)
+	}
+}
+
+func TestSortedKeysStr(t *testing.T) {
+	m := map[string]string{"c": "3", "a": "1", "b": "2"}
+	keys := sortedKeysStr(m)
+	if len(keys) != 3 || keys[0] != "a" || keys[1] != "b" || keys[2] != "c" {
+		t.Errorf("sortedKeysStr = %v, want [a b c]", keys)
+	}
+}

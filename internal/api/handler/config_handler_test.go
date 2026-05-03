@@ -23,8 +23,46 @@ func setupConfigTestRouter(t *testing.T) (*gin.Engine, *ConfigHandler) {
 	r := gin.New()
 	r.PUT("/config", handler.Update)
 	r.GET("/config", handler.GetAll)
+	r.GET("/config/:key", handler.GetKey)
 	return r, handler
 }
+
+// --- GetAll tests ---
+
+func TestConfigHandler_GetAll(t *testing.T) {
+	r, _ := setupConfigTestRouter(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/config", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+
+	// Verify key settings fields are present with defaults
+	if _, ok := resp["proxy_port"]; !ok {
+		t.Error("expected 'proxy_port' field in response")
+	}
+	if _, ok := resp["geoblock_mode"]; !ok {
+		t.Error("expected 'geoblock_mode' field in response")
+	}
+	if _, ok := resp["proxy_domain"]; !ok {
+		t.Error("expected 'proxy_domain' field in response")
+	}
+
+	// Verify default values
+	if resp["geoblock_mode"] != "blacklist" {
+		t.Errorf("expected geoblock_mode 'blacklist', got %v", resp["geoblock_mode"])
+	}
+}
+
+// --- Update tests ---
 
 func TestConfigUpdate_RejectsInternalKeys(t *testing.T) {
 	r, _ := setupConfigTestRouter(t)
@@ -92,6 +130,102 @@ func TestConfigUpdate_RejectsInternalKeys(t *testing.T) {
 	}
 }
 
+func TestConfigUpdate_BoolType(t *testing.T) {
+	r, _ := setupConfigTestRouter(t)
+
+	body, _ := json.Marshal(map[string]interface{}{
+		"debug": true,
+	})
+	req := httptest.NewRequest(http.MethodPut, "/config", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+
+	applied := resp["applied"].([]interface{})
+	found := false
+	for _, k := range applied {
+		if k == "debug" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected 'debug' in applied keys, got %v", applied)
+	}
+
+	// Verify the value was stored as "true"
+	req2 := httptest.NewRequest(http.MethodGet, "/config/debug", nil)
+	w2 := httptest.NewRecorder()
+	r.ServeHTTP(w2, req2)
+
+	var getResp map[string]interface{}
+	json.Unmarshal(w2.Body.Bytes(), &getResp)
+	if getResp["value"] != "true" {
+		t.Errorf("expected debug='true', got %v", getResp["value"])
+	}
+}
+
+func TestConfigUpdate_FloatType(t *testing.T) {
+	r, _ := setupConfigTestRouter(t)
+
+	// JSON numbers are decoded as float64 in Go
+	body, _ := json.Marshal(map[string]interface{}{
+		"proxy_port": 8443,
+	})
+	req := httptest.NewRequest(http.MethodPut, "/config", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// Verify stored as integer string
+	req2 := httptest.NewRequest(http.MethodGet, "/config/proxy_port", nil)
+	w2 := httptest.NewRecorder()
+	r.ServeHTTP(w2, req2)
+
+	var resp map[string]interface{}
+	json.Unmarshal(w2.Body.Bytes(), &resp)
+	if resp["value"] != "8443" {
+		t.Errorf("expected proxy_port='8443', got %v", resp["value"])
+	}
+}
+
+func TestConfigUpdate_StringType(t *testing.T) {
+	r, _ := setupConfigTestRouter(t)
+
+	body, _ := json.Marshal(map[string]interface{}{
+		"proxy_domain": "example.com",
+	})
+	req := httptest.NewRequest(http.MethodPut, "/config", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// Verify stored value
+	req2 := httptest.NewRequest(http.MethodGet, "/config/proxy_domain", nil)
+	w2 := httptest.NewRecorder()
+	r.ServeHTTP(w2, req2)
+
+	var resp map[string]interface{}
+	json.Unmarshal(w2.Body.Bytes(), &resp)
+	if resp["value"] != "example.com" {
+		t.Errorf("expected proxy_domain='example.com', got %v", resp["value"])
+	}
+}
+
 func TestConfigUpdate_AllOnlyInternalKeys_ReturnsBadRequest(t *testing.T) {
 	r, _ := setupConfigTestRouter(t)
 
@@ -106,6 +240,35 @@ func TestConfigUpdate_AllOnlyInternalKeys_ReturnsBadRequest(t *testing.T) {
 
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("expected 400, got %d", w.Code)
+	}
+
+	var resp map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp["error"] != "no valid settings provided" {
+		t.Errorf("expected 'no valid settings provided', got %v", resp["error"])
+	}
+}
+
+func TestConfigUpdate_NoValidKeys(t *testing.T) {
+	r, _ := setupConfigTestRouter(t)
+
+	body, _ := json.Marshal(map[string]interface{}{
+		"nonexistent_key": "value",
+		"another_bad_key": "value",
+	})
+	req := httptest.NewRequest(http.MethodPut, "/config", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp["error"] != "no valid settings provided" {
+		t.Errorf("expected 'no valid settings provided', got %v", resp["error"])
 	}
 }
 
@@ -138,5 +301,120 @@ func TestConfigUpdate_MixedKeys_AppliesOnlyAllowed(t *testing.T) {
 	rejected := resp["rejected"].([]interface{})
 	if len(rejected) != 2 {
 		t.Errorf("expected 2 rejected keys, got %d: %v", len(rejected), rejected)
+	}
+}
+
+func TestConfigUpdate_InvalidJSON(t *testing.T) {
+	r, _ := setupConfigTestRouter(t)
+
+	req := httptest.NewRequest(http.MethodPut, "/config", bytes.NewReader([]byte(`{invalid`)))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestConfigUpdate_NullValueSkipped(t *testing.T) {
+	r, _ := setupConfigTestRouter(t)
+
+	// null values should be skipped, not cause errors
+	body, _ := json.Marshal(map[string]interface{}{
+		"debug":      nil,
+		"proxy_port": 443,
+	})
+	req := httptest.NewRequest(http.MethodPut, "/config", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+
+	applied := resp["applied"].([]interface{})
+	if len(applied) != 1 {
+		t.Errorf("expected 1 applied key (null should be skipped), got %d: %v", len(applied), applied)
+	}
+	if applied[0] != "proxy_port" {
+		t.Errorf("expected 'proxy_port' to be applied, got %v", applied[0])
+	}
+}
+
+// --- GetKey tests ---
+
+func TestConfigHandler_GetKey(t *testing.T) {
+	r, _ := setupConfigTestRouter(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/config/geoblock_mode", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp["key"] != "geoblock_mode" {
+		t.Errorf("expected key='geoblock_mode', got %v", resp["key"])
+	}
+	if resp["value"] != "blacklist" {
+		t.Errorf("expected value='blacklist', got %v", resp["value"])
+	}
+}
+
+func TestConfigHandler_GetKey_UnknownKey(t *testing.T) {
+	r, _ := setupConfigTestRouter(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/config/nonexistent_key", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp["key"] != "nonexistent_key" {
+		t.Errorf("expected key='nonexistent_key', got %v", resp["key"])
+	}
+	// Unknown keys return empty string (not an error)
+	if resp["value"] != "" {
+		t.Errorf("expected empty value for unknown key, got %v", resp["value"])
+	}
+}
+
+func TestConfigHandler_GetKey_AfterUpdate(t *testing.T) {
+	r, _ := setupConfigTestRouter(t)
+
+	// Update a value first
+	body, _ := json.Marshal(map[string]interface{}{
+		"debug": true,
+	})
+	req := httptest.NewRequest(http.MethodPut, "/config", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("update: expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// Now retrieve it
+	req2 := httptest.NewRequest(http.MethodGet, "/config/debug", nil)
+	w2 := httptest.NewRecorder()
+	r.ServeHTTP(w2, req2)
+
+	var resp map[string]interface{}
+	json.Unmarshal(w2.Body.Bytes(), &resp)
+	if resp["value"] != "true" {
+		t.Errorf("expected debug='true' after update, got %v", resp["value"])
 	}
 }

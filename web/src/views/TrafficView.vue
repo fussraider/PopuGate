@@ -187,6 +187,23 @@
       <div v-else class="text-muted text-sm">{{ t('traffic.no_traffic') }}</div>
     </div>
 
+    <!-- Traffic History -->
+    <div class="card mb-lg">
+      <div class="flex justify-between items-center mb-md">
+        <h3>{{ t('traffic.history') }}</h3>
+        <div class="flex gap-sm">
+          <button v-for="range in dateRanges" :key="range.value"
+            :class="['btn btn-sm', selectedRange === range.value ? 'btn-primary' : 'btn-secondary']"
+            @click="selectRange(range.value)">
+            {{ range.label }}
+          </button>
+        </div>
+      </div>
+      <div v-if="trafficStore.historyLoading" class="text-muted">{{ t('common.loading') }}</div>
+      <TrafficChart v-else-if="trafficStore.history.length" :records="trafficStore.history" />
+      <EmptyState v-else :icon="TrendingUp" :message="t('traffic.no_history')" />
+    </div>
+
     <!-- Per-User Traffic -->
     <div class="card">
       <h3 class="mb-md">{{ t('traffic.per_user_traffic') }}</h3>
@@ -217,7 +234,8 @@ import DataTable from '@/components/common/DataTable.vue'
 import ToggleSwitch from '@/components/common/ToggleSwitch.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import Tooltip from '@/components/common/Tooltip.vue'
-import { Activity, Loader2, BarChart3, Info } from '@lucide/vue'
+import TrafficChart from '@/components/traffic/TrafficChart.vue'
+import { Activity, Loader2, BarChart3, Info, TrendingUp } from '@lucide/vue'
 
 const { t } = useI18n()
 const trafficStore = useTrafficStore()
@@ -231,6 +249,36 @@ const userColumns = [
 ]
 
 const autoRefresh = ref(trafficStore.autoRefresh)
+const selectedRange = ref('24h')
+
+const dateRanges = [
+  { label: '1H', value: '1h' },
+  { label: '6H', value: '6h' },
+  { label: '24H', value: '24h' },
+  { label: '7D', value: '7d' },
+  { label: '30D', value: '30d' },
+]
+
+function selectRange(range: string) {
+  selectedRange.value = range
+  const now = Math.floor(Date.now() / 1000)
+  const secondsMap: Record<string, number> = {
+    '1h': 3600,
+    '6h': 21600,
+    '24h': 86400,
+    '7d': 604800,
+    '30d': 2592000,
+  }
+  const aggregateMap: Record<string, string> = {
+    '1h': 'none',
+    '6h': 'none',
+    '24h': 'hour',
+    '7d': 'hour',
+    '30d': 'day',
+  }
+  const start = now - (secondsMap[range] || 86400)
+  trafficStore.loadHistory(start, now, undefined, aggregateMap[range])
+}
 
 watch(autoRefresh, (val) => {
   trafficStore.toggleAutoRefresh(val)
@@ -267,6 +315,7 @@ watch(proxyRunning, (running) => {
 
 onMounted(async () => {
   trafficStore.load()
+  selectRange(selectedRange.value)
   await proxyStore.loadStatus()
   if (proxyRunning.value && autoRefresh.value) {
     trafficStore.loadLive()

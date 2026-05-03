@@ -22,6 +22,15 @@ func NewGeoblockHandler(settings *store.SettingsStore, geoSvc *service.GeoblockS
 }
 
 // Get handles GET /api/v1/geoblock
+// @Summary      Get geo-block settings
+// @Description  Returns the current geo-blocking mode and list of blocked/allowed countries
+// @Tags         geoblock
+// @Accept       json
+// @Produce      json
+// @Success      200  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /geoblock [get]
 func (h *GeoblockHandler) Get(c *gin.Context) {
 	settings, err := h.settings.Load(c.Request.Context())
 	if err != nil {
@@ -35,14 +44,25 @@ func (h *GeoblockHandler) Get(c *gin.Context) {
 }
 
 type geoRequest struct {
-	Country string `json:"country" binding:"required"`
+	Country string `json:"country" binding:"required,alpha,len=2"`
 }
 
 // Add handles POST /api/v1/geoblock/add
+// @Summary      Add country to blocklist
+// @Description  Adds a country (ISO 3166-1 alpha-2 code) to the geo-block list and applies iptables rules
+// @Tags         geoblock
+// @Accept       json
+// @Produce      json
+// @Param        body  body  object{country=string}  true  "Country code to add"
+// @Success      200  {object}  map[string]string
+// @Failure      400  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /geoblock/add [post]
 func (h *GeoblockHandler) Add(c *gin.Context) {
 	var req geoRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		HandleBindError(c, err)
 		return
 	}
 
@@ -76,10 +96,21 @@ func (h *GeoblockHandler) Add(c *gin.Context) {
 }
 
 // Remove handles POST /api/v1/geoblock/remove
+// @Summary      Remove country from blocklist
+// @Description  Removes a country (ISO 3166-1 alpha-2 code) from the geo-block list and re-applies rules
+// @Tags         geoblock
+// @Accept       json
+// @Produce      json
+// @Param        body  body  object{country=string}  true  "Country code to remove"
+// @Success      200  {object}  map[string]string
+// @Failure      400  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /geoblock/remove [post]
 func (h *GeoblockHandler) Remove(c *gin.Context) {
 	var req geoRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		HandleBindError(c, err)
 		return
 	}
 
@@ -108,6 +139,15 @@ func (h *GeoblockHandler) Remove(c *gin.Context) {
 }
 
 // Clear handles POST /api/v1/geoblock/clear
+// @Summary      Clear all geo-block rules
+// @Description  Removes all countries from the geo-block list and clears iptables rules
+// @Tags         geoblock
+// @Accept       json
+// @Produce      json
+// @Success      200  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /geoblock/clear [post]
 func (h *GeoblockHandler) Clear(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -126,19 +166,25 @@ func (h *GeoblockHandler) Clear(c *gin.Context) {
 }
 
 type modeRequest struct {
-	Mode string `json:"mode" binding:"required"`
+	Mode string `json:"mode" binding:"required,oneof=blacklist whitelist"`
 }
 
 // SetMode handles PUT /api/v1/geoblock/mode
+// @Summary      Set geo-block mode
+// @Description  Sets the geo-blocking mode to either blacklist or whitelist and re-applies rules
+// @Tags         geoblock
+// @Accept       json
+// @Produce      json
+// @Param        body  body  object{mode=string}  true  "Mode to set (blacklist or whitelist)"
+// @Success      200  {object}  map[string]string
+// @Failure      400  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /geoblock/mode [put]
 func (h *GeoblockHandler) SetMode(c *gin.Context) {
 	var req modeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	if req.Mode != "blacklist" && req.Mode != "whitelist" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "mode must be 'blacklist' or 'whitelist'"})
+		HandleBindError(c, err)
 		return
 	}
 

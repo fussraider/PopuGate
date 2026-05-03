@@ -1,0 +1,2926 @@
+basePath: /api/v1
+definitions:
+  handler.addInstanceRequest:
+    properties:
+      label:
+        maxLength: 32
+        type: string
+      metrics_port:
+        maximum: 65535
+        minimum: 1
+        type: integer
+      port:
+        maximum: 65535
+        minimum: 1
+        type: integer
+    required:
+    - port
+    type: object
+  handler.addSecretRequest:
+    properties:
+      label:
+        maxLength: 32
+        type: string
+      secret:
+        type: string
+    required:
+    - label
+    type: object
+  handler.addUpstreamRequest:
+    properties:
+      address:
+        type: string
+      iface:
+        type: string
+      name:
+        maxLength: 32
+        type: string
+      password:
+        type: string
+      type:
+        description: direct, socks5, socks4
+        enum:
+        - direct
+        - socks5
+        - socks4
+        type: string
+      username:
+        type: string
+      weight:
+        maximum: 100
+        minimum: 1
+        type: integer
+    required:
+    - name
+    - type
+    type: object
+  handler.loginRequest:
+    properties:
+      password:
+        type: string
+      username:
+        type: string
+    required:
+    - password
+    type: object
+  handler.loginResponse:
+    properties:
+      access_token:
+        type: string
+      expires_in:
+        type: integer
+      refresh_token:
+        type: string
+    type: object
+  handler.netIface:
+    properties:
+      addresses:
+        items:
+          type: string
+        type: array
+      name:
+        type: string
+    type: object
+  handler.passwordRequest:
+    properties:
+      current:
+        type: string
+      new:
+        minLength: 8
+        type: string
+    required:
+    - current
+    - new
+    type: object
+  handler.refreshRequest:
+    properties:
+      refresh_token:
+        type: string
+    required:
+    - refresh_token
+    type: object
+  handler.secretToggleRequest:
+    properties:
+      enabled:
+        type: boolean
+    required:
+    - enabled
+    type: object
+  handler.setLimitsRequest:
+    properties:
+      expires_at:
+        description: ISO 8601 or "0"
+        type: string
+      max_conns:
+        minimum: -1
+        type: integer
+      max_ips:
+        minimum: -1
+        type: integer
+      quota:
+        description: 'Human-readable: "5G", "500M"'
+        type: string
+      quota_bytes:
+        description: Or raw bytes
+        minimum: -1
+        type: integer
+    type: object
+  handler.setupRequest:
+    properties:
+      password:
+        minLength: 8
+        type: string
+    required:
+    - password
+    type: object
+  handler.testUpstreamRequest:
+    properties:
+      address:
+        type: string
+      iface:
+        type: string
+      password:
+        type: string
+      type:
+        enum:
+        - direct
+        - socks5
+        - socks4
+        type: string
+      username:
+        type: string
+    required:
+    - type
+    type: object
+  handler.updateNotesRequest:
+    properties:
+      notes:
+        maxLength: 500
+        type: string
+    type: object
+  handler.updateUpstreamRequest:
+    properties:
+      address:
+        type: string
+      iface:
+        type: string
+      password:
+        type: string
+      type:
+        enum:
+        - direct
+        - socks5
+        - socks4
+        type: string
+      username:
+        type: string
+      weight:
+        maximum: 100
+        minimum: 1
+        type: integer
+    required:
+    - type
+    type: object
+  handler.upstreamToggleRequest:
+    properties:
+      enabled:
+        type: boolean
+    required:
+    - enabled
+    type: object
+host: localhost:8080
+info:
+  contact:
+    name: PopuGate Support
+    url: https://github.com/fussraider/PopuGate
+  description: PopuGate is a Telegram MTProto proxy manager with a REST API.
+  license:
+    name: MIT
+    url: https://github.com/fussraider/PopuGate/blob/main/LICENSE
+  title: PopuGate API
+  version: "1.0"
+paths:
+  /auth/login:
+    post:
+      consumes:
+      - application/json
+      description: Authenticate with username and password to obtain an access/refresh
+        token pair
+      parameters:
+      - description: Login credentials
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.loginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.loginResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Login
+      tags:
+      - auth
+  /auth/logout:
+    post:
+      consumes:
+      - application/json
+      description: Revoke the current access token and optionally a refresh token
+        from the body
+      parameters:
+      - description: Refresh token to revoke
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/handler.refreshRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Logout
+      tags:
+      - auth
+  /auth/password:
+    put:
+      consumes:
+      - application/json
+      description: Update the admin password by providing the current and new password
+      parameters:
+      - description: Current and new password
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.passwordRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Change password
+      tags:
+      - auth
+  /auth/refresh:
+    post:
+      consumes:
+      - application/json
+      description: Exchange a valid refresh token for a new access/refresh token pair
+      parameters:
+      - description: Refresh token
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.refreshRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.loginResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Refresh token
+      tags:
+      - auth
+  /auth/setup:
+    post:
+      consumes:
+      - application/json
+      description: One-time setup to create the admin password. Returns a token pair
+        on success.
+      parameters:
+      - description: Setup password
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.setupRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.loginResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: Conflict
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Initial setup
+      tags:
+      - auth
+  /backups:
+    get:
+      consumes:
+      - application/json
+      description: Returns a list of all available database backups
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              type: object
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List backups
+      tags:
+      - backup
+    post:
+      consumes:
+      - application/json
+      description: Creates a new database backup and returns its filename, size, and
+        creation timestamp
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Create backup
+      tags:
+      - backup
+  /backups/{filename}:
+    delete:
+      consumes:
+      - application/json
+      description: Deletes a backup file by its filename
+      parameters:
+      - description: Backup filename
+        in: path
+        name: filename
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Delete backup
+      tags:
+      - backup
+  /backups/download/{filename}:
+    get:
+      consumes:
+      - application/json
+      description: Downloads a backup file by its filename as a binary attachment
+      parameters:
+      - description: Backup filename
+        in: path
+        name: filename
+        required: true
+        type: string
+      produces:
+      - application/octet-stream
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Download backup
+      tags:
+      - backup
+  /backups/restore:
+    post:
+      consumes:
+      - application/json
+      description: Restores the database from a specified backup file. Overwrites
+        current database and config files.
+      parameters:
+      - description: Backup filename to restore
+        in: body
+        name: body
+        required: true
+        schema:
+          properties:
+            filename:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Restore backup
+      tags:
+      - backup
+  /bot/detect-chat-id:
+    get:
+      consumes:
+      - application/json
+      description: Queries Telegram API for recent messages to detect and auto-save
+        the chat ID
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Detect Telegram chat ID
+      tags:
+      - bot
+  /bot/setup:
+    post:
+      consumes:
+      - application/json
+      description: Configures and starts the Telegram notification bot with the provided
+        token, chat ID, interval, and label
+      parameters:
+      - description: Bot configuration
+        in: body
+        name: body
+        required: true
+        schema:
+          properties:
+            chat_id:
+              type: string
+            interval:
+              type: integer
+            label:
+              type: string
+            token:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Setup Telegram bot
+      tags:
+      - bot
+  /bot/status:
+    get:
+      consumes:
+      - application/json
+      description: Returns the current Telegram bot status including enabled state,
+        running state, and configuration
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Bot status
+      tags:
+      - bot
+  /bot/test:
+    post:
+      consumes:
+      - application/json
+      description: Sends a test message via the configured Telegram bot
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Test bot notification
+      tags:
+      - bot
+  /bot/toggle:
+    put:
+      consumes:
+      - application/json
+      description: Enables or disables the Telegram notification bot
+      parameters:
+      - description: Enable flag
+        in: body
+        name: body
+        required: true
+        schema:
+          properties:
+            enable:
+              type: boolean
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Toggle bot on/off
+      tags:
+      - bot
+  /config:
+    get:
+      consumes:
+      - application/json
+      description: Returns all application settings
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get all settings
+      tags:
+      - config
+    put:
+      consumes:
+      - application/json
+      description: Updates application settings. Only whitelisted keys are accepted;
+        internal keys (jwt_secret, auth_password_hash) are rejected.
+      parameters:
+      - description: Settings key-value pairs to update
+        in: body
+        name: body
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Update settings
+      tags:
+      - config
+  /config/{key}:
+    get:
+      consumes:
+      - application/json
+      description: Returns the value of a specific setting by key name
+      parameters:
+      - description: Setting key
+        in: path
+        name: key
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get a single setting
+      tags:
+      - config
+  /docker/install:
+    post:
+      consumes:
+      - application/json
+      description: Ensures Docker is installed on the host system
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Install Docker
+      tags:
+      - docker
+  /docker/status:
+    get:
+      consumes:
+      - application/json
+      description: Returns Docker installation and running status along with server
+        version
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Docker status
+      tags:
+      - docker
+  /engine/build:
+    post:
+      consumes:
+      - application/json
+      description: Builds the telemt engine Docker image from source. Supports optional
+        force rebuild
+      parameters:
+      - description: Build options
+        in: body
+        name: body
+        schema:
+          properties:
+            force:
+              type: boolean
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Build engine image
+      tags:
+      - engine
+  /engine/check:
+    post:
+      consumes:
+      - application/json
+      description: Checks remote source for new telemt engine releases and returns
+        updated status
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "502":
+          description: Bad Gateway
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Check for engine updates
+      tags:
+      - engine
+  /engine/releases:
+    get:
+      consumes:
+      - application/json
+      description: Returns a list of available telemt engine releases from the remote
+        source
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              type: object
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List engine releases
+      tags:
+      - engine
+  /engine/status:
+    get:
+      consumes:
+      - application/json
+      description: Returns the telemt engine image status, installed version, and
+        whether it is up to date
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Engine status
+      tags:
+      - engine
+  /engine/update:
+    get:
+      consumes:
+      - application/json
+      description: Returns the current telemt engine version, latest available version,
+        and update availability
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Engine update status
+      tags:
+      - engine
+    post:
+      consumes:
+      - application/json
+      description: Applies a telemt engine update by downloading and installing the
+        specified version
+      parameters:
+      - description: Version to apply
+        in: body
+        name: body
+        required: true
+        schema:
+          properties:
+            commit:
+              type: string
+            version:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Apply engine update
+      tags:
+      - engine
+  /geoblock:
+    get:
+      consumes:
+      - application/json
+      description: Returns the current geo-blocking mode and list of blocked/allowed
+        countries
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get geo-block settings
+      tags:
+      - geoblock
+  /geoblock/add:
+    post:
+      consumes:
+      - application/json
+      description: Adds a country (ISO 3166-1 alpha-2 code) to the geo-block list
+        and applies iptables rules
+      parameters:
+      - description: Country code to add
+        in: body
+        name: body
+        required: true
+        schema:
+          properties:
+            country:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Add country to blocklist
+      tags:
+      - geoblock
+  /geoblock/clear:
+    post:
+      consumes:
+      - application/json
+      description: Removes all countries from the geo-block list and clears iptables
+        rules
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Clear all geo-block rules
+      tags:
+      - geoblock
+  /geoblock/mode:
+    put:
+      consumes:
+      - application/json
+      description: Sets the geo-blocking mode to either blacklist or whitelist and
+        re-applies rules
+      parameters:
+      - description: Mode to set (blacklist or whitelist)
+        in: body
+        name: body
+        required: true
+        schema:
+          properties:
+            mode:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Set geo-block mode
+      tags:
+      - geoblock
+  /geoblock/remove:
+    post:
+      consumes:
+      - application/json
+      description: Removes a country (ISO 3166-1 alpha-2 code) from the geo-block
+        list and re-applies rules
+      parameters:
+      - description: Country code to remove
+        in: body
+        name: body
+        required: true
+        schema:
+          properties:
+            country:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Remove country from blocklist
+      tags:
+      - geoblock
+  /health:
+    get:
+      description: Returns the health status of the service, including version, Docker,
+        and container info
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Health check
+      tags:
+      - health
+  /instances:
+    get:
+      description: Retrieve all proxy instances
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              type: object
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List instances
+      tags:
+      - instances
+    post:
+      consumes:
+      - application/json
+      description: Create a new proxy instance with a port, optional metrics port,
+        and label
+      parameters:
+      - description: Instance configuration
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.addInstanceRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Add an instance
+      tags:
+      - instances
+  /instances/{port}:
+    delete:
+      description: Delete a proxy instance by port. The last instance cannot be removed.
+      parameters:
+      - description: Instance port
+        in: path
+        name: port
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Remove an instance
+      tags:
+      - instances
+  /proxy/logs:
+    get:
+      description: Retrieve proxy container logs. Supports SSE streaming when follow=true.
+      parameters:
+      - description: Number of log lines to return (default 100)
+        in: query
+        name: tail
+        type: integer
+      - description: Enable SSE streaming of log output
+        in: query
+        name: follow
+        type: boolean
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "503":
+          description: Service Unavailable
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Proxy logs
+      tags:
+      - proxy
+  /proxy/reload:
+    post:
+      description: Reload the proxy configuration without restarting the container
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Reload proxy configuration
+      tags:
+      - proxy
+  /proxy/restart:
+    post:
+      description: Restart the proxy container
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Restart proxy
+      tags:
+      - proxy
+  /proxy/start:
+    post:
+      description: Start the proxy container and return links for all enabled secrets
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Start proxy
+      tags:
+      - proxy
+  /proxy/status:
+    get:
+      description: Retrieve the current status of the proxy container
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Proxy status
+      tags:
+      - proxy
+  /proxy/stop:
+    post:
+      description: Stop the proxy container
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Stop proxy
+      tags:
+      - proxy
+  /replication/setup:
+    post:
+      consumes:
+      - application/json
+      description: Configures replication role (master or slave) with optional SSH
+        settings
+      parameters:
+      - description: Replication configuration
+        in: body
+        name: body
+        required: true
+        schema:
+          properties:
+            role:
+              type: string
+            ssh_port:
+              type: integer
+            ssh_user:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Setup replication
+      tags:
+      - replication
+  /replication/slaves:
+    get:
+      consumes:
+      - application/json
+      description: Returns a list of all configured replication slaves
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              type: object
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List replication slaves
+      tags:
+      - replication
+    post:
+      consumes:
+      - application/json
+      description: Registers a new replication slave with host, port, and optional
+        label
+      parameters:
+      - description: Slave configuration
+        in: body
+        name: body
+        required: true
+        schema:
+          properties:
+            host:
+              type: string
+            label:
+              type: string
+            port:
+              type: integer
+          type: object
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Add replication slave
+      tags:
+      - replication
+  /replication/slaves/{host}:
+    delete:
+      consumes:
+      - application/json
+      description: Removes a replication slave by its host address
+      parameters:
+      - description: Slave host address
+        in: path
+        name: host
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Remove replication slave
+      tags:
+      - replication
+  /replication/ssh-key:
+    get:
+      consumes:
+      - application/json
+      description: Returns the SSH public key used for replication
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "503":
+          description: Service Unavailable
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get SSH public key
+      tags:
+      - replication
+  /replication/ssh-keygen:
+    post:
+      consumes:
+      - application/json
+      description: Generates a new SSH key pair for replication and returns the public
+        key
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "503":
+          description: Service Unavailable
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Generate SSH key pair
+      tags:
+      - replication
+  /replication/status:
+    get:
+      consumes:
+      - application/json
+      description: Returns the current replication role, enabled state, and list of
+        slaves
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Replication status
+      tags:
+      - replication
+  /replication/sync:
+    post:
+      consumes:
+      - application/json
+      description: Triggers a configuration sync to all registered replication slaves
+        via SSH/SFTP
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "503":
+          description: Service Unavailable
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Sync to all slaves
+      tags:
+      - replication
+  /replication/test:
+    post:
+      consumes:
+      - application/json
+      description: Tests SSH connectivity to a specified replication slave host
+      parameters:
+      - description: Host to test
+        in: body
+        name: body
+        required: true
+        schema:
+          properties:
+            host:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "503":
+          description: Service Unavailable
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Test SSH connection
+      tags:
+      - replication
+  /scheduler/history:
+    get:
+      consumes:
+      - application/json
+      description: Returns execution history records for all scheduled tasks
+      parameters:
+      - description: 'Max records to return (default: 20, max: 100)'
+        in: query
+        name: limit
+        type: integer
+      - description: 'Records to skip (default: 0)'
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              type: object
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get all execution history
+      tags:
+      - scheduler
+  /scheduler/tasks:
+    get:
+      consumes:
+      - application/json
+      description: Returns all scheduled tasks with their current configuration, enabled
+        state, and schedule
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              type: object
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List scheduler tasks
+      tags:
+      - scheduler
+  /scheduler/tasks/{name}:
+    put:
+      consumes:
+      - application/json
+      description: Updates a scheduled task's enabled state and/or cron schedule
+      parameters:
+      - description: Task name
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: Task update fields
+        in: body
+        name: body
+        required: true
+        schema:
+          properties:
+            enabled:
+              type: boolean
+            schedule:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Update scheduler task
+      tags:
+      - scheduler
+  /scheduler/tasks/{name}/history:
+    get:
+      consumes:
+      - application/json
+      description: Returns execution history records for a specific scheduled task
+      parameters:
+      - description: Task name
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: 'Max records to return (default: 20, max: 100)'
+        in: query
+        name: limit
+        type: integer
+      - description: 'Records to skip (default: 0)'
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              type: object
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get task execution history
+      tags:
+      - scheduler
+  /scheduler/tasks/{name}/run:
+    post:
+      consumes:
+      - application/json
+      description: Triggers immediate execution of a scheduled task and returns the
+        execution record
+      parameters:
+      - description: Task name
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Run scheduler task now
+      tags:
+      - scheduler
+  /secrets:
+    get:
+      description: Retrieve all registered secrets
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              type: object
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List secrets
+      tags:
+      - secrets
+    post:
+      consumes:
+      - application/json
+      description: Create a new secret with a unique label and optional hex secret
+        value
+      parameters:
+      - description: Secret to add
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.addSecretRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Add a secret
+      tags:
+      - secrets
+  /secrets/{label}:
+    delete:
+      description: Delete a secret by its label. Use force=true to remove even if
+        in use.
+      parameters:
+      - description: Secret label
+        in: path
+        name: label
+        required: true
+        type: string
+      - description: Force removal
+        in: query
+        name: force
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Remove a secret
+      tags:
+      - secrets
+    get:
+      description: Retrieve a single secret by its label
+      parameters:
+      - description: Secret label
+        in: path
+        name: label
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get a secret
+      tags:
+      - secrets
+  /secrets/{label}/limits:
+    get:
+      description: Retrieve the current limits (connections, IPs, quota, expiry) for
+        a secret
+      parameters:
+      - description: Secret label
+        in: path
+        name: label
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get secret limits
+      tags:
+      - secrets
+    put:
+      consumes:
+      - application/json
+      description: Configure connection, IP, quota, and expiry limits for a secret
+      parameters:
+      - description: Secret label
+        in: path
+        name: label
+        required: true
+        type: string
+      - description: Limits configuration
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.setLimitsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Set secret limits
+      tags:
+      - secrets
+  /secrets/{label}/link:
+    get:
+      description: Generate the Telegram proxy link for a given secret label
+      parameters:
+      - description: Secret label
+        in: path
+        name: label
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get proxy link
+      tags:
+      - secrets
+  /secrets/{label}/notes:
+    put:
+      consumes:
+      - application/json
+      description: Set or update the notes field for a secret
+      parameters:
+      - description: Secret label
+        in: path
+        name: label
+        required: true
+        type: string
+      - description: Notes content
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.updateNotesRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Update secret notes
+      tags:
+      - secrets
+  /secrets/{label}/qr:
+    get:
+      description: Generate a PNG QR code image for the proxy link associated with
+        the secret
+      parameters:
+      - description: Secret label
+        in: path
+        name: label
+        required: true
+        type: string
+      - description: QR code image size in pixels (64-2048, default 256)
+        in: query
+        name: size
+        type: integer
+      produces:
+      - image/png
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get QR code
+      tags:
+      - secrets
+  /secrets/{label}/reset-traffic:
+    post:
+      description: Reset traffic counters for a specific secret
+      parameters:
+      - description: Secret label
+        in: path
+        name: label
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Reset secret traffic
+      tags:
+      - secrets
+  /secrets/{label}/rotate:
+    post:
+      description: Generate a new secret value for the given label
+      parameters:
+      - description: Secret label
+        in: path
+        name: label
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Rotate a secret
+      tags:
+      - secrets
+  /secrets/{label}/toggle:
+    put:
+      consumes:
+      - application/json
+      description: Enable or disable a secret by label
+      parameters:
+      - description: Secret label
+        in: path
+        name: label
+        required: true
+        type: string
+      - description: Enabled state
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.secretToggleRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Toggle a secret
+      tags:
+      - secrets
+  /secrets/reset-traffic:
+    post:
+      description: Reset traffic counters for all secrets
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Reset all traffic
+      tags:
+      - secrets
+  /system/os:
+    get:
+      consumes:
+      - application/json
+      description: Returns detected OS information including distribution, version,
+        and architecture
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Detect operating system
+      tags:
+      - system
+  /system/service/install:
+    post:
+      consumes:
+      - application/json
+      description: Installs and enables the PopuGate systemd service unit
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Install systemd service
+      tags:
+      - system
+  /system/service/reload:
+    post:
+      consumes:
+      - application/json
+      description: Sends a reload signal to the PopuGate systemd service
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Reload service
+      tags:
+      - system
+  /system/service/restart:
+    post:
+      consumes:
+      - application/json
+      description: Restarts the PopuGate systemd service
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Restart service
+      tags:
+      - system
+  /system/service/status:
+    get:
+      consumes:
+      - application/json
+      description: Returns the current systemd service status (running, stopped, etc.)
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Service status
+      tags:
+      - system
+  /system/service/uninstall:
+    delete:
+      consumes:
+      - application/json
+      description: Stops and removes the PopuGate systemd service unit
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Uninstall systemd service
+      tags:
+      - system
+  /traffic:
+    get:
+      consumes:
+      - application/json
+      description: Returns global traffic statistics (bytes in/out) and per-user traffic
+        breakdown
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get traffic summary
+      tags:
+      - traffic
+  /traffic/{label}:
+    get:
+      consumes:
+      - application/json
+      description: Returns traffic statistics for a specific user identified by label
+      parameters:
+      - description: User label
+        in: path
+        name: label
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get user traffic
+      tags:
+      - traffic
+  /traffic/history:
+    get:
+      consumes:
+      - application/json
+      description: Returns historical traffic records with optional time range filtering
+        and aggregation
+      parameters:
+      - description: 'Start timestamp (Unix epoch, default: 24h ago)'
+        in: query
+        name: start
+        type: integer
+      - description: 'End timestamp (Unix epoch, default: now)'
+        in: query
+        name: end
+        type: integer
+      - description: Filter by user label
+        in: query
+        name: label
+        type: string
+      - description: 'Aggregation mode: none, hour, or day (default: none)'
+        in: query
+        name: aggregate
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "503":
+          description: Service Unavailable
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get traffic history
+      tags:
+      - traffic
+  /traffic/live:
+    get:
+      consumes:
+      - application/json
+      description: Returns real-time connection metrics scraped from the telemt engine
+        Prometheus endpoint
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "503":
+          description: Service Unavailable
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get live traffic metrics
+      tags:
+      - traffic
+  /update/apply:
+    post:
+      consumes:
+      - application/json
+      description: 'Downloads and installs the latest PopuGate update, then triggers
+        a restart. In binary mode: replaces the binary. In Docker mode: pulls a new
+        image and recreates the container.'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Apply PopuGate update
+      tags:
+      - update
+  /update/check:
+    get:
+      consumes:
+      - application/json
+      description: Checks remote source for new PopuGate releases and returns update
+        availability status
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Check for PopuGate updates
+      tags:
+      - update
+  /upstreams:
+    get:
+      description: Retrieve all configured upstream proxies
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              type: object
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List upstreams
+      tags:
+      - upstreams
+    post:
+      consumes:
+      - application/json
+      description: Create a new upstream proxy configuration
+      parameters:
+      - description: Upstream to add
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.addUpstreamRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Add an upstream
+      tags:
+      - upstreams
+  /upstreams/{name}:
+    delete:
+      description: Delete an upstream proxy configuration by name
+      parameters:
+      - description: Upstream name
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Remove an upstream
+      tags:
+      - upstreams
+    put:
+      consumes:
+      - application/json
+      description: Update the configuration of an existing upstream proxy
+      parameters:
+      - description: Upstream name
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: Upstream configuration
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.updateUpstreamRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Update an upstream
+      tags:
+      - upstreams
+  /upstreams/{name}/test:
+    post:
+      description: Run a connectivity test against an existing upstream by name
+      parameters:
+      - description: Upstream name
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Test an upstream
+      tags:
+      - upstreams
+  /upstreams/{name}/toggle:
+    put:
+      consumes:
+      - application/json
+      description: Enable or disable an upstream proxy by name
+      parameters:
+      - description: Upstream name
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: Enabled state
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.upstreamToggleRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Toggle an upstream
+      tags:
+      - upstreams
+  /upstreams/interfaces:
+    get:
+      description: Retrieve the host's active network interfaces and their addresses
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/handler.netIface'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List network interfaces
+      tags:
+      - upstreams
+  /upstreams/test:
+    post:
+      consumes:
+      - application/json
+      description: Test raw upstream configuration without saving it
+      parameters:
+      - description: Upstream configuration to test
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.testUpstreamRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Test upstream configuration
+      tags:
+      - upstreams
+securityDefinitions:
+  BearerAuth:
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

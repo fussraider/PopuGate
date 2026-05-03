@@ -301,3 +301,9 @@ export interface SchedulerHistoryRecord {
   error: string
   output: string
 }
+
+export interface TrafficHistoryRecord {
+  timestamp: number
+  bytes_in: number
+  bytes_out: number
+}

@@ -273,6 +273,8 @@
     "upstream_success_rate_tip": "Percentage of successful upstream connections relative to total attempts.",
     "no_user_metrics": "No active user metrics available.",
     "per_user_traffic": "Per-User Traffic",
+    "history": "Traffic History",
+    "no_history": "No traffic history yet. Data is recorded every minute while the proxy is running.",
     "user_table": {
       "user": "User",
       "in": "In",
@@ -455,6 +457,7 @@
     "telemt_version_placeholder": "e.g. 3.3.39 (leave empty for default)",
     "telemt_commit_placeholder": "e.g. bc69153 (leave empty for default)",
     "save_settings": "Save Settings",
+    "api_docs": "API Docs",
     "reset": "Reset",
     "saving": "Saving...",
     "saved_success": "Settings saved successfully"

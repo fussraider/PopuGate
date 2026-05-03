@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { trafficApi } from '@/api/endpoints'
-import type { GlobalTraffic, UserTraffic, LiveMetrics } from '@/types/models'
+import type { GlobalTraffic, UserTraffic, LiveMetrics, TrafficHistoryRecord } from '@/types/models'
 
 export const useTrafficStore = defineStore('traffic', () => {
   const global = ref<GlobalTraffic | null>(null)
@@ -11,6 +11,8 @@ export const useTrafficStore = defineStore('traffic', () => {
   const liveLoading = ref(false)
   const liveError = ref(false)
   const autoRefresh = ref(true)
+  const history = ref<TrafficHistoryRecord[]>([])
+  const historyLoading = ref(false)
 
   let liveInterval: ReturnType<typeof setInterval> | null = null
 
@@ -34,6 +36,18 @@ export const useTrafficStore = defineStore('traffic', () => {
       liveError.value = true
     } finally {
       liveLoading.value = false
+    }
+  }
+
+  async function loadHistory(start: number, end: number, label?: string, aggregate?: string) {
+    historyLoading.value = true
+    try {
+      const data = await trafficApi.getHistory(start, end, label, aggregate)
+      history.value = data.history ?? []
+    } catch {
+      history.value = []
+    } finally {
+      historyLoading.value = false
     }
   }
 
@@ -64,5 +78,5 @@ export const useTrafficStore = defineStore('traffic', () => {
     liveError.value = false
   }
 
-  return { global, users, live, loading, liveLoading, liveError, autoRefresh, load, loadLive, startAutoRefresh, stopAutoRefresh, toggleAutoRefresh, reset }
+  return { global, users, live, loading, liveLoading, liveError, autoRefresh, history, historyLoading, load, loadLive, loadHistory, startAutoRefresh, stopAutoRefresh, toggleAutoRefresh, reset }
 })

@@ -26,6 +26,15 @@ type updateTaskRequest struct {
 }
 
 // List handles GET /api/v1/scheduler/tasks
+// @Summary      List scheduler tasks
+// @Description  Returns all scheduled tasks with their current configuration, enabled state, and schedule
+// @Tags         scheduler
+// @Accept       json
+// @Produce      json
+// @Success      200  {array}   object
+// @Failure      500  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /scheduler/tasks [get]
 func (h *SchedulerHandler) List(c *gin.Context) {
 	tasks, err := h.svc.ListTasks(c.Request.Context())
 	if err != nil {
@@ -36,12 +45,23 @@ func (h *SchedulerHandler) List(c *gin.Context) {
 }
 
 // Update handles PUT /api/v1/scheduler/tasks/:name
+// @Summary      Update scheduler task
+// @Description  Updates a scheduled task's enabled state and/or cron schedule
+// @Tags         scheduler
+// @Accept       json
+// @Produce      json
+// @Param        name  path  string  true  "Task name"
+// @Param        body  body  object{enabled=bool,schedule=string}  true  "Task update fields"
+// @Success      200  {object}  map[string]string
+// @Failure      400  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /scheduler/tasks/{name} [put]
 func (h *SchedulerHandler) Update(c *gin.Context) {
 	name := c.Param("name")
 
 	var req updateTaskRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		HandleBindError(c, err)
 		return
 	}
 
@@ -59,6 +79,16 @@ func (h *SchedulerHandler) Update(c *gin.Context) {
 }
 
 // RunNow handles POST /api/v1/scheduler/tasks/:name/run
+// @Summary      Run scheduler task now
+// @Description  Triggers immediate execution of a scheduled task and returns the execution record
+// @Tags         scheduler
+// @Accept       json
+// @Produce      json
+// @Param        name  path  string  true  "Task name"
+// @Success      200  {object}  map[string]string
+// @Failure      400  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /scheduler/tasks/{name}/run [post]
 func (h *SchedulerHandler) RunNow(c *gin.Context) {
 	name := c.Param("name")
 
@@ -72,6 +102,18 @@ func (h *SchedulerHandler) RunNow(c *gin.Context) {
 }
 
 // History handles GET /api/v1/scheduler/tasks/:name/history
+// @Summary      Get task execution history
+// @Description  Returns execution history records for a specific scheduled task
+// @Tags         scheduler
+// @Accept       json
+// @Produce      json
+// @Param        name    path  string  true  "Task name"
+// @Param        limit   query  int    false  "Max records to return (default: 20, max: 100)"
+// @Param        offset  query  int    false  "Records to skip (default: 0)"
+// @Success      200  {array}   object
+// @Failure      500  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /scheduler/tasks/{name}/history [get]
 func (h *SchedulerHandler) History(c *gin.Context) {
 	name := c.Param("name")
 	limit, offset := getPagination(c)
@@ -88,6 +130,17 @@ func (h *SchedulerHandler) History(c *gin.Context) {
 }
 
 // AllHistory handles GET /api/v1/scheduler/history
+// @Summary      Get all execution history
+// @Description  Returns execution history records for all scheduled tasks
+// @Tags         scheduler
+// @Accept       json
+// @Produce      json
+// @Param        limit   query  int    false  "Max records to return (default: 20, max: 100)"
+// @Param        offset  query  int    false  "Records to skip (default: 0)"
+// @Success      200  {array}   object
+// @Failure      500  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /scheduler/history [get]
 func (h *SchedulerHandler) AllHistory(c *gin.Context) {
 	limit, offset := getPagination(c)
 

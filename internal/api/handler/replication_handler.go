@@ -29,6 +29,14 @@ func (h *ReplicationHandler) SetReplicationService(svc *service.ReplicationServi
 }
 
 // Status handles GET /api/v1/replication/status
+// @Summary      Replication status
+// @Description  Returns the current replication role, enabled state, and list of slaves
+// @Tags         replication
+// @Accept       json
+// @Produce      json
+// @Success      200  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /replication/status [get]
 func (h *ReplicationHandler) Status(c *gin.Context) {
 	settings, _ := h.settings.Load(c.Request.Context())
 	slaves, _ := h.slaves.List(c.Request.Context())
@@ -41,21 +49,27 @@ func (h *ReplicationHandler) Status(c *gin.Context) {
 }
 
 type replicationSetupRequest struct {
-	Role    string `json:"role" binding:"required"`
+	Role    string `json:"role" binding:"required,oneof=master slave"`
 	SSHUser string `json:"ssh_user"`
-	SSHPort int    `json:"ssh_port"`
+	SSHPort int    `json:"ssh_port" binding:"omitempty,min=1,max=65535"`
 }
 
 // Setup handles POST /api/v1/replication/setup
+// @Summary      Setup replication
+// @Description  Configures replication role (master or slave) with optional SSH settings
+// @Tags         replication
+// @Accept       json
+// @Produce      json
+// @Param        body  body  object{role=string,ssh_user=string,ssh_port=int}  true  "Replication configuration"
+// @Success      200  {object}  map[string]string
+// @Failure      400  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /replication/setup [post]
 func (h *ReplicationHandler) Setup(c *gin.Context) {
 	var req replicationSetupRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	if req.Role != "master" && req.Role != "slave" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "role must be 'master' or 'slave'"})
+		HandleBindError(c, err)
 		return
 	}
 
@@ -80,15 +94,25 @@ func (h *ReplicationHandler) Setup(c *gin.Context) {
 
 type addSlaveRequest struct {
 	Host  string `json:"host" binding:"required"`
-	Port  int    `json:"port"`
+	Port  int    `json:"port" binding:"omitempty,min=1,max=65535"`
 	Label string `json:"label"`
 }
 
 // AddSlave handles POST /api/v1/replication/slaves
+// @Summary      Add replication slave
+// @Description  Registers a new replication slave with host, port, and optional label
+// @Tags         replication
+// @Accept       json
+// @Produce      json
+// @Param        body  body  object{host=string,port=int,label=string}  true  "Slave configuration"
+// @Success      201  {object}  map[string]string
+// @Failure      400  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /replication/slaves [post]
 func (h *ReplicationHandler) AddSlave(c *gin.Context) {
 	var req addSlaveRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		HandleBindError(c, err)
 		return
 	}
 
@@ -116,6 +140,16 @@ func (h *ReplicationHandler) AddSlave(c *gin.Context) {
 }
 
 // RemoveSlave handles DELETE /api/v1/replication/slaves/:host
+// @Summary      Remove replication slave
+// @Description  Removes a replication slave by its host address
+// @Tags         replication
+// @Accept       json
+// @Produce      json
+// @Param        host  path  string  true  "Slave host address"
+// @Success      200  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /replication/slaves/{host} [delete]
 func (h *ReplicationHandler) RemoveSlave(c *gin.Context) {
 	host := c.Param("host")
 	if err := h.slaves.Delete(c.Request.Context(), host); err != nil {
@@ -126,6 +160,15 @@ func (h *ReplicationHandler) RemoveSlave(c *gin.Context) {
 }
 
 // ListSlaves handles GET /api/v1/replication/slaves
+// @Summary      List replication slaves
+// @Description  Returns a list of all configured replication slaves
+// @Tags         replication
+// @Accept       json
+// @Produce      json
+// @Success      200  {array}   object
+// @Failure      500  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /replication/slaves [get]
 func (h *ReplicationHandler) ListSlaves(c *gin.Context) {
 	slaves, err := h.slaves.List(c.Request.Context())
 	if err != nil {
@@ -136,6 +179,15 @@ func (h *ReplicationHandler) ListSlaves(c *gin.Context) {
 }
 
 // Sync handles POST /api/v1/replication/sync
+// @Summary      Sync to all slaves
+// @Description  Triggers a configuration sync to all registered replication slaves via SSH/SFTP
+// @Tags         replication
+// @Accept       json
+// @Produce      json
+// @Success      200  {object}  map[string]string
+// @Failure      503  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /replication/sync [post]
 func (h *ReplicationHandler) Sync(c *gin.Context) {
 	if h.replSvc == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "replication service not available"})
@@ -156,6 +208,18 @@ func (h *ReplicationHandler) Sync(c *gin.Context) {
 }
 
 // Test handles POST /api/v1/replication/test
+// @Summary      Test SSH connection
+// @Description  Tests SSH connectivity to a specified replication slave host
+// @Tags         replication
+// @Accept       json
+// @Produce      json
+// @Param        body  body  object{host=string}  true  "Host to test"
+// @Success      200  {object}  map[string]string
+// @Failure      400  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Failure      503  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /replication/test [post]
 func (h *ReplicationHandler) Test(c *gin.Context) {
 	if h.replSvc == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "replication service not available"})
@@ -166,7 +230,7 @@ func (h *ReplicationHandler) Test(c *gin.Context) {
 		Host string `json:"host" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		HandleBindError(c, err)
 		return
 	}
 
@@ -179,6 +243,16 @@ func (h *ReplicationHandler) Test(c *gin.Context) {
 }
 
 // GetSSHKey handles GET /api/v1/replication/ssh-key
+// @Summary      Get SSH public key
+// @Description  Returns the SSH public key used for replication
+// @Tags         replication
+// @Accept       json
+// @Produce      json
+// @Success      200  {object}  map[string]string
+// @Failure      404  {object}  map[string]string
+// @Failure      503  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /replication/ssh-key [get]
 func (h *ReplicationHandler) GetSSHKey(c *gin.Context) {
 	if h.replSvc == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "replication service not available"})
@@ -194,6 +268,16 @@ func (h *ReplicationHandler) GetSSHKey(c *gin.Context) {
 }
 
 // SSHKeygen handles POST /api/v1/replication/ssh-keygen
+// @Summary      Generate SSH key pair
+// @Description  Generates a new SSH key pair for replication and returns the public key
+// @Tags         replication
+// @Accept       json
+// @Produce      json
+// @Success      200  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Failure      503  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /replication/ssh-keygen [post]
 func (h *ReplicationHandler) SSHKeygen(c *gin.Context) {
 	if h.replSvc == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "replication service not available"})

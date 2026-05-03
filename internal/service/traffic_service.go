@@ -238,6 +238,15 @@ func (s *TrafficService) Flush(ctx context.Context) error {
 		return fmt.Errorf("flush traffic: %w", err)
 	}
 
+	// Record history (non-critical)
+	historyUsers := make(map[string][2]int64, len(userDeltas))
+	for label, snap := range userDeltas {
+		historyUsers[label] = [2]int64{snap.BytesIn, snap.BytesOut}
+	}
+	if err := s.traffic.InsertHistoryBatch(ctx, time.Now().Unix(), globalDeltaIn, globalDeltaOut, historyUsers); err != nil {
+		trafficLog.Warnf("failed to record traffic history: %v", err)
+	}
+
 	trafficLog.Debugf("flush ok: global ↓%d ↑%d, users=%d", globalDeltaIn, globalDeltaOut, len(userDeltas))
 	return nil
 }
@@ -297,6 +306,18 @@ func (s *TrafficService) CheckQuotas(ctx context.Context) {
 				}
 			}
 		}
+	}
+}
+
+// GetHistory returns traffic history records for the given time range and label.
+func (s *TrafficService) GetHistory(ctx context.Context, start, end int64, label string, aggregate string) ([]model.TrafficHistoryRecord, error) {
+	switch aggregate {
+	case "hour":
+		return s.traffic.GetAggregatedHistory(ctx, start, end, label, 3600)
+	case "day":
+		return s.traffic.GetAggregatedHistory(ctx, start, end, label, 86400)
+	default:
+		return s.traffic.GetHistory(ctx, start, end, label)
 	}
 }
 

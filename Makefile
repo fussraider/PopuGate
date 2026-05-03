@@ -1,4 +1,4 @@
-.PHONY: build test lint clean
+.PHONY: build test lint clean swag tidy fmt
 
 BINARY=popugate
 VERSION?=$(shell git describe --tags --exact-match 2>/dev/null || git rev-parse --short HEAD 2>/dev/null || echo dev)
@@ -24,6 +24,9 @@ build-linux-amd64:
 
 build-linux-arm64:
 	GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o bin/$(BINARY)-linux-arm64 ./cmd/popugate/
+
+swag:
+	swag init -g cmd/popugate/server.go -o docs/ --parseInternal
 
 tidy:
 	go mod tidy

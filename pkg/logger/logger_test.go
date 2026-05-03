@@ -1,8 +1,11 @@
 package logger
 
 import (
+	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/gin-gonic/gin"
 )
 
 func TestFatalf_PanicsInsteadOfExit(t *testing.T) {
@@ -102,4 +105,87 @@ func TestWithScope(t *testing.T) {
 	if l.scope != "test" {
 		t.Errorf("expected scope 'test', got %q", l.scope)
 	}
+}
+
+func TestColorize(t *testing.T) {
+	tests := []struct {
+		level Level
+		want  string
+	}{
+		{LevelDebug, ansiBlue + "DEBUG" + ansiReset},
+		{LevelInfo, ansiGreen + "INFO" + ansiReset},
+		{LevelWarn, ansiYellow + "WARN" + ansiReset},
+		{LevelError, ansiRed + "ERROR" + ansiReset},
+		{LevelFatal, ansiRed + ansiBold + "FATAL" + ansiReset},
+	}
+	for _, tt := range tests {
+		got := colorize(tt.level)
+		if got != tt.want {
+			t.Errorf("colorize(%s) = %q, want %q", tt.level, got, tt.want)
+		}
+	}
+}
+
+func TestLevelEmoji(t *testing.T) {
+	origNoColor := noColor
+	defer func() { noColor = origNoColor }()
+
+	// With colors enabled
+	noColor = false
+	if emoji := levelEmoji(LevelDebug); emoji != emojiDebug {
+		t.Errorf("levelEmoji(Debug) = %q, want %q", emoji, emojiDebug)
+	}
+	if emoji := levelEmoji(LevelInfo); emoji != emojiInfo {
+		t.Errorf("levelEmoji(Info) = %q, want %q", emoji, emojiInfo)
+	}
+
+	// With noColor
+	noColor = true
+	if emoji := levelEmoji(LevelDebug); emoji != "" {
+		t.Errorf("levelEmoji with noColor should return empty, got %q", emoji)
+	}
+}
+
+func TestGinLogger(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.Use(GinLogger())
+	r.GET("/test", func(c *gin.Context) {
+		c.JSON(200, gin.H{"ok": true})
+	})
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/test", nil)
+	r.ServeHTTP(w, req)
+
+	if w.Code != 200 {
+		t.Errorf("status = %d, want 200", w.Code)
+	}
+}
+
+func TestWrite_SuppressesBelowLevel(t *testing.T) {
+	origLevel := GetLevel()
+	defer SetLevel(origLevel)
+
+	SetLevel(LevelError)
+	// These should not panic or fail - they're suppressed
+	Debugf("should be suppressed")
+	Infof("should be suppressed")
+	Warnf("should be suppressed")
+	// This should actually write
+	Errorf("should be visible")
+}
+
+func TestScopedLogger_Methods(t *testing.T) {
+	origLevel := GetLevel()
+	defer SetLevel(origLevel)
+
+	SetLevel(LevelDebug)
+	l := WithScope("testscope")
+
+	// Should not panic
+	l.Debugf("debug msg: %d", 1)
+	l.Infof("info msg: %s", "hello")
+	l.Warnf("warn msg")
+	l.Errorf("error msg")
 }

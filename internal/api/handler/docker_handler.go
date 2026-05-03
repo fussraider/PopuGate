@@ -26,6 +26,15 @@ func NewDockerHandler(docker *dockerutil.DockerClient, dockerSvc *service.Docker
 }
 
 // Install handles POST /api/v1/docker/install
+// @Summary      Install Docker
+// @Description  Ensures Docker is installed on the host system
+// @Tags         docker
+// @Accept       json
+// @Produce      json
+// @Success      200  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /docker/install [post]
 func (h *DockerHandler) Install(c *gin.Context) {
 	ctx := c.Request.Context()
 	if err := dockerutil.EnsureDockerInstalled(ctx); err != nil {
@@ -36,6 +45,14 @@ func (h *DockerHandler) Install(c *gin.Context) {
 }
 
 // Status handles GET /api/v1/docker/status
+// @Summary      Docker status
+// @Description  Returns Docker installation and running status along with server version
+// @Tags         docker
+// @Accept       json
+// @Produce      json
+// @Success      200  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /docker/status [get]
 func (h *DockerHandler) Status(c *gin.Context) {
 	ctx := c.Request.Context()
 	installed := h.docker.IsInstalled(ctx)
@@ -53,6 +70,14 @@ func (h *DockerHandler) Status(c *gin.Context) {
 }
 
 // EngineStatus handles GET /api/v1/engine/status
+// @Summary      Engine status
+// @Description  Returns the telemt engine image status, installed version, and whether it is up to date
+// @Tags         engine
+// @Accept       json
+// @Produce      json
+// @Success      200  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /engine/status [get]
 func (h *DockerHandler) EngineStatus(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -110,6 +135,16 @@ func (h *DockerHandler) EngineStatus(c *gin.Context) {
 }
 
 // Build handles POST /api/v1/engine/build
+// @Summary      Build engine image
+// @Description  Builds the telemt engine Docker image from source. Supports optional force rebuild
+// @Tags         engine
+// @Accept       json
+// @Produce      json
+// @Param        body  body  object{force=bool}  false  "Build options"
+// @Success      200  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /engine/build [post]
 func (h *DockerHandler) Build(c *gin.Context) {
 	if h.dockerSvc == nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "docker service not available"})

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"time"
 
 	"github.com/fussraider/PopuGate/internal/model"
 )
@@ -178,4 +179,84 @@ func (s *TrafficStore) FlushTraffic(ctx context.Context, global model.TrafficSna
 	}
 
 	return tx.Commit()
+}
+
+// InsertHistoryBatch persists traffic deltas as history records in a single transaction.
+func (s *TrafficStore) InsertHistoryBatch(ctx context.Context, ts int64, globalIn, globalOut int64, users map[string][2]int64) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin history tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.PrepareContext(ctx, `
+		INSERT INTO traffic_history (timestamp, bytes_in, bytes_out, label) VALUES (?, ?, ?, ?)
+	`)
+	if err != nil {
+		return fmt.Errorf("prepare history insert: %w", err)
+	}
+	defer stmt.Close()
+
+	if globalIn > 0 || globalOut > 0 {
+		if _, err := stmt.ExecContext(ctx, ts, globalIn, globalOut, ""); err != nil {
+			return fmt.Errorf("insert global history: %w", err)
+		}
+	}
+
+	for label, deltas := range users {
+		if deltas[0] > 0 || deltas[1] > 0 {
+			if _, err := stmt.ExecContext(ctx, ts, deltas[0], deltas[1], label); err != nil {
+				return fmt.Errorf("insert user history %s: %w", label, err)
+			}
+		}
+	}
+
+	return tx.Commit()
+}
+
+// GetHistory returns traffic history records for the given time range and label.
+func (s *TrafficStore) GetHistory(ctx context.Context, start, end int64, label string) ([]model.TrafficHistoryRecord, error) {
+	query := `SELECT timestamp, bytes_in, bytes_out FROM traffic_history WHERE timestamp >= ? AND timestamp <= ? AND label = ? ORDER BY timestamp ASC`
+	rows, err := s.db.QueryContext(ctx, query, start, end, label)
+	if err != nil {
+		return nil, fmt.Errorf("get history: %w", err)
+	}
+	defer rows.Close()
+
+	var records []model.TrafficHistoryRecord
+	for rows.Next() {
+		var r model.TrafficHistoryRecord
+		if err := rows.Scan(&r.Timestamp, &r.BytesIn, &r.BytesOut); err != nil {
+			return nil, fmt.Errorf("scan history: %w", err)
+		}
+		records = append(records, r)
+	}
+	return records, rows.Err()
+}
+
+// GetAggregatedHistory returns traffic history aggregated by hour or day.
+func (s *TrafficStore) GetAggregatedHistory(ctx context.Context, start, end int64, label string, groupSeconds int64) ([]model.TrafficHistoryRecord, error) {
+	query := fmt.Sprintf(`SELECT (timestamp / %d) * %d AS ts, SUM(bytes_in), SUM(bytes_out) FROM traffic_history WHERE timestamp >= ? AND timestamp <= ? AND label = ? GROUP BY ts ORDER BY ts ASC`, groupSeconds, groupSeconds)
+	rows, err := s.db.QueryContext(ctx, query, start, end, label)
+	if err != nil {
+		return nil, fmt.Errorf("get aggregated history: %w", err)
+	}
+	defer rows.Close()
+
+	var records []model.TrafficHistoryRecord
+	for rows.Next() {
+		var r model.TrafficHistoryRecord
+		if err := rows.Scan(&r.Timestamp, &r.BytesIn, &r.BytesOut); err != nil {
+			return nil, fmt.Errorf("scan aggregated history: %w", err)
+		}
+		records = append(records, r)
+	}
+	return records, rows.Err()
+}
+
+// CleanOldHistory deletes traffic history records older than maxAge.
+func (s *TrafficStore) CleanOldHistory(ctx context.Context, maxAge time.Duration) error {
+	cutoff := time.Now().Add(-maxAge).Unix()
+	_, err := s.db.ExecContext(ctx, `DELETE FROM traffic_history WHERE timestamp < ?`, cutoff)
+	return err
 }

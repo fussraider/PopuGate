@@ -54,6 +54,15 @@ func NewConfigHandler(settings *store.SettingsStore) *ConfigHandler {
 }
 
 // GetAll handles GET /api/v1/config
+// @Summary      Get all settings
+// @Description  Returns all application settings
+// @Tags         config
+// @Accept       json
+// @Produce      json
+// @Success      200  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /config [get]
 func (h *ConfigHandler) GetAll(c *gin.Context) {
 	settings, err := h.settings.Load(c.Request.Context())
 	if err != nil {
@@ -64,6 +73,17 @@ func (h *ConfigHandler) GetAll(c *gin.Context) {
 }
 
 // Update handles PUT /api/v1/config
+// @Summary      Update settings
+// @Description  Updates application settings. Only whitelisted keys are accepted; internal keys (jwt_secret, auth_password_hash) are rejected.
+// @Tags         config
+// @Accept       json
+// @Produce      json
+// @Param        body  body  map[string]any  true  "Settings key-value pairs to update"
+// @Success      200  {object}  map[string]string
+// @Failure      400  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /config [put]
 func (h *ConfigHandler) Update(c *gin.Context) {
 	var updates map[string]any
 	if err := c.ShouldBindJSON(&updates); err != nil {
@@ -113,6 +133,16 @@ func (h *ConfigHandler) Update(c *gin.Context) {
 }
 
 // GetKey handles GET /api/v1/config/:key
+// @Summary      Get a single setting
+// @Description  Returns the value of a specific setting by key name
+// @Tags         config
+// @Accept       json
+// @Produce      json
+// @Param        key  path  string  true  "Setting key"
+// @Success      200  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /config/{key} [get]
 func (h *ConfigHandler) GetKey(c *gin.Context) {
 	key := c.Param("key")
 	value, err := h.settings.Get(c.Request.Context(), key)

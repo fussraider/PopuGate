@@ -34,6 +34,14 @@ func (h *ProxyHandler) SetDockerClient(d *dockerutil.DockerClient) {
 }
 
 // Start handles POST /api/v1/proxy/start
+// @Summary      Start proxy
+// @Description  Start the proxy container and return links for all enabled secrets
+// @Tags         proxy
+// @Produce      json
+// @Success      200  {object}  map[string]interface{}
+// @Failure      500  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /proxy/start [post]
 func (h *ProxyHandler) Start(c *gin.Context) {
 	if err := h.container.Start(c.Request.Context()); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
@@ -76,6 +84,14 @@ func (h *ProxyHandler) Start(c *gin.Context) {
 }
 
 // Stop handles POST /api/v1/proxy/stop
+// @Summary      Stop proxy
+// @Description  Stop the proxy container
+// @Tags         proxy
+// @Produce      json
+// @Success      200  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /proxy/stop [post]
 func (h *ProxyHandler) Stop(c *gin.Context) {
 	if err := h.container.Stop(c.Request.Context()); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
@@ -85,6 +101,14 @@ func (h *ProxyHandler) Stop(c *gin.Context) {
 }
 
 // Restart handles POST /api/v1/proxy/restart
+// @Summary      Restart proxy
+// @Description  Restart the proxy container
+// @Tags         proxy
+// @Produce      json
+// @Success      200  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /proxy/restart [post]
 func (h *ProxyHandler) Restart(c *gin.Context) {
 	if err := h.container.Restart(c.Request.Context()); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
@@ -94,6 +118,14 @@ func (h *ProxyHandler) Restart(c *gin.Context) {
 }
 
 // Reload handles POST /api/v1/proxy/reload
+// @Summary      Reload proxy configuration
+// @Description  Reload the proxy configuration without restarting the container
+// @Tags         proxy
+// @Produce      json
+// @Success      200  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /proxy/reload [post]
 func (h *ProxyHandler) Reload(c *gin.Context) {
 	if err := h.container.Reload(c.Request.Context()); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
@@ -103,6 +135,14 @@ func (h *ProxyHandler) Reload(c *gin.Context) {
 }
 
 // Status handles GET /api/v1/proxy/status
+// @Summary      Proxy status
+// @Description  Retrieve the current status of the proxy container
+// @Tags         proxy
+// @Produce      json
+// @Success      200  {object}  map[string]interface{}
+// @Failure      500  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /proxy/status [get]
 func (h *ProxyHandler) Status(c *gin.Context) {
 	status, err := h.container.Status(c.Request.Context())
 	if err != nil {
@@ -112,7 +152,18 @@ func (h *ProxyHandler) Status(c *gin.Context) {
 	c.JSON(http.StatusOK, status)
 }
 
-// Logs handles GET /api/v1/proxy/logs (supports SSE when follow=true)
+// Logs handles GET /api/v1/proxy/logs
+// @Summary      Proxy logs
+// @Description  Retrieve proxy container logs. Supports SSE streaming when follow=true.
+// @Tags         proxy
+// @Produce      plain
+// @Param        tail    query  int     false  "Number of log lines to return (default 100)"
+// @Param        follow  query  bool    false  "Enable SSE streaming of log output"
+// @Success      200  {string}  string
+// @Failure      500   {object}  map[string]string
+// @Failure      503   {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /proxy/logs [get]
 func (h *ProxyHandler) Logs(c *gin.Context) {
 	if h.docker == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "docker not available"})

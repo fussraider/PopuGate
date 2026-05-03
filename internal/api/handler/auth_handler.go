@@ -37,6 +37,18 @@ type loginResponse struct {
 }
 
 // Login handles POST /api/v1/auth/login
+// @Summary      Login
+// @Description  Authenticate with username and password to obtain an access/refresh token pair
+// @Tags         auth
+// @Accept       json
+// @Produce      json
+// @Param        body  body  loginRequest  true  "Login credentials"
+// @Success      200  {object}  loginResponse
+// @Failure      400  {object}  map[string]string
+// @Failure      401  {object}  map[string]string
+// @Failure      403  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Router       /auth/login [post]
 func (h *AuthHandler) Login(c *gin.Context) {
 	var req loginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -85,6 +97,17 @@ type refreshRequest struct {
 }
 
 // Refresh handles POST /api/v1/auth/refresh
+// @Summary      Refresh token
+// @Description  Exchange a valid refresh token for a new access/refresh token pair
+// @Tags         auth
+// @Accept       json
+// @Produce      json
+// @Param        body  body  refreshRequest  true  "Refresh token"
+// @Success      200  {object}  loginResponse
+// @Failure      400  {object}  map[string]string
+// @Failure      401  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Router       /auth/refresh [post]
 func (h *AuthHandler) Refresh(c *gin.Context) {
 	var req refreshRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -148,6 +171,15 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 }
 
 // Logout handles POST /api/v1/auth/logout
+// @Summary      Logout
+// @Description  Revoke the current access token and optionally a refresh token from the body
+// @Tags         auth
+// @Accept       json
+// @Produce      json
+// @Param        body  body  refreshRequest  false  "Refresh token to revoke"
+// @Success      200  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /auth/logout [post]
 func (h *AuthHandler) Logout(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -201,7 +233,18 @@ type setupRequest struct {
 	Password string `json:"password" binding:"required,min=8"`
 }
 
-// Setup handles POST /api/v1/auth/setup (no auth, one-time only)
+// Setup handles POST /api/v1/auth/setup
+// @Summary      Initial setup
+// @Description  One-time setup to create the admin password. Returns a token pair on success.
+// @Tags         auth
+// @Accept       json
+// @Produce      json
+// @Param        body  body  setupRequest  true  "Setup password"
+// @Success      200  {object}  loginResponse
+// @Failure      400  {object}  map[string]string
+// @Failure      409  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Router       /auth/setup [post]
 func (h *AuthHandler) Setup(c *gin.Context) {
 	// Fast check without lock
 	if h.setupDone {
@@ -271,10 +314,22 @@ func (h *AuthHandler) Setup(c *gin.Context) {
 }
 
 // ChangePassword handles PUT /api/v1/auth/password
+// @Summary      Change password
+// @Description  Update the admin password by providing the current and new password
+// @Tags         auth
+// @Accept       json
+// @Produce      json
+// @Param        body  body  passwordRequest  true  "Current and new password"
+// @Success      200  {object}  map[string]string
+// @Failure      400  {object}  map[string]string
+// @Failure      401  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /auth/password [put]
 func (h *AuthHandler) ChangePassword(c *gin.Context) {
 	var req passwordRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		HandleBindError(c, err)
 		return
 	}
 

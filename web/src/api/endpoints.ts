@@ -29,6 +29,7 @@ import type {
   ServiceStatus,
   SchedulerTask,
   SchedulerHistoryRecord,
+  TrafficHistoryRecord,
 } from '@/types/models'
 
 // ─── Auth ──────────────────────────────────────────────────────
@@ -190,6 +191,10 @@ export const trafficApi = {
   getLive: () => api.get<LiveMetrics>('/traffic/live', { _silent: true } as any).then((r) => r.data),
   getUser: (label: string) =>
     api.get<UserTraffic>(`/traffic/${label}`).then((r) => r.data),
+  getHistory: (start: number, end: number, label?: string, aggregate?: string) =>
+    api.get<{ history: TrafficHistoryRecord[] }>('/traffic/history', {
+      params: { start, end, label: label || undefined, aggregate: aggregate || 'none' },
+    }).then((r) => r.data),
 }
 
 // ─── Bot ───────────────────────────────────────────────────────

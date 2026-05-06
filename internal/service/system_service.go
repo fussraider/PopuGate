@@ -10,6 +10,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/fussraider/PopuGate/internal/model"
+	"github.com/fussraider/PopuGate/pkg/fmtutil"
 	"github.com/fussraider/PopuGate/pkg/logger"
 )
 
@@ -23,7 +25,13 @@ func CheckResources(ctx context.Context, notify NotifyFunc) error {
 	if res == nil {
 		return fmt.Errorf("failed to get system resources")
 	}
+	checkResourcesWithStats(ctx, res, notify)
+	return nil
+}
 
+// checkResourcesWithStats applies threshold checks against the provided stats.
+// Extracted for unit-testability without requiring real system calls.
+func checkResourcesWithStats(ctx context.Context, res *model.SystemResources, notify NotifyFunc) {
 	alertMu.Lock()
 	defer alertMu.Unlock()
 
@@ -34,7 +42,7 @@ func CheckResources(ctx context.Context, notify NotifyFunc) error {
 	if res.MemoryTotal > 0 {
 		memPct := float64(res.MemoryUsed) / float64(res.MemoryTotal) * 100
 		if memPct > 95 && now.Sub(lastAlertTime["memory"]) > alertCooldown {
-			notify(ctx, "🚨 *%s* High Memory Usage: %.1f%% (%s/%s)", memPct, formatBytes(res.MemoryUsed), formatBytes(res.MemoryTotal))
+			notify(ctx, "🚨 *%s* High Memory Usage: %.1f%% (%s/%s)", memPct, fmtutil.FormatBytes(res.MemoryUsed), fmtutil.FormatBytes(res.MemoryTotal))
 			lastAlertTime["memory"] = now
 		}
 	}
@@ -43,25 +51,10 @@ func CheckResources(ctx context.Context, notify NotifyFunc) error {
 	if res.DiskTotal > 0 {
 		diskPct := float64(res.DiskUsed) / float64(res.DiskTotal) * 100
 		if diskPct > 90 && now.Sub(lastAlertTime["disk"]) > alertCooldown {
-			notify(ctx, "🚨 *%s* High Disk Usage: %.1f%% (%s/%s)", diskPct, formatBytes(res.DiskUsed), formatBytes(res.DiskTotal))
+			notify(ctx, "🚨 *%s* High Disk Usage: %.1f%% (%s/%s)", diskPct, fmtutil.FormatBytes(res.DiskUsed), fmtutil.FormatBytes(res.DiskTotal))
 			lastAlertTime["disk"] = now
 		}
 	}
-
-	return nil
-}
-
-func formatBytes(b uint64) string {
-	const unit = 1024
-	if b < unit {
-		return fmt.Sprintf("%d B", b)
-	}
-	div, exp := uint64(unit), 0
-	for n := b / unit; n >= unit; n /= unit {
-		div *= unit
-		exp++
-	}
-	return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), "KMGTPE"[exp])
 }
 
 // OSType represents the details of the host OS.

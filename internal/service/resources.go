@@ -27,10 +27,14 @@ func dataDir() string {
 	return "."
 }
 
-// procStat holds parsed /proc/stat CPU fields.
+// procStat holds parsed CPU usage fields.
+// When direct is true, the usage percentage is already computed (e.g. on macOS
+// via `top -l 2`) and stored in usagePct; the idle/total fields are unused.
 type procStat struct {
-	idle  uint64
-	total uint64
+	idle     uint64
+	total    uint64
+	direct   bool    // true when usagePct is already computed
+	usagePct float64 // valid only when direct == true
 }
 
 func readCPUUsage() float64 {
@@ -39,11 +43,10 @@ func readCPUUsage() float64 {
 		return 0
 	}
 
-	// On macOS, parseProcStat might already return the current usage via top -l 2.
-	// In that case, we don't need the second sample and delta.
-	// We check if total is 1000, which is our "fake" indicator for macOS.
-	if s1.total == 1000 {
-		return float64(1000-s1.idle) / 10
+	// When the platform (e.g. macOS) already provides a ready-made percentage,
+	// return it directly without a second sample.
+	if s1.direct {
+		return s1.usagePct
 	}
 
 	time.Sleep(time.Second)

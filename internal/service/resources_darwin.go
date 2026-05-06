@@ -102,14 +102,14 @@ func readDiskUsage(r *model.SystemResources, path string) {
 }
 
 func parseProcStat() (*procStat, error) {
-	// On macOS we use top -l 2 to get a more accurate delta of CPU usage.
-	// The first sample of top is often stats since boot, the second is the current delta.
+	// Use `top -l 2` to get a per-interval CPU delta (the first sample reflects
+	// stats since boot; the second reflects the current measurement window).
 	out, err := exec.Command("top", "-l", "2", "-n", "0", "-F", "-R").Output()
 	if err != nil {
 		return nil, err
 	}
 
-	// We only need the last "CPU usage" line from the output
+	// Keep only the last "CPU usage:" line — that is the delta sample.
 	lines := strings.Split(string(out), "\n")
 	var lastCPUUsage string
 	for _, line := range lines {
@@ -118,41 +118,26 @@ func parseProcStat() (*procStat, error) {
 		}
 	}
 
-	if lastCPUUsage != "" {
-		parts := strings.Split(lastCPUUsage, ":")
-		if len(parts) >= 2 {
-			usageParts := strings.Split(parts[1], ",")
-			for _, p := range usageParts {
-				if strings.Contains(p, "idle") {
-					p = strings.TrimSpace(p)
-					idleStr := strings.Fields(p)[0]
-					idleStr = strings.TrimSuffix(idleStr, "%")
-					idlePct, err := strconv.ParseFloat(idleStr, 64)
-					if err != nil {
-						return nil, err
-					}
+	if lastCPUUsage == "" {
+		return nil, fmt.Errorf("could not parse CPU usage from top output")
+	}
 
-					// Return "fake" ticks that represent this percentage.
-					// Since we are getting a delta from top -l 2, we can just return it
-					// in a way that readCPUUsage will correctly calculate it.
-					// readCPUUsage expects: (dTotal - dIdle) / dTotal * 100
-					// If we return total=1000 and idle=idlePct*10, then:
-					// (1000 - idlePct*10) / 1000 * 100 = (100 - idlePct) = usagePct.
-					// But readCPUUsage does delta between two calls!
-					// So we need to make sure the delta works.
-
-					// Actually, if we use top -l 2, we already have the percentage.
-					// We can bypass the delta logic in readCPUUsage if we wanted,
-					// but let's try to fit into it.
-
-					return &procStat{
-						idle:  uint64(idlePct * 10),
-						total: 1000,
-					}, nil
-				}
+	parts := strings.SplitN(lastCPUUsage, ":", 2)
+	if len(parts) < 2 {
+		return nil, fmt.Errorf("unexpected top output format")
+	}
+	for _, p := range strings.Split(parts[1], ",") {
+		if strings.Contains(p, "idle") {
+			idleStr := strings.TrimSuffix(strings.Fields(strings.TrimSpace(p))[0], "%")
+			idlePct, err := strconv.ParseFloat(idleStr, 64)
+			if err != nil {
+				return nil, fmt.Errorf("parse idle pct: %w", err)
 			}
+			// top -l 2 already gives us a percentage for the current interval,
+			// so return it directly via the direct flag.
+			return &procStat{direct: true, usagePct: 100 - idlePct}, nil
 		}
 	}
 
-	return nil, fmt.Errorf("could not parse CPU usage")
+	return nil, fmt.Errorf("idle field not found in top output")
 }

@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/fussraider/PopuGate/internal/store"
+	"github.com/fussraider/PopuGate/pkg/fmtutil"
 	"github.com/fussraider/PopuGate/pkg/logger"
 )
 
@@ -341,22 +342,12 @@ func (b *Bot) args(text string) string {
 	return strings.TrimSpace(parts[1])
 }
 
+// FormatBytes re-exports fmtutil.FormatBytes for internal bot use with int64 inputs.
 func formatBytes(n int64) string {
-	const (
-		KB = 1024
-		MB = KB * 1024
-		GB = MB * 1024
-	)
-	switch {
-	case n >= GB:
-		return fmt.Sprintf("%.1f GB", float64(n)/float64(GB))
-	case n >= MB:
-		return fmt.Sprintf("%.1f MB", float64(n)/float64(MB))
-	case n >= KB:
-		return fmt.Sprintf("%.1f KB", float64(n)/float64(KB))
-	default:
-		return fmt.Sprintf("%d B", n)
+	if n < 0 {
+		return "0 B"
 	}
+	return fmtutil.FormatBytes(uint64(n))
 }
 
 func escapeURL(s string) string {

@@ -273,7 +273,7 @@ func TestFormatBytes(t *testing.T) {
 		{"1.0 MB", 1024 * 1024, "1.0 MB"},
 		{"1.5 MB", int64(1.5 * 1024 * 1024), "1.5 MB"},
 		{"2.0 GB", 2 * 1024 * 1024 * 1024, "2.0 GB"},
-		{"max int64", math.MaxInt64, "8589934592.0 GB"},
+		{"max int64", math.MaxInt64, "8.0 EB"},
 		{"just below KB", 1023, "1023 B"},
 		{"just below MB", 1024*1024 - 1, "1024.0 KB"},
 		{"just below GB", 1024*1024*1024 - 1, "1024.0 MB"},

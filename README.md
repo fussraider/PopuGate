@@ -398,10 +398,11 @@ make cross-build
 - **Проверка кода линтером:** `make lint`
 - **Форматирование кода:** `make fmt`
 
-Тесты разделены на три уровня:
+Тесты разделены на четыре уровня:
 1. **Store-слой** (`internal/store/*_test.go`) — тестируют SQL-операции с in-memory SQLite
-2. **Model-валидация** (`internal/model/*_test.go`) — тестируют бизнес-правила моделей
-3. **Pkg-утилиты** (`pkg/*/*_test.go`) — тестируют вспомогательные функции
+2. **Service-слой** (`internal/service/*_test.go`) — тестируют бизнес-логику (SecretService, TrafficService, UpstreamService, CheckResources, ResourceMonitor и др.)
+3. **Model-валидация** (`internal/model/*_test.go`) — тестируют бизнес-правила моделей
+4. **Pkg-утилиты** (`pkg/*/*_test.go`) — тестируют вспомогательные функции (fmtutil, logger, telemt и др.)
 
 ### База данных и миграции
 
@@ -425,6 +426,7 @@ make cross-build
   - `testutil/` — Утилиты для тестирования (in-memory SQLite).
 - `pkg/` — Вспомогательные библиотеки и обертки:
   - `dockerutil/`, `netutil/`, `sshutil/` — Утилиты для работы с Docker, сетью (iptables) и SSH.
+  - `fmtutil/` — Общие форматтеры (например, `FormatBytes` для человекочитаемых размеров).
   - `logger/` — Собственная система логирования с уровнями и scope.
   - `promutil/`, `qrutil/` — Работа с метриками Prometheus и генерация QR-кодов.
   - `telemt/` — Интеграция с движком MTProxy.

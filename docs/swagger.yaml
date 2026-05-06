@@ -54,6 +54,92 @@ definitions:
     - name
     - type
     type: object
+  handler.applyTemplateRequest:
+    properties:
+      secret_label:
+        type: string
+    required:
+    - secret_label
+    type: object
+  handler.bulkExtendRequest:
+    properties:
+      days:
+        minimum: 1
+        type: integer
+      labels:
+        items:
+          type: string
+        minItems: 1
+        type: array
+      tag:
+        type: string
+    required:
+    - days
+    type: object
+  handler.bulkRotateRequest:
+    properties:
+      labels:
+        items:
+          type: string
+        minItems: 1
+        type: array
+      tag:
+        type: string
+    type: object
+  handler.cloneSecretRequest:
+    properties:
+      new_label:
+        maxLength: 32
+        type: string
+    required:
+    - new_label
+    type: object
+  handler.createTemplateRequest:
+    properties:
+      expires_days:
+        type: integer
+      max_conns:
+        type: integer
+      max_ips:
+        type: integer
+      name:
+        maxLength: 64
+        type: string
+      notes:
+        maxLength: 500
+        type: string
+      quota_bytes:
+        type: integer
+    required:
+    - name
+    type: object
+  handler.extendSecretRequest:
+    properties:
+      days:
+        minimum: 1
+        type: integer
+    required:
+    - days
+    type: object
+  handler.importSecretEntry:
+    properties:
+      label:
+        type: string
+      secret_key:
+        type: string
+    required:
+    - label
+    type: object
+  handler.importSecretsRequest:
+    properties:
+      secrets:
+        items:
+          $ref: '#/definitions/handler.importSecretEntry'
+        minItems: 1
+        type: array
+    required:
+    - secrets
+    type: object
   handler.loginRequest:
     properties:
       password:
@@ -99,6 +185,14 @@ definitions:
     required:
     - refresh_token
     type: object
+  handler.renameSecretRequest:
+    properties:
+      new_label:
+        maxLength: 32
+        type: string
+    required:
+    - new_label
+    type: object
   handler.secretToggleRequest:
     properties:
       enabled:
@@ -124,6 +218,12 @@ definitions:
         description: Or raw bytes
         minimum: -1
         type: integer
+    type: object
+  handler.setTagsRequest:
+    properties:
+      tags:
+        maxLength: 500
+        type: string
     type: object
   handler.setupRequest:
     properties:
@@ -188,6 +288,33 @@ definitions:
     required:
     - enabled
     type: object
+  model.SystemResources:
+    properties:
+      cpu_usage:
+        description: percent (0-100)
+        type: number
+      disk_total:
+        description: bytes
+        type: integer
+      disk_used:
+        description: bytes
+        type: integer
+      load1:
+        type: number
+      load5:
+        type: number
+      load15:
+        type: number
+      memory_total:
+        description: bytes
+        type: integer
+      memory_used:
+        description: bytes
+        type: integer
+      uptime:
+        description: seconds
+        type: integer
+    type: object
 host: localhost:8090
 info:
   contact:
@@ -200,6 +327,38 @@ info:
   title: PopuGate API
   version: "1.0"
 paths:
+  /audit:
+    get:
+      description: Retrieve audit log entries with pagination
+      parameters:
+      - description: Max entries (1-1000, default 100)
+        in: query
+        name: limit
+        type: integer
+      - description: Offset (default 0)
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              type: object
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List audit entries
+      tags:
+      - audit
   /auth/login:
     post:
       consumes:
@@ -2069,6 +2228,108 @@ paths:
       summary: Get a secret
       tags:
       - secrets
+  /secrets/{label}/archive:
+    post:
+      description: Archive a secret to hide it from normal listings
+      parameters:
+      - description: Secret label
+        in: path
+        name: label
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Archive a secret
+      tags:
+      - secrets
+  /secrets/{label}/clone:
+    post:
+      consumes:
+      - application/json
+      description: Create a copy of a secret with a new label and generated key
+      parameters:
+      - description: Source secret label
+        in: path
+        name: label
+        required: true
+        type: string
+      - description: New label
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.cloneSecretRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Clone a secret
+      tags:
+      - secrets
+  /secrets/{label}/extend:
+    post:
+      consumes:
+      - application/json
+      description: Extend a secret's expiry by the given number of days. Re-enables
+        the secret if it was disabled.
+      parameters:
+      - description: Secret label
+        in: path
+        name: label
+        required: true
+        type: string
+      - description: Days to extend
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.extendSecretRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Extend secret expiry
+      tags:
+      - secrets
   /secrets/{label}/limits:
     get:
       description: Retrieve the current limits (connections, IPs, quota, expiry) for
@@ -2250,6 +2511,43 @@ paths:
       summary: Get QR code
       tags:
       - secrets
+  /secrets/{label}/rename:
+    put:
+      consumes:
+      - application/json
+      description: Change the label of an existing secret
+      parameters:
+      - description: Current secret label
+        in: path
+        name: label
+        required: true
+        type: string
+      - description: New label
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.renameSecretRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Rename a secret
+      tags:
+      - secrets
   /secrets/{label}/reset-traffic:
     post:
       description: Reset traffic counters for a specific secret
@@ -2306,6 +2604,43 @@ paths:
       summary: Rotate a secret
       tags:
       - secrets
+  /secrets/{label}/tags:
+    put:
+      consumes:
+      - application/json
+      description: Set comma-separated tags for a secret
+      parameters:
+      - description: Secret label
+        in: path
+        name: label
+        required: true
+        type: string
+      - description: Tags
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.setTagsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Set secret tags
+      tags:
+      - secrets
   /secrets/{label}/toggle:
     put:
       consumes:
@@ -2343,6 +2678,177 @@ paths:
       summary: Toggle a secret
       tags:
       - secrets
+  /secrets/{label}/unarchive:
+    post:
+      description: Restore an archived secret to normal listings
+      parameters:
+      - description: Secret label
+        in: path
+        name: label
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Unarchive a secret
+      tags:
+      - secrets
+  /secrets/bulk-extend:
+    post:
+      consumes:
+      - application/json
+      description: Extend expiry for multiple secrets at once
+      parameters:
+      - description: Labels and days
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.bulkExtendRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Bulk extend secrets
+      tags:
+      - secrets
+  /secrets/bulk-rotate:
+    post:
+      consumes:
+      - application/json
+      description: Rotate keys for multiple secrets at once
+      parameters:
+      - description: Labels
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.bulkRotateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Bulk rotate secrets
+      tags:
+      - secrets
+  /secrets/disable-expired:
+    post:
+      description: Disable all secrets whose expiry date has passed
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Disable expired secrets
+      tags:
+      - secrets
+  /secrets/export:
+    get:
+      description: Export all secrets as JSON
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              type: object
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Export secrets
+      tags:
+      - secrets
+  /secrets/import:
+    post:
+      consumes:
+      - application/json
+      description: Import multiple secrets at once
+      parameters:
+      - description: Secrets to import
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.importSecretsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Import secrets
+      tags:
+      - secrets
   /secrets/reset-traffic:
     post:
       description: Reset traffic counters for all secrets
@@ -2366,6 +2872,63 @@ paths:
       summary: Reset all traffic
       tags:
       - secrets
+  /secrets/search:
+    get:
+      description: Search secrets by label or notes
+      parameters:
+      - description: Search query
+        in: query
+        name: q
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              type: object
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Search secrets
+      tags:
+      - secrets
+  /secrets/top:
+    get:
+      description: Get secrets ordered by total traffic usage
+      parameters:
+      - description: Number of results (default 10)
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              type: object
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Top secrets by traffic
+      tags:
+      - secrets
   /system/os:
     get:
       consumes:
@@ -2384,6 +2947,23 @@ paths:
       security:
       - BearerAuth: []
       summary: Detect operating system
+      tags:
+      - system
+  /system/resources:
+    get:
+      consumes:
+      - application/json
+      description: Returns current CPU, memory, disk, and load information
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.SystemResources'
+      security:
+      - BearerAuth: []
+      summary: Get system resources
       tags:
       - system
   /system/service/install:
@@ -2505,6 +3085,156 @@ paths:
       summary: Uninstall systemd service
       tags:
       - system
+  /templates:
+    get:
+      description: Retrieve all secret templates
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              type: object
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List templates
+      tags:
+      - templates
+    post:
+      consumes:
+      - application/json
+      description: Create a new secret template
+      parameters:
+      - description: Template
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.createTemplateRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Create a template
+      tags:
+      - templates
+  /templates/{name}:
+    delete:
+      description: Delete a template by name
+      parameters:
+      - description: Template name
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Delete a template
+      tags:
+      - templates
+    get:
+      description: Retrieve a single template by name
+      parameters:
+      - description: Template name
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get a template
+      tags:
+      - templates
+  /templates/{name}/apply:
+    post:
+      consumes:
+      - application/json
+      description: Apply a template's limits to an existing secret
+      parameters:
+      - description: Template name
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: Secret label
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.applyTemplateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Apply template to secret
+      tags:
+      - templates
   /traffic:
     get:
       consumes:

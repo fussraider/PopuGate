@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/fussraider/PopuGate/internal/store"
@@ -21,6 +22,9 @@ type TelemtUpdateService struct {
 	containerSvc *ContainerService
 	telemtCfg    *DBTelemtConfig
 	notify       NotifyFunc
+
+	mu          sync.RWMutex
+	subscribers map[chan *TelemtUpdateStatus]struct{}
 }
 
 // TelemtReleaseInfo holds information about a remote telemt release.
@@ -64,6 +68,36 @@ func NewTelemtUpdateService(
 		dockerSvc:    dockerSvc,
 		containerSvc: containerSvc,
 		telemtCfg:    telemtCfg,
+		subscribers:  make(map[chan *TelemtUpdateStatus]struct{}),
+	}
+}
+
+// Subscribe returns a channel that receives TelemtUpdateStatus updates.
+func (s *TelemtUpdateService) Subscribe() (chan *TelemtUpdateStatus, func()) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	ch := make(chan *TelemtUpdateStatus, 1)
+	s.subscribers[ch] = struct{}{}
+
+	return ch, func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		delete(s.subscribers, ch)
+		close(ch)
+	}
+}
+
+func (s *TelemtUpdateService) broadcast(status *TelemtUpdateStatus) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	for ch := range s.subscribers {
+		select {
+		case ch <- status:
+		default:
+			// Buffer full, skip this subscriber
+		}
 	}
 }
 
@@ -181,6 +215,10 @@ func (s *TelemtUpdateService) Apply(ctx context.Context, version, commit string)
 		"telemt_updating_to": updatingTo,
 	})
 
+	if status, err := s.GetStatus(ctx); err == nil {
+		s.broadcast(status)
+	}
+
 	s.notifyUpdate(ctx, "⏳ *%s* Updating telemt engine to %s...", updatingTo)
 
 	prevVersion, _ := s.settings.Get(ctx, "telemt_version")
@@ -191,6 +229,9 @@ func (s *TelemtUpdateService) Apply(ctx context.Context, version, commit string)
 			"telemt_updating":    "false",
 			"telemt_updating_to": "",
 		})
+		if status, err := s.GetStatus(ctx); err == nil {
+			s.broadcast(status)
+		}
 	}()
 
 	if err := s.settings.Save(ctx, map[string]string{

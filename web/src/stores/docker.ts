@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { dockerApi } from '@/api/endpoints'
+import { useWebSocket } from '@/composables/useWebSocket'
 import type { DockerStatus, EngineStatus, TelemtUpdateStatus, TelemtReleaseListItem } from '@/types/models'
 
 export const useDockerStore = defineStore('docker', () => {
@@ -14,9 +15,10 @@ export const useDockerStore = defineStore('docker', () => {
   const telemtUpdateStatus = ref<TelemtUpdateStatus | null>(null)
   const checkingRemote = ref(false)
   const applyingUpdate = ref(false)
-  const pollTimer = ref<ReturnType<typeof setInterval> | null>(null)
   const releases = ref<TelemtReleaseListItem[]>([])
   const selectedRelease = ref<TelemtReleaseListItem | null>(null)
+
+  let wsControls: ReturnType<typeof useWebSocket> | null = null
 
   async function loadDockerStatus() {
     try {
@@ -60,8 +62,8 @@ export const useDockerStore = defineStore('docker', () => {
     } catch { /* ignore */ }
 
     // Auto-poll while update is in progress
-    if (telemtUpdateStatus.value?.updating && !pollTimer.value) {
-      startUpdatePoll()
+    if (telemtUpdateStatus.value?.updating && !wsControls) {
+      startUpdateStream()
     }
   }
 
@@ -87,29 +89,35 @@ export const useDockerStore = defineStore('docker', () => {
     applyingUpdate.value = true
     try {
       await dockerApi.engineApplyUpdate(version, commit)
+      startUpdateStream()
     } catch { /* error handled by caller */ }
     applyingUpdate.value = false
     await loadEngineStatus()
     await loadTelemtUpdateStatus()
   }
 
-  function startUpdatePoll() {
-    if (pollTimer.value) return
-    pollTimer.value = setInterval(async () => {
-      try {
-        telemtUpdateStatus.value = await dockerApi.engineUpdateStatus()
-        if (!telemtUpdateStatus.value?.updating) {
-          stopUpdatePoll()
-          await loadEngineStatus()
+  function startUpdateStream() {
+    if (wsControls) return
+
+    const wsUrl = '/api/v1/engine/update/ws'
+
+    wsControls = useWebSocket({
+      url: wsUrl,
+      onMessage: (data) => {
+        telemtUpdateStatus.value = data
+        if (!data.updating) {
+          stopUpdateStream()
+          loadEngineStatus()
         }
-      } catch { /* ignore */ }
-    }, 5000)
+      },
+    })
+    wsControls.connect()
   }
 
-  function stopUpdatePoll() {
-    if (pollTimer.value) {
-      clearInterval(pollTimer.value)
-      pollTimer.value = null
+  function stopUpdateStream() {
+    if (wsControls) {
+      wsControls.disconnect()
+      wsControls = null
     }
   }
 
@@ -119,6 +127,6 @@ export const useDockerStore = defineStore('docker', () => {
     releases, selectedRelease,
     loadDockerStatus, loadEngineStatus, installDocker, buildEngine,
     loadTelemtUpdateStatus, loadReleases, checkRemoteTelemt, applyTelemtUpdate,
-    stopUpdatePoll,
+    stopUpdateStream,
   }
 })

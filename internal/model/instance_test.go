@@ -8,9 +8,9 @@ import (
 
 func TestInstanceValidate(t *testing.T) {
 	tests := []struct {
-		name    string
+		name     string
 		instance Instance
-		wantErr bool
+		wantErr  bool
 	}{
 		{
 			name: "valid port and metrics port",
@@ -105,7 +105,7 @@ func TestInstanceContainerName(t *testing.T) {
 		{8443, "popugate-8443"},
 		{1, "popugate-1"},
 		{65535, "popugate-65535"},
-		{8080, "popugate-8080"},
+		{8090, "popugate-8090"},
 	}
 
 	for _, tt := range tests {

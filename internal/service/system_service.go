@@ -1,14 +1,68 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"runtime"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/fussraider/PopuGate/pkg/logger"
 )
+
+// lastAlertTime tracks when the last alert was sent for each resource type.
+var lastAlertTime = make(map[string]time.Time)
+var alertMu sync.Mutex
+
+// CheckResources checks system resource usage and alerts if thresholds are exceeded.
+func CheckResources(ctx context.Context, notify NotifyFunc) error {
+	res := GetResources()
+	if res == nil {
+		return fmt.Errorf("failed to get system resources")
+	}
+
+	alertMu.Lock()
+	defer alertMu.Unlock()
+
+	now := time.Now()
+	const alertCooldown = 30 * time.Minute
+
+	// Memory > 95%
+	if res.MemoryTotal > 0 {
+		memPct := float64(res.MemoryUsed) / float64(res.MemoryTotal) * 100
+		if memPct > 95 && now.Sub(lastAlertTime["memory"]) > alertCooldown {
+			notify(ctx, "🚨 *%s* High Memory Usage: %.1f%% (%s/%s)", memPct, formatBytes(res.MemoryUsed), formatBytes(res.MemoryTotal))
+			lastAlertTime["memory"] = now
+		}
+	}
+
+	// Disk > 90%
+	if res.DiskTotal > 0 {
+		diskPct := float64(res.DiskUsed) / float64(res.DiskTotal) * 100
+		if diskPct > 90 && now.Sub(lastAlertTime["disk"]) > alertCooldown {
+			notify(ctx, "🚨 *%s* High Disk Usage: %.1f%% (%s/%s)", diskPct, formatBytes(res.DiskUsed), formatBytes(res.DiskTotal))
+			lastAlertTime["disk"] = now
+		}
+	}
+
+	return nil
+}
+
+func formatBytes(b uint64) string {
+	const unit = 1024
+	if b < unit {
+		return fmt.Sprintf("%d B", b)
+	}
+	div, exp := uint64(unit), 0
+	for n := b / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), "KMGTPE"[exp])
+}
 
 // OSType represents the details of the host OS.
 type OSType struct {

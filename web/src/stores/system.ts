@@ -1,12 +1,16 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { systemApi } from '@/api/endpoints'
-import type { OSType, ServiceStatus } from '@/types/models'
+import { useWebSocket } from '@/composables/useWebSocket'
+import type { OSType, ServiceStatus, SystemResources } from '@/types/models'
 
 export const useSystemStore = defineStore('system', () => {
   const os = ref<OSType | null>(null)
   const service = ref<ServiceStatus | null>(null)
+  const resources = ref<SystemResources | null>(null)
   const loading = ref(false)
+  
+  let wsControls: ReturnType<typeof useWebSocket> | null = null
 
   async function loadOS() {
     try {
@@ -60,5 +64,35 @@ export const useSystemStore = defineStore('system', () => {
     }
   }
 
-  return { os, service, loading, loadOS, loadServiceStatus, installService, uninstallService, restartService, reloadService }
+  async function loadResources() {
+    try {
+      resources.value = await systemApi.getResources()
+    } catch { /* ignore */ }
+  }
+
+  function startResourceStream() {
+    if (wsControls) return
+
+    const wsUrl = '/api/v1/system/resources/ws'
+    
+    wsControls = useWebSocket({
+      url: wsUrl,
+      onMessage: (data) => {
+        resources.value = data
+      }
+    })
+    wsControls.connect()
+  }
+
+  function stopResourceStream() {
+    wsControls?.disconnect()
+    wsControls = null
+  }
+
+  return { 
+    os, service, resources, loading, 
+    loadOS, loadServiceStatus, installService, uninstallService, 
+    restartService, reloadService, loadResources,
+    startResourceStream, stopResourceStream
+  }
 })

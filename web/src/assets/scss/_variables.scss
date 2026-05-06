@@ -20,13 +20,13 @@ $color-gray-800: #1f2937;
 $color-gray-900: #111827;
 
 // Semantic
-$color-success: #10b981;
+$color-success: var(--color-success);
 $color-success-bg: var(--color-success-bg);
-$color-warning: #f59e0b;
+$color-warning: var(--color-warning);
 $color-warning-bg: var(--color-warning-bg);
-$color-danger: #ef4444;
+$color-danger: var(--color-danger);
 $color-danger-bg: var(--color-danger-bg);
-$color-info: #3b82f6;
+$color-info: var(--color-info);
 $color-info-bg: var(--color-info-bg);
 
 // Background

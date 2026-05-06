@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -38,7 +39,7 @@ func NewDockerHandler(docker *dockerutil.DockerClient, dockerSvc *service.Docker
 func (h *DockerHandler) Install(c *gin.Context) {
 	ctx := c.Request.Context()
 	if err := dockerutil.EnsureDockerInstalled(ctx); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to install docker: %v", err)})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})
@@ -147,7 +148,7 @@ func (h *DockerHandler) EngineStatus(c *gin.Context) {
 // @Router       /engine/build [post]
 func (h *DockerHandler) Build(c *gin.Context) {
 	if h.dockerSvc == nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "docker service not available"})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "docker service not available"})
 		return
 	}
 
@@ -163,7 +164,7 @@ func (h *DockerHandler) Build(c *gin.Context) {
 
 	result, err := h.dockerSvc.BuildEngine(ctx, req.Force)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to build engine: %v", err)})
 		return
 	}
 	c.JSON(http.StatusOK, result)

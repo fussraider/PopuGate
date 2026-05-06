@@ -4,16 +4,67 @@ import (
 	"net/http"
 
 	"github.com/fussraider/PopuGate/internal/service"
-
 	"github.com/gin-gonic/gin"
 )
 
 // SystemHandler handles system-level endpoints.
-type SystemHandler struct{}
+type SystemHandler struct {
+	notify service.NotifyFunc
+}
 
 // NewSystemHandler creates a new SystemHandler.
 func NewSystemHandler() *SystemHandler {
 	return &SystemHandler{}
+}
+
+// SetNotify sets the notification function for alerting.
+func (h *SystemHandler) SetNotify(fn service.NotifyFunc) {
+	h.notify = fn
+}
+
+// GetResources handles GET /api/v1/system/resources
+// @Summary      Get system resources
+// @Description  Returns current CPU, memory, disk, and load information
+// @Tags         system
+// @Accept       json
+// @Produce      json
+// @Success      200  {object}  model.SystemResources
+// @Security     BearerAuth
+// @Router       /system/resources [get]
+func (h *SystemHandler) GetResources(c *gin.Context) {
+	c.JSON(http.StatusOK, service.GetResourceMonitor().GetCurrent())
+}
+
+// StreamResources handles WebSocket connection for real-time resource updates.
+func (h *SystemHandler) StreamResources(c *gin.Context) {
+	ws, err := WSUpgrader.Upgrade(c.Writer, c.Request, nil)
+	if err != nil {
+		return
+	}
+	defer ws.Close()
+
+	monitor := service.GetResourceMonitor()
+	ch, unsubscribe := monitor.Subscribe()
+	defer unsubscribe()
+
+	// Send current state immediately
+	if err := ws.WriteJSON(monitor.GetCurrent()); err != nil {
+		return
+	}
+
+	for {
+		select {
+		case stats, ok := <-ch:
+			if !ok {
+				return
+			}
+			if err := ws.WriteJSON(stats); err != nil {
+				return
+			}
+		case <-c.Request.Context().Done():
+			return
+		}
+	}
 }
 
 // GetOS handles GET /api/v1/system/os
@@ -41,7 +92,7 @@ func (h *SystemHandler) GetOS(c *gin.Context) {
 // @Router       /system/service/install [post]
 func (h *SystemHandler) InstallService(c *gin.Context) {
 	if err := service.InstallSystemdService(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		HandleError(c, http.StatusInternalServerError, "failed to install service", err)
 		return
 	}
 	auditLog(c, "system.install_service", "service installed")
@@ -60,7 +111,7 @@ func (h *SystemHandler) InstallService(c *gin.Context) {
 // @Router       /system/service/uninstall [delete]
 func (h *SystemHandler) UninstallService(c *gin.Context) {
 	if err := service.UninstallSystemdService(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		HandleError(c, http.StatusInternalServerError, "failed to uninstall service", err)
 		return
 	}
 	auditLog(c, "system.uninstall_service", "service uninstalled")
@@ -93,7 +144,7 @@ func (h *SystemHandler) ServiceStatus(c *gin.Context) {
 // @Router       /system/service/restart [post]
 func (h *SystemHandler) RestartService(c *gin.Context) {
 	if err := service.RestartService(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		HandleError(c, http.StatusInternalServerError, "failed to restart service", err)
 		return
 	}
 	auditLog(c, "system.restart_service", "service restarted")
@@ -112,7 +163,7 @@ func (h *SystemHandler) RestartService(c *gin.Context) {
 // @Router       /system/service/reload [post]
 func (h *SystemHandler) ReloadService(c *gin.Context) {
 	if err := service.ReloadService(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		HandleError(c, http.StatusInternalServerError, "failed to reload service", err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true, "message": "service reload signaled"})

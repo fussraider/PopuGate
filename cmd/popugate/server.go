@@ -5,7 +5,7 @@
 // @contact.url     https://github.com/fussraider/PopuGate
 // @license.name    MIT
 // @license.url     https://github.com/fussraider/PopuGate/blob/main/LICENSE
-// @host      localhost:8080
+// @host      localhost:8090
 // @BasePath  /api/v1
 // @securityDefinitions.apikey BearerAuth
 // @in header
@@ -56,14 +56,14 @@ Usage:
   popugate server [flags]
 
 Flags:
-  -p, --port int       HTTP server port (default 8080)
+  -p, --port int       HTTP server port (default 8090)
   -d, --db string      SQLite database path
       --data string    Data directory`,
 	Run: runServer,
 }
 
 func init() {
-	serverCmd.Flags().IntP("port", "p", 8080, "HTTP server port")
+	serverCmd.Flags().IntP("port", "p", 8090, "HTTP server port")
 	serverCmd.Flags().String("db", "", "SQLite database path")
 	serverCmd.Flags().StringP("data", "d", "", "Data directory")
 	rootCmd.AddCommand(serverCmd)
@@ -215,6 +215,9 @@ func runServer(cmd *cobra.Command, args []string) {
 	if telemtUpdateSvc != nil {
 		telemtUpdateSvc.SetNotify(notifyFn)
 	}
+	if upstreamSvc != nil {
+		upstreamSvc.SetNotify(notifyFn)
+	}
 
 	// Get settings from DB
 	ctx := context.Background()
@@ -244,8 +247,11 @@ func runServer(cmd *cobra.Command, args []string) {
 	// Create services needed by scheduler
 	auditSvc := service.NewAuditService(auditStore)
 
+	// Resource monitor for WebSocket and background threshold checks
+	service.InitResourceMonitor(notifyFn)
+
 	// Prepare scheduler tasks (wire Fn callbacks)
-	sched, tasks := prepareSchedulerTasks(trafficSvc, healthSvc, replSvc, blocklistStore, settingsStore, secretStore, backupStore, &activeBot, &botMu, updateSvc, telemtUpdateSvc, telemtCfg, notifyFn, trafficStore, secretSvc, auditSvc)
+	sched, tasks := prepareSchedulerTasks(trafficSvc, healthSvc, replSvc, blocklistStore, settingsStore, secretStore, backupStore, &activeBot, &botMu, updateSvc, telemtUpdateSvc, telemtCfg, notifyFn, trafficStore, secretSvc, upstreamSvc, auditSvc)
 
 	// Load overrides and start scheduler with execution tracking
 	overrides, _ := schedulerStore.GetOverrides(ctx)
@@ -389,6 +395,7 @@ func prepareSchedulerTasks(
 	notify service.NotifyFunc,
 	trafficStore *store.TrafficStore,
 	secretSvc *service.SecretService,
+	upstreamSvc *service.UpstreamService,
 	auditSvc *service.AuditService,
 ) (*scheduler.Scheduler, []scheduler.Task) {
 	sched := scheduler.New()
@@ -531,6 +538,12 @@ func prepareSchedulerTasks(
 						auditSvc.Log(ctx, "system", "auto-rotate", fmt.Sprintf("rotated %d secret(s)", rotated))
 					}
 					return nil
+				}
+			}
+		case "upstream-health":
+			if upstreamSvc != nil {
+				tasks[i].Fn = func(ctx context.Context) error {
+					return upstreamSvc.CheckAllUpstreams(ctx)
 				}
 			}
 		}

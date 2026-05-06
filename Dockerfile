@@ -21,11 +21,11 @@ ENV POPUGATE_DATA_DIR=/data
 ENV POPUGATE_DEPLOYMENT=docker
 
 # Expose default API/Web port
-EXPOSE 8080
+EXPOSE 8090
 
 # Entrypoint script to handle initial setup if needed
 COPY scripts/docker-entrypoint.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 ENTRYPOINT ["docker-entrypoint.sh"]
-CMD ["server", "--port", "8080", "--data", "/data"]
+CMD ["server", "--port", "8090", "--data", "/data"]

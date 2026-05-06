@@ -98,7 +98,14 @@ func (svc *SchedulerService) UpdateTask(ctx context.Context, name string, enable
 
 		if !ovr.Enabled {
 			svc.sched.RemoveTask(name)
-			return nil
+			// Still update task definition with empty schedule or something to reflect disabled state
+			task := scheduler.Task{
+				Name:     dt.Name,
+				Schedule: "", // Mark as disabled/no schedule
+				Timeout:  scheduler.DefaultTimeoutFor(dt.Name),
+				Fn:       dt.Fn,
+			}
+			return svc.sched.AddOrUpdateTask(task)
 		}
 
 		effectiveSchedule := dt.Schedule

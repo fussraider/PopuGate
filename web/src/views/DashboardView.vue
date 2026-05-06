@@ -34,6 +34,54 @@
       </div>
     </div>
 
+    <!-- Resource Cards -->
+    <div v-if="!systemStore.resources" class="stats-grid mb-lg">
+      <div v-for="i in 4" :key="i" class="stat-card">
+        <div class="skeleton" style="height: 56px; width: 100%; border-radius: 4px;"></div>
+      </div>
+    </div>
+    <template v-else>
+      <div class="stats-grid mb-lg">
+        <div class="stat-card">
+          <div class="stat-icon"><Cpu :size="28" :stroke-width="1.5" /></div>
+          <div class="stat-info w-full">
+            <div class="stat-label">CPU</div>
+            <div class="stat-value mb-xs">{{ systemStore.resources.cpu_usage.toFixed(1) }}%</div>
+            <div class="progress-bar" style="height: 4px;">
+              <div class="progress-inner" :class="getBarVariant(systemStore.resources.cpu_usage)" :style="{ width: systemStore.resources.cpu_usage + '%' }"></div>
+            </div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon"><Database :size="28" :stroke-width="1.5" /></div>
+          <div class="stat-info w-full">
+            <div class="stat-label">RAM</div>
+            <div class="stat-value mb-xs">{{ ramPercent.toFixed(1) }}%</div>
+            <div class="progress-bar" style="height: 4px;">
+              <div class="progress-inner" :class="getBarVariant(ramPercent)" :style="{ width: ramPercent + '%' }"></div>
+            </div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon"><HardDrive :size="28" :stroke-width="1.5" /></div>
+          <div class="stat-info w-full">
+            <div class="stat-label">DISK</div>
+            <div class="stat-value mb-xs">{{ diskPercent.toFixed(1) }}%</div>
+            <div class="progress-bar" style="height: 4px;">
+              <div class="progress-inner" :class="getBarVariant(diskPercent)" :style="{ width: diskPercent + '%' }"></div>
+            </div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon"><Activity :size="28" :stroke-width="1.5" /></div>
+          <div class="stat-info">
+            <div class="stat-label">LOAD</div>
+            <div class="stat-value">{{ systemStore.resources.load1.toFixed(2) }}</div>
+          </div>
+        </div>
+      </div>
+    </template>
+
     <!-- Quick Actions -->
     <div class="card mb-lg">
       <h3 class="mb-md">{{ t('dashboard.quick_actions') }}</h3>
@@ -106,22 +154,23 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useSecretsStore, useProxyStore, useDockerStore, useConfigStore } from '@/stores'
+import { useSecretsStore, useProxyStore, useDockerStore, useConfigStore, useSystemStore } from '@/stores'
 import { useToastStore } from '@/stores/toast'
 import { formatBytes } from '@/utils/format'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import InfoGrid from '@/components/common/InfoGrid.vue'
 import InfoItem from '@/components/common/InfoItem.vue'
 import Tooltip from '@/components/common/Tooltip.vue'
-import { Play, KeyRound, Users, TrendingUp, Square, RefreshCw, RotateCw, Loader2 } from '@lucide/vue'
+import { Play, KeyRound, Users, TrendingUp, Square, RefreshCw, RotateCw, Loader2, Cpu, Database, HardDrive, Activity } from '@lucide/vue'
 
 const { t } = useI18n()
 const secretsStore = useSecretsStore()
 const proxyStore = useProxyStore()
 const dockerStore = useDockerStore()
 const configStore = useConfigStore()
+const systemStore = useSystemStore()
 const toast = useToastStore()
 
 const proxyRunning = computed(() => proxyStore.status?.running)
@@ -130,6 +179,24 @@ const totalTraffic = computed(() => {
   if (!s) return '0 B'
   return formatBytes((s.traffic_in || 0) + (s.traffic_out || 0))
 })
+
+const ramPercent = computed(() => {
+  const r = systemStore.resources
+  if (!r || r.memory_total === 0) return 0
+  return (r.memory_used / r.memory_total) * 100
+})
+
+const diskPercent = computed(() => {
+  const r = systemStore.resources
+  if (!r || r.disk_total === 0) return 0
+  return (r.disk_used / r.disk_total) * 100
+})
+
+function getBarVariant(percent: number) {
+  if (percent > 90) return 'danger'
+  if (percent > 70) return 'warning'
+  return 'success'
+}
 
 async function proxyAction(action: 'start' | 'stop' | 'restart' | 'reload') {
   try {
@@ -162,6 +229,12 @@ onMounted(async () => {
     dockerStore.loadEngineStatus(),
     configStore.load(),
   ])
+
+  systemStore.startResourceStream()
+})
+
+onUnmounted(() => {
+  systemStore.stopResourceStream()
 })
 </script>
 

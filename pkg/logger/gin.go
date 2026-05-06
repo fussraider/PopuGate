@@ -21,10 +21,20 @@ func GinLogger() gin.HandlerFunc {
 		args := []any{status, method, path, elapsed, c.ClientIP()}
 
 		if status >= 500 {
+			msg += " [Errors: %v]"
+			args = append(args, c.Errors.String())
 			log.Errorf(msg, args...)
 		} else if status >= 400 {
+			if len(c.Errors) > 0 {
+				msg += " [Errors: %v]"
+				args = append(args, c.Errors.String())
+			}
 			log.Warnf(msg, args...)
 		} else {
+			if len(c.Errors) > 0 {
+				msg += " [Errors: %v]"
+				args = append(args, c.Errors.String())
+			}
 			log.Infof(msg, args...)
 		}
 	}

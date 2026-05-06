@@ -19,6 +19,14 @@
       <template #cell-address="{ item }">{{ item.address || t('upstreams.direct') }}</template>
       <template #cell-weight="{ item }">{{ item.weight }}</template>
       <template #cell-interface="{ item }">{{ item.iface || '—' }}</template>
+      <template #cell-health="{ item }">
+        <StatusBadge :variant="getHealthVariant(item.last_check_ok)">
+          {{ getHealthLabel(item.last_check_ok) }}
+        </StatusBadge>
+        <div v-if="item.latency_ms" class="text-xs text-muted mt-xs">
+          {{ item.latency_ms }}ms
+        </div>
+      </template>
       <template #cell-status="{ item }">
         <StatusBadge :variant="item.enabled ? 'success' : 'neutral'">
           {{ item.enabled ? t('instances.enabled') : t('instances.disabled') }}
@@ -136,11 +144,22 @@ const columns = [
   { key: 'address', header: t('upstreams.table.address') },
   { key: 'weight', header: t('upstreams.table.weight') },
   { key: 'interface', header: t('upstreams.table.interface') },
+  { key: 'health', header: t('upstreams.table.health') },
   { key: 'status', header: t('upstreams.table.status') },
 ]
 
 // Confirm dialog
 const { confirmState, confirm, handleConfirm, handleCancel } = useConfirmDialog()
+
+function getHealthVariant(ok: boolean | null | undefined) {
+  if (ok === null || ok === undefined) return 'neutral'
+  return ok ? 'success' : 'danger'
+}
+
+function getHealthLabel(ok: boolean | null | undefined) {
+  if (ok === null || ok === undefined) return t('upstreams.health_unknown')
+  return ok ? 'OK' : 'FAIL'
+}
 
 async function handleRemove(name: string) {
   if (!await confirm({ title: t('upstreams.remove_title'), message: t('upstreams.confirm_remove', { name }), confirmText: t('upstreams.delete') })) return

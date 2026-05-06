@@ -32,13 +32,15 @@ func AuthMiddleware(secretProvider JWTSecretProvider, blocklist BlocklistChecker
 		}
 
 		if tokenStr == "" {
+			// Don't log 401 as error, it's normal for some flows
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Authorization required"})
 			return
 		}
 
 		jwtSecret, err := secretProvider.GetJWTSecret(c.Request.Context())
 		if err != nil {
-			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+			c.Error(err) // Record error for GinLogger
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "JWT secret error: " + err.Error()})
 			return
 		}
 

@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { trafficApi } from '@/api/endpoints'
+import { useWebSocket } from '@/composables/useWebSocket'
 import type { GlobalTraffic, UserTraffic, LiveMetrics, TrafficHistoryRecord } from '@/types/models'
 
 export const useTrafficStore = defineStore('traffic', () => {
@@ -13,8 +14,10 @@ export const useTrafficStore = defineStore('traffic', () => {
   const autoRefresh = ref(true)
   const history = ref<TrafficHistoryRecord[]>([])
   const historyLoading = ref(false)
+  const wsConnected = ref(false)
 
   let liveInterval: ReturnType<typeof setInterval> | null = null
+  let wsControls: ReturnType<typeof useWebSocket> | null = null
 
   async function load() {
     loading.value = true
@@ -51,12 +54,41 @@ export const useTrafficStore = defineStore('traffic', () => {
     }
   }
 
+  function startWS() {
+    stopWS()
+    const wsUrl = '/api/v1/traffic/live/ws'
+
+    wsControls = useWebSocket({
+      url: wsUrl,
+      onMessage: (data) => {
+        live.value = data
+        liveError.value = false
+      },
+      onError: () => {
+        liveError.value = true
+      },
+    })
+    wsControls.connect()
+    wsConnected.value = true
+  }
+
+  function stopWS() {
+    wsControls?.disconnect()
+    wsControls = null
+    wsConnected.value = false
+  }
+
   function startAutoRefresh() {
     stopAutoRefresh()
-    liveInterval = setInterval(() => loadLive(), 5000)
+    try {
+      startWS()
+    } catch {
+      liveInterval = setInterval(() => loadLive(), 5000)
+    }
   }
 
   function stopAutoRefresh() {
+    stopWS()
     if (liveInterval) {
       clearInterval(liveInterval)
       liveInterval = null
@@ -78,5 +110,5 @@ export const useTrafficStore = defineStore('traffic', () => {
     liveError.value = false
   }
 
-  return { global, users, live, loading, liveLoading, liveError, autoRefresh, history, historyLoading, load, loadLive, loadHistory, startAutoRefresh, stopAutoRefresh, toggleAutoRefresh, reset }
+  return { global, users, live, loading, liveLoading, liveError, autoRefresh, history, historyLoading, wsConnected, load, loadLive, loadHistory, startAutoRefresh, stopAutoRefresh, toggleAutoRefresh, reset }
 })

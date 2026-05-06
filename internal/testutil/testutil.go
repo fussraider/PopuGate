@@ -3,6 +3,7 @@ package testutil
 import (
 	"database/sql"
 	"embed"
+	"fmt"
 	"sort"
 	"strconv"
 	"strings"
@@ -87,8 +88,17 @@ func applyMigrations(db *sql.DB) error {
 			continue
 		}
 
-		if _, err := db.Exec(m.content); err != nil {
-			return err
+		cleanSQL := m.content
+		if strings.Contains(m.content, "-- +migrate Up:") {
+			parts := strings.Split(m.content, "-- +migrate Down:")
+			cleanSQL = strings.ReplaceAll(parts[0], "-- +migrate Up:", "")
+		} else {
+			cleanSQL = strings.ReplaceAll(cleanSQL, "-- +migrate Up:", "")
+			cleanSQL = strings.ReplaceAll(cleanSQL, "-- +migrate Down:", "")
+		}
+
+		if _, err := db.Exec(cleanSQL); err != nil {
+			return fmt.Errorf("migration %d (%s) failed: %w\nSQL: %s", m.version, m.name, err, cleanSQL)
 		}
 		db.Exec("INSERT INTO schema_version (version, name) VALUES (?, ?)", m.version, m.name)
 	}

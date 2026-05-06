@@ -74,7 +74,7 @@ defineProps<{
   display: flex;
   gap: 0;
   padding: 10px 16px;
-  background: var(--bg-table-header);
+  background: $bg-body;
 }
 
 .skeleton-table-row {
@@ -99,7 +99,7 @@ defineProps<{
 }
 
 .skeleton-stat-card {
-  height: 80px;
+  height: 92px;
   border-radius: $border-radius-lg;
 }
 

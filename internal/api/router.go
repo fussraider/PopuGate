@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	swaggerFiles "github.com/swaggo/files"
@@ -61,9 +62,12 @@ func SetupRouter(cfg RouterConfig) *gin.Engine {
 	r := gin.New()
 	r.Use(logger.GinLogger(), gin.Recovery())
 
-	// Limit request body size to 2MB
+	// Limit request body size to 2MB (skip for WebSocket upgrades)
 	r.Use(func(c *gin.Context) {
-		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 2<<20)
+		upgrade := c.GetHeader("Upgrade")
+		if !strings.EqualFold(upgrade, "websocket") {
+			c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 2<<20)
+		}
 		c.Next()
 	})
 
@@ -118,9 +122,13 @@ func SetupRouter(cfg RouterConfig) *gin.Engine {
 		protected.GET("/secrets/search", secretHandler.Search)
 		protected.GET("/secrets/top", secretHandler.Top)
 		protected.GET("/secrets/export", secretHandler.Export)
+		protected.GET("/secrets/tags", secretHandler.ListTags)
+		protected.GET("/secrets/by-tag/:tag", secretHandler.ListByTag)
 		protected.POST("/secrets/import", secretHandler.Import)
 		protected.POST("/secrets/bulk-extend", secretHandler.BulkExtend)
 		protected.POST("/secrets/bulk-rotate", secretHandler.BulkRotate)
+		protected.POST("/secrets/bulk-toggle", secretHandler.BulkToggle)
+		protected.POST("/secrets/bulk-set-limits", secretHandler.BulkSetLimits)
 		protected.POST("/secrets/reset-traffic", secretHandler.ResetAllTraffic)
 		protected.POST("/secrets/disable-expired", secretHandler.DisableExpired)
 		// Secrets — per-label paths
@@ -200,6 +208,16 @@ func SetupRouter(cfg RouterConfig) *gin.Engine {
 		protected.GET("/traffic/history", trafficHandler.GetHistory)
 		protected.GET("/traffic/:label", trafficHandler.GetUser)
 
+		// WebSocket — live metrics streaming
+		wsHandler := handler.NewWSHandler(cfg.TrafficSvc, cfg.TelemtUpdateSvc)
+		if len(origins) > 0 {
+			handler.SetWSAllowedOrigins(origins)
+		} else {
+			handler.SetWSAllowedOrigins([]string{"*"})
+		}
+		protected.GET("/traffic/live/ws", wsHandler.Handle)
+		protected.GET("/engine/update/ws", wsHandler.HandleEngineUpdate)
+
 		// Bot
 		botHandler := handler.NewBotHandler(cfg.Settings, cfg.BotDeps)
 		protected.POST("/bot/setup", botHandler.Setup)
@@ -236,6 +254,8 @@ func SetupRouter(cfg RouterConfig) *gin.Engine {
 
 		// System
 		systemHandler := handler.NewSystemHandler()
+		protected.GET("/system/resources", systemHandler.GetResources)
+		protected.GET("/system/resources/ws", systemHandler.StreamResources)
 		protected.GET("/system/os", systemHandler.GetOS)
 		protected.POST("/system/service/install", systemHandler.InstallService)
 		protected.DELETE("/system/service/uninstall", systemHandler.UninstallService)

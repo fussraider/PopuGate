@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/fussraider/PopuGate/internal/model"
@@ -467,4 +468,98 @@ func (s *SecretStore) Top(ctx context.Context, limit int) ([]model.Secret, error
 	}
 	defer rows.Close()
 	return scanSecrets(rows)
+}
+
+// ListAllTags returns all unique tags across all secrets.
+func (s *SecretStore) ListAllTags(ctx context.Context) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, "SELECT tags FROM secrets WHERE tags IS NOT NULL AND tags != ''")
+	if err != nil {
+		return nil, fmt.Errorf("list tags: %w", err)
+	}
+	defer rows.Close()
+
+	seen := make(map[string]bool)
+	var tags []string
+	for rows.Next() {
+		var tagStr string
+		if err := rows.Scan(&tagStr); err != nil {
+			continue
+		}
+		for _, t := range strings.Split(tagStr, ",") {
+			t = strings.TrimSpace(t)
+			if t != "" && !seen[t] {
+				seen[t] = true
+				tags = append(tags, t)
+			}
+		}
+	}
+	return tags, rows.Err()
+}
+
+// LabelsByTag returns labels of secrets that have the given tag.
+func (s *SecretStore) LabelsByTag(ctx context.Context, tag string) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT label FROM secrets
+		WHERE ',' || tags || ',' LIKE '%,' || ? || ',%'
+		ORDER BY id
+	`, tag)
+	if err != nil {
+		return nil, fmt.Errorf("labels by tag %s: %w", tag, err)
+	}
+	defer rows.Close()
+
+	var labels []string
+	for rows.Next() {
+		var l string
+		if err := rows.Scan(&l); err != nil {
+			continue
+		}
+		labels = append(labels, l)
+	}
+	return labels, rows.Err()
+}
+
+// BulkToggleEnabled enables or disables multiple secrets by labels.
+func (s *SecretStore) BulkToggleEnabled(ctx context.Context, labels []string, enable bool) (int, error) {
+	enabled := 0
+	if enable {
+		enabled = 1
+	}
+	updated := 0
+	for _, label := range labels {
+		res, err := s.db.ExecContext(ctx, "UPDATE secrets SET enabled = ? WHERE label = ?", enabled, label)
+		if err != nil {
+			continue
+		}
+		n, _ := res.RowsAffected()
+		updated += int(n)
+	}
+	return updated, nil
+}
+
+// BulkSetLimits sets the same limits for multiple secrets by labels.
+func (s *SecretStore) BulkSetLimits(ctx context.Context, labels []string, maxConns, maxIPs int, quotaBytes int64, expiresAt string) (int, error) {
+	updated := 0
+	for _, label := range labels {
+		sec, err := s.GetByLabel(ctx, label)
+		if err != nil || sec == nil {
+			continue
+		}
+		if maxConns >= 0 {
+			sec.MaxConns = maxConns
+		}
+		if maxIPs >= 0 {
+			sec.MaxIPs = maxIPs
+		}
+		if quotaBytes >= 0 {
+			sec.QuotaBytes = quotaBytes
+		}
+		if expiresAt != "" {
+			sec.ExpiresAt = expiresAt
+		}
+		if err := s.Update(ctx, sec); err == nil {
+			updated++
+		}
+	}
+	return updated, nil
 }

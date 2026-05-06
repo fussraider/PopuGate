@@ -21,6 +21,7 @@ var log = logger.WithScope("upstream")
 type UpstreamService struct {
 	upstreams *store.UpstreamStore
 	client    *http.Client
+	notify    NotifyFunc
 }
 
 // NewUpstreamService creates a new UpstreamService.
@@ -29,6 +30,61 @@ func NewUpstreamService(upstreams *store.UpstreamStore) *UpstreamService {
 		upstreams: upstreams,
 		client:    &http.Client{Timeout: 15 * time.Second},
 	}
+}
+
+// SetNotify sets the notification function.
+func (s *UpstreamService) SetNotify(fn NotifyFunc) {
+	s.notify = fn
+}
+
+// CheckAllUpstreams iterates through all enabled upstreams and performs health checks.
+func (s *UpstreamService) CheckAllUpstreams(ctx context.Context) error {
+	upstreams, err := s.upstreams.List(ctx)
+	if err != nil {
+		return err
+	}
+
+	for _, u := range upstreams {
+		// Only check enabled ones for health
+		if !u.Enabled {
+			continue
+		}
+
+		res, err := s.testUpstream(ctx, &u)
+		ok := err == nil && res.OK
+		errMsg := ""
+		if err != nil {
+			errMsg = err.Error()
+		} else if res != nil && !res.OK {
+			errMsg = res.Error
+		}
+
+		latency := int64(0)
+		if res != nil {
+			latency = res.LatencyMs
+		}
+
+		// Update health in store
+		if err := s.upstreams.UpdateHealth(ctx, u.Name, ok, latency, errMsg); err != nil {
+			log.Errorf("failed to update health for %s: %v", u.Name, err)
+		}
+
+		// Failover logic
+		if !ok {
+			// Reload to get latest fail_count
+			latest, _ := s.upstreams.GetByName(ctx, u.Name)
+			if latest != nil && latest.FailCount >= 3 && latest.Enabled {
+				// Auto-disable
+				if err := s.upstreams.UpdateEnabled(ctx, u.Name, false); err == nil {
+					log.Warnf("upstream %s auto-disabled after %d failures", u.Name, latest.FailCount)
+					if s.notify != nil {
+						s.notify(ctx, "🚫 *%s* Upstream auto-disabled after 3 failures: %s", u.Name, errMsg)
+					}
+				}
+			}
+		}
+	}
+	return nil
 }
 
 // List returns all upstreams.

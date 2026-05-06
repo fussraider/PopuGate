@@ -25,6 +25,7 @@ import type {
   TelemtUpdateStatus,
   TelemtReleaseListItem,
   BackupInfo,
+  SystemResources,
   OSType,
   ServiceStatus,
   SchedulerTask,
@@ -133,11 +134,27 @@ export const secretsApi = {
   disableExpired: () =>
     api.post<{ ok: boolean; disabled: number }>('/secrets/disable-expired').then((r) => r.data),
 
-  bulkExtend: (labels: string[], days: number) =>
-    api.post<{ ok: boolean; updated: number }>('/secrets/bulk-extend', { labels, days }).then((r) => r.data),
+  bulkExtend: (labels: string[], days: number, tag?: string) =>
+    api.post<{ ok: boolean; updated: number }>('/secrets/bulk-extend', { labels: tag ? undefined : labels, tag: tag || undefined, days }).then((r) => r.data),
 
-  bulkRotate: (labels: string[]) =>
-    api.post<{ ok: boolean; updated: number; labels: string[] }>('/secrets/bulk-rotate', { labels }).then((r) => r.data),
+  bulkRotate: (labels: string[], tag?: string) =>
+    api.post<{ ok: boolean; updated: number; labels: string[] }>('/secrets/bulk-rotate', { labels: tag ? undefined : labels, tag: tag || undefined }).then((r) => r.data),
+
+  bulkToggle: (labels: string[], enable: boolean, tag?: string) =>
+    api.post<{ ok: boolean; updated: number }>('/secrets/bulk-toggle', { labels: tag ? undefined : labels, tag: tag || undefined, enable }).then((r) => r.data),
+
+  bulkSetLimits: (
+    labels: string[],
+    limits: { max_conns?: number; max_ips?: number; quota_bytes?: number; expires_at?: string },
+    tag?: string,
+  ) =>
+    api.post<{ ok: boolean; updated: number }>('/secrets/bulk-set-limits', { labels: tag ? undefined : labels, tag: tag || undefined, ...limits }).then((r) => r.data),
+
+  listTags: () =>
+    api.get<{ tags: string[] }>('/secrets/tags').then((r) => r.data),
+
+  listByTag: (tag: string) =>
+    api.get<Secret[]>(`/secrets/by-tag/${tag}`).then((r) => r.data),
 
   search: (query: string) =>
     api.get<Secret[]>('/secrets/search', { params: { q: query } }).then((r) => r.data),
@@ -301,6 +318,7 @@ export const backupApi = {
 
 export const systemApi = {
   getOS: () => api.get<OSType>('/system/os').then((r) => r.data),
+  getResources: () => api.get<SystemResources>('/system/resources').then((r) => r.data),
   installService: () => api.post('/system/service/install', {}, { timeout: 300000 }),
   uninstallService: () => api.delete('/system/service/uninstall', { timeout: 120000 }),
   serviceStatus: () =>

@@ -67,7 +67,7 @@ func TestInstanceStore_EnsureDefaultInstanceNoOpIfPopulated(t *testing.T) {
 	if err := s.EnsureDefaultInstance(ctx, 443, 9090); err != nil {
 		t.Fatalf("EnsureDefaultInstance first: %v", err)
 	}
-	if err := s.EnsureDefaultInstance(ctx, 8080, 9091); err != nil {
+	if err := s.EnsureDefaultInstance(ctx, 8090, 9091); err != nil {
 		t.Fatalf("EnsureDefaultInstance second: %v", err)
 	}
 

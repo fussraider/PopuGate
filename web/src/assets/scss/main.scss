@@ -389,6 +389,22 @@ code {
   to { transform: rotate(360deg); }
 }
 
+.progress-bar {
+  height: 8px;
+  background: var(--bg-body);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progress-inner {
+  height: 100%;
+  transition: width 0.3s ease;
+
+  &.success { background: $color-success; }
+  &.warning { background: $color-warning; }
+  &.danger { background: $color-danger; }
+}
+
 // ─── Responsive ────────────────────────────────────────────────────
 
 @media (max-width: 768px) {
@@ -627,7 +643,7 @@ code {
 // ─── Skeleton Loading ──────────────────────────────────────────────
 
 .skeleton {
-  background: linear-gradient(90deg, var(--skeleton-base) 25%, var(--skeleton-highlight) 50%, var(--skeleton-base) 75%);
+  background: linear-gradient(90deg, $bg-body 25%, $border-color 50%, $bg-body 75%);
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
   border-radius: $border-radius-sm;

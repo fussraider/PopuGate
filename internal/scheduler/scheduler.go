@@ -146,6 +146,7 @@ func (s *Scheduler) AddOrUpdateTask(task Task) error {
 		return fmt.Errorf("task %s has no function", task.Name)
 	}
 
+	// Update the definition in taskDefs
 	s.taskDefs[task.Name] = &task
 
 	// Remove existing entry
@@ -154,7 +155,11 @@ func (s *Scheduler) AddOrUpdateTask(task Task) error {
 		delete(s.entries, task.Name)
 	}
 
-	return s.addTaskToCron(&task, task.Schedule)
+	// Add to cron if schedule is not empty
+	if task.Schedule != "" {
+		return s.addTaskToCron(&task, task.Schedule)
+	}
+	return nil
 }
 
 // RemoveTask removes a task's cron entry by name.
@@ -177,15 +182,15 @@ func (s *Scheduler) GetTaskStatuses() []TaskStatus {
 	for _, dt := range s.defaults {
 		effectiveSchedule := dt.Schedule
 
-		// Check if taskDefs has a modified schedule (from runtime override)
+		// Enabled = has a cron entry
+		_, enabled := s.entries[dt.Name]
+
+		// Use the definition from taskDefs if it exists (for effective schedule)
 		if td, ok := s.taskDefs[dt.Name]; ok {
 			effectiveSchedule = td.Schedule
 		}
 
-		// Enabled = has a cron entry
-		_, enabled := s.entries[dt.Name]
-
-		isOverridden := effectiveSchedule != dt.Schedule
+		isOverridden := effectiveSchedule != dt.Schedule && effectiveSchedule != ""
 
 		timeout := defaultTaskTimeout.String()
 		if dt.Timeout > 0 {
@@ -228,6 +233,7 @@ func (s *Scheduler) RunTaskNow(name string) (*ExecutionRecord, error) {
 	}
 	s.mu.Unlock()
 
+	log.Infof("running manual task: %s", name)
 	start := time.Now()
 	rec := &ExecutionRecord{
 		TaskName:  name,
@@ -244,8 +250,10 @@ func (s *Scheduler) RunTaskNow(name string) (*ExecutionRecord, error) {
 	if err != nil {
 		rec.Status = "error"
 		rec.Error = err.Error()
+		log.Errorf("manual task %s failed: %v", name, err)
 	} else {
 		rec.Status = "success"
+		log.Infof("manual task %s completed successfully in %dms", name, rec.DurationMs)
 	}
 
 	if s.history != nil {
@@ -273,6 +281,7 @@ func (s *Scheduler) addTaskToCron(task *Task, schedule string) error {
 
 func (s *Scheduler) wrapTask(task *Task) func() {
 	return func() {
+		log.Infof("starting task: %s", task.Name)
 		start := time.Now()
 		rec := &ExecutionRecord{
 			TaskName:  task.Name,
@@ -293,9 +302,10 @@ func (s *Scheduler) wrapTask(task *Task) func() {
 		if err != nil {
 			rec.Status = "error"
 			rec.Error = err.Error()
-			log.Errorf("%s error: %v", task.Name, err)
+			log.Errorf("task %s failed: %v", task.Name, err)
 		} else {
 			rec.Status = "success"
+			log.Infof("task %s completed successfully in %dms", task.Name, rec.DurationMs)
 		}
 
 		if s.history != nil {
@@ -326,6 +336,7 @@ func DefaultTasks() []Task {
 		{Name: "history-cleanup", Schedule: "0 0 4 * * *"},                              // daily at 4:00
 		{Name: "quota-reset", Schedule: "0 0 0 1 * *", Timeout: 2 * time.Minute},        // monthly on 1st
 		{Name: "auto-rotate", Schedule: "0 0 4 * * *"},                                  // daily at 4:00
+		{Name: "upstream-health", Schedule: "0 */5 * * * *", Timeout: 2 * time.Minute},  // every 5 min
 	}
 }
 

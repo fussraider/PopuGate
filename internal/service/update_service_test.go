@@ -126,7 +126,7 @@ func TestBuildRecreateScriptInner(t *testing.T) {
 			&container.Config{
 				Image:      "ghcr.io/fussraider/popugate:v1.0.0",
 				Entrypoint: []string{"/usr/local/bin/docker-entrypoint.sh"},
-				Cmd:        []string{"server", "--port", "8080"},
+				Cmd:        []string{"server", "--port", "8090"},
 			},
 			&container.HostConfig{
 				NetworkMode:   "host",
@@ -178,14 +178,14 @@ func TestBuildRecreateScriptInner(t *testing.T) {
 
 	t.Run("fills empty HostIP", func(t *testing.T) {
 		pm := nat.PortMap{}
-		pm[nat.Port("8080/tcp")] = []nat.PortBinding{{HostIP: "", HostPort: "8080"}}
+		pm[nat.Port("8090/tcp")] = []nat.PortBinding{{HostIP: "", HostPort: "8090"}}
 		inspect := makeInspect(
 			&container.Config{Image: "img", Cmd: []string{"server"}},
 			&container.HostConfig{PortBindings: pm},
 			nil,
 		)
 		script := svc.buildRecreateScriptInner("popugate", inspect, "img:latest")
-		if !strings.Contains(script, "-p 0.0.0.0:8080/tcp:8080") {
+		if !strings.Contains(script, "-p 0.0.0.0:8090/tcp:8090") {
 			t.Errorf("script missing port, got:\n%s", script)
 		}
 	})

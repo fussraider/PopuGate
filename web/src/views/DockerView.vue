@@ -165,7 +165,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
-  dockerStore.stopUpdatePoll()
+  dockerStore.stopUpdateStream()
 })
 </script>
 

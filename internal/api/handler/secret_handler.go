@@ -36,7 +36,7 @@ func NewSecretHandler(secrets *service.SecretService, settings *store.SettingsSt
 func (h *SecretHandler) List(c *gin.Context) {
 	secrets, err := h.secrets.List(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		HandleError(c, http.StatusInternalServerError, "failed to list secrets", err)
 		return
 	}
 	c.JSON(http.StatusOK, secrets)
@@ -90,7 +90,7 @@ func (h *SecretHandler) Get(c *gin.Context) {
 	label := c.Param("label")
 	sec, err := h.secrets.Get(c.Request.Context(), label)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		HandleError(c, http.StatusInternalServerError, "failed to get secret", err)
 		return
 	}
 	if sec == nil {
@@ -623,7 +623,8 @@ func (h *SecretHandler) Clone(c *gin.Context) {
 }
 
 type bulkExtendRequest struct {
-	Labels []string `json:"labels" binding:"required,min=1"`
+	Labels []string `json:"labels" binding:"omitempty,min=1"`
+	Tag    string   `json:"tag,omitempty"`
 	Days   int      `json:"days" binding:"required,min=1"`
 }
 
@@ -645,17 +646,23 @@ func (h *SecretHandler) BulkExtend(c *gin.Context) {
 		return
 	}
 
-	updated, err := h.secrets.BulkExtend(c.Request.Context(), req.Labels, req.Days)
+	labels, err := h.resolveBulkLabels(c, req.Labels, req.Tag)
+	if err != nil {
+		return
+	}
+
+	updated, err := h.secrets.BulkExtend(c.Request.Context(), labels, req.Days)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	auditLog(c, "secret.bulk_extend", fmt.Sprintf("count=%d days=%d", len(req.Labels), req.Days))
+	auditLog(c, "secret.bulk_extend", fmt.Sprintf("count=%d days=%d tag=%s", len(labels), req.Days, req.Tag))
 	c.JSON(http.StatusOK, gin.H{"ok": true, "updated": updated})
 }
 
 type bulkRotateRequest struct {
-	Labels []string `json:"labels" binding:"required,min=1"`
+	Labels []string `json:"labels" binding:"omitempty,min=1"`
+	Tag    string   `json:"tag,omitempty"`
 }
 
 // BulkRotate handles POST /api/v1/secrets/bulk-rotate
@@ -676,13 +683,18 @@ func (h *SecretHandler) BulkRotate(c *gin.Context) {
 		return
 	}
 
-	updated, labels, err := h.secrets.BulkRotate(c.Request.Context(), req.Labels)
+	labels, err := h.resolveBulkLabels(c, req.Labels, req.Tag)
+	if err != nil {
+		return
+	}
+
+	updated, rotated, err := h.secrets.BulkRotate(c.Request.Context(), labels)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	auditLog(c, "secret.bulk_rotate", fmt.Sprintf("count=%d labels=%v", len(req.Labels), req.Labels))
-	c.JSON(http.StatusOK, gin.H{"ok": true, "updated": updated, "labels": labels})
+	auditLog(c, "secret.bulk_rotate", fmt.Sprintf("count=%d tag=%s", len(labels), req.Tag))
+	c.JSON(http.StatusOK, gin.H{"ok": true, "updated": updated, "labels": rotated})
 }
 
 // Search handles GET /api/v1/secrets/search
@@ -796,4 +808,129 @@ func (h *SecretHandler) Import(c *gin.Context) {
 	}
 	auditLog(c, "secret.import", fmt.Sprintf("count=%d", len(req.Secrets)))
 	c.JSON(http.StatusOK, gin.H{"ok": true, "imported": imported, "created": created})
+}
+
+// resolveBulkLabels resolves labels from either explicit list or tag.
+// Returns error response via gin if validation fails.
+func (h *SecretHandler) resolveBulkLabels(c *gin.Context, labels []string, tag string) ([]string, error) {
+	if tag != "" {
+		if len(labels) > 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "provide either 'labels' or 'tag', not both"})
+			return nil, fmt.Errorf("both labels and tag provided")
+		}
+		resolved, err := h.secrets.LabelsByTag(c.Request.Context(), tag)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+			return nil, err
+		}
+		if len(resolved) == 0 {
+			c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("no secrets found with tag '%s'", tag)})
+			return nil, fmt.Errorf("no secrets for tag")
+		}
+		return resolved, nil
+	}
+	if len(labels) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "labels or tag is required"})
+		return nil, fmt.Errorf("no labels or tag")
+	}
+	return labels, nil
+}
+
+// ListTags handles GET /api/v1/secrets/tags
+func (h *SecretHandler) ListTags(c *gin.Context) {
+	tags, err := h.secrets.ListAllTags(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		return
+	}
+	if tags == nil {
+		tags = []string{}
+	}
+	c.JSON(http.StatusOK, gin.H{"tags": tags})
+}
+
+// ListByTag handles GET /api/v1/secrets/by-tag/:tag
+func (h *SecretHandler) ListByTag(c *gin.Context) {
+	tag := c.Param("tag")
+	secrets, err := h.secrets.ListByTag(c.Request.Context(), tag)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		return
+	}
+	if secrets == nil {
+		secrets = []model.Secret{}
+	}
+	c.JSON(http.StatusOK, secrets)
+}
+
+type bulkToggleRequest struct {
+	Labels []string `json:"labels" binding:"omitempty,min=1"`
+	Tag    string   `json:"tag,omitempty"`
+	Enable bool     `json:"enable"`
+}
+
+// BulkToggle handles POST /api/v1/secrets/bulk-toggle
+func (h *SecretHandler) BulkToggle(c *gin.Context) {
+	var req bulkToggleRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		HandleBindError(c, err)
+		return
+	}
+
+	labels, err := h.resolveBulkLabels(c, req.Labels, req.Tag)
+	if err != nil {
+		return
+	}
+
+	updated, err := h.secrets.BulkToggle(c.Request.Context(), labels, req.Enable)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	auditLog(c, "secret.bulk_toggle", fmt.Sprintf("count=%d enable=%v", updated, req.Enable))
+	c.JSON(http.StatusOK, gin.H{"ok": true, "updated": updated})
+}
+
+type bulkSetLimitsRequest struct {
+	Labels     []string `json:"labels" binding:"omitempty,min=1"`
+	Tag        string   `json:"tag,omitempty"`
+	MaxConns   *int     `json:"max_conns"`
+	MaxIPs     *int     `json:"max_ips"`
+	QuotaBytes *int64   `json:"quota_bytes"`
+	ExpiresAt  string   `json:"expires_at"`
+}
+
+// BulkSetLimits handles POST /api/v1/secrets/bulk-set-limits
+func (h *SecretHandler) BulkSetLimits(c *gin.Context) {
+	var req bulkSetLimitsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		HandleBindError(c, err)
+		return
+	}
+
+	labels, err := h.resolveBulkLabels(c, req.Labels, req.Tag)
+	if err != nil {
+		return
+	}
+
+	maxConns := -1
+	if req.MaxConns != nil {
+		maxConns = *req.MaxConns
+	}
+	maxIPs := -1
+	if req.MaxIPs != nil {
+		maxIPs = *req.MaxIPs
+	}
+	var quotaBytes int64 = -1
+	if req.QuotaBytes != nil {
+		quotaBytes = *req.QuotaBytes
+	}
+
+	updated, err := h.secrets.BulkSetLimits(c.Request.Context(), labels, maxConns, maxIPs, quotaBytes, req.ExpiresAt)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	auditLog(c, "secret.bulk_set_limits", fmt.Sprintf("count=%d", updated))
+	c.JSON(http.StatusOK, gin.H{"ok": true, "updated": updated})
 }

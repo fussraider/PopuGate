@@ -81,6 +81,7 @@ func runMigrations(db *sql.DB) error {
 	if err != nil {
 		return fmt.Errorf("load migrations: %w", err)
 	}
+	fmt.Printf("Loaded %d migrations\n", len(migrations))
 
 	if len(migrations) == 0 {
 		return nil
@@ -117,14 +118,53 @@ func runMigrations(db *sql.DB) error {
 			continue
 		}
 
+		fmt.Printf("Applying migration %d (%s)\n", m.version, m.name)
 		tx, err := db.Begin()
 		if err != nil {
 			return fmt.Errorf("begin migration %d: %w", m.version, err)
 		}
 
-		if _, err := tx.Exec(m.content); err != nil {
-			tx.Rollback()
-			return fmt.Errorf("run migration %d (%s): %w", m.version, m.name, err)
+		content := m.content
+		// Parse the migration content to get only the "Up" part.
+		// We look for "-- +migrate Up:" and "-- +migrate Down:" markers.
+		upIdx := strings.Index(content, "-- +migrate Up:")
+		downIdx := strings.Index(content, "-- +migrate Down:")
+
+		var sqlToRun string
+		if upIdx != -1 {
+			if downIdx != -1 && downIdx > upIdx {
+				sqlToRun = content[upIdx+len("-- +migrate Up:") : downIdx]
+			} else {
+				sqlToRun = content[upIdx+len("-- +migrate Up:"):]
+			}
+		} else {
+			// Fallback: if no markers, run everything (legacy)
+			if downIdx != -1 {
+				sqlToRun = content[:downIdx]
+			} else {
+				sqlToRun = content
+			}
+		}
+
+		sqlToRun = strings.TrimSpace(sqlToRun)
+		if sqlToRun != "" {
+			// Split by semicolon and run each statement individually.
+			// This is because Exec() might not support multiple ALTER TABLE statements in one call depending on driver.
+			statements := strings.Split(sqlToRun, ";")
+			for _, stmt := range statements {
+				stmt = strings.TrimSpace(stmt)
+				if stmt == "" {
+					continue
+				}
+				if _, err := tx.Exec(stmt); err != nil {
+					// If column already exists, we can ignore this error for ADD COLUMN statements
+					if strings.Contains(strings.ToUpper(stmt), "ADD COLUMN") && strings.Contains(err.Error(), "duplicate column name") {
+						continue
+					}
+					tx.Rollback()
+					return fmt.Errorf("run migration %d (%s) statement [%s]: %w", m.version, m.name, stmt, err)
+				}
+			}
 		}
 
 		if _, err := tx.Exec("INSERT INTO schema_version (version, name) VALUES (?, ?)", m.version, m.name); err != nil {

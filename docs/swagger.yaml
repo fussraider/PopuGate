@@ -188,7 +188,7 @@ definitions:
     required:
     - enabled
     type: object
-host: localhost:8080
+host: localhost:8090
 info:
   contact:
     name: PopuGate Support

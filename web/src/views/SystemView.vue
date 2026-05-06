@@ -1,5 +1,74 @@
 <template>
   <div class="system-view">
+    <!-- System Resources -->
+    <div class="card mb-lg">
+      <h3 class="mb-md">{{ t('system.resources_title') }}</h3>
+      <div v-if="systemStore.resources">
+        <div class="resource-grid mb-lg">
+          <!-- CPU -->
+          <div class="resource-item">
+            <div class="flex justify-between items-center mb-xs">
+              <span class="text-sm font-medium">{{ t('system.cpu_usage') }}</span>
+              <span class="text-sm">{{ systemStore.resources.cpu_usage.toFixed(1) }}%</span>
+            </div>
+            <div class="progress-bar">
+              <div
+                class="progress-inner"
+                :class="getBarVariant(systemStore.resources.cpu_usage)"
+                :style="{ width: systemStore.resources.cpu_usage + '%' }"
+              ></div>
+            </div>
+          </div>
+
+          <!-- Memory -->
+          <div class="resource-item">
+            <div class="flex justify-between items-center mb-xs">
+              <span class="text-sm font-medium">{{ t('system.memory_usage') }}</span>
+              <span class="text-sm">
+                {{ formatBytes(systemStore.resources.memory_used) }} /
+                {{ formatBytes(systemStore.resources.memory_total) }}
+              </span>
+            </div>
+            <div class="progress-bar">
+              <div
+                class="progress-inner"
+                :class="getBarVariant((systemStore.resources.memory_used / systemStore.resources.memory_total) * 100)"
+                :style="{ width: (systemStore.resources.memory_used / systemStore.resources.memory_total) * 100 + '%' }"
+              ></div>
+            </div>
+          </div>
+
+          <!-- Disk -->
+          <div class="resource-item">
+            <div class="flex justify-between items-center mb-xs">
+              <span class="text-sm font-medium">{{ t('system.disk_usage') }}</span>
+              <span class="text-sm">
+                {{ formatBytes(systemStore.resources.disk_used) }} /
+                {{ formatBytes(systemStore.resources.disk_total) }}
+              </span>
+            </div>
+            <div class="progress-bar">
+              <div
+                class="progress-inner"
+                :class="getBarVariant((systemStore.resources.disk_used / systemStore.resources.disk_total) * 100)"
+                :style="{ width: (systemStore.resources.disk_used / systemStore.resources.disk_total) * 100 + '%' }"
+              ></div>
+            </div>
+          </div>
+        </div>
+
+        <InfoGrid>
+          <InfoItem :label="t('system.load_avg')">
+            <span>{{ systemStore.resources.load1.toFixed(2) }} {{ systemStore.resources.load5.toFixed(2) }} {{ systemStore.resources.load15.toFixed(2) }}</span>
+          </InfoItem>
+          <InfoItem :label="t('system.uptime')">
+            <span>{{ formatUptime(systemStore.resources.uptime) }}</span>
+          </InfoItem>
+        </InfoGrid>
+      </div>
+      <div v-else class="text-muted">{{ t('system.loading') }}</div>
+    </div>
+
     <!-- OS Information -->
     <div class="card mb-lg">
       <h3 class="mb-md">{{ t('system.title') }}</h3>
@@ -100,7 +169,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useSystemStore } from '@/stores/system'
 import { useToastStore } from '@/stores/toast'
@@ -110,6 +179,7 @@ import StatusBadge from '@/components/common/StatusBadge.vue'
 import InfoGrid from '@/components/common/InfoGrid.vue'
 import InfoItem from '@/components/common/InfoItem.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import { formatBytes } from '@/utils/format'
 
 const { t } = useI18n()
 const systemStore = useSystemStore()
@@ -124,6 +194,23 @@ const serviceStatusVariant = computed(() => {
   if (status.includes('failed')) return 'danger'
   return 'warning'
 })
+
+function getBarVariant(percent: number) {
+  if (percent > 90) return 'danger'
+  if (percent > 70) return 'warning'
+  return 'success'
+}
+
+function formatUptime(seconds: number) {
+  const d = Math.floor(seconds / 86400)
+  const h = Math.floor((seconds % 86400) / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  const parts = []
+  if (d > 0) parts.push(`${d}d`)
+  if (h > 0) parts.push(`${h}h`)
+  if (m > 0) parts.push(`${m}m`)
+  return parts.length > 0 ? parts.join(' ') : '< 1m'
+}
 
 async function handleInstall() {
   try {
@@ -165,8 +252,14 @@ async function handleReload() {
 onMounted(async () => {
   await Promise.all([
     systemStore.loadOS(),
-    systemStore.loadServiceStatus()
+    systemStore.loadServiceStatus(),
   ])
+
+  systemStore.startResourceStream()
+})
+
+onUnmounted(() => {
+  systemStore.stopResourceStream()
 })
 </script>
 
@@ -184,5 +277,11 @@ onMounted(async () => {
   background: var(--bg-table-hover);
   border-radius: $border-radius;
   border: 1px solid $border-color;
+}
+
+.resource-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: $spacing-lg;
 }
 </style>

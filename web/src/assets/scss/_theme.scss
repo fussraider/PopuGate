@@ -6,6 +6,12 @@
   // Brand
   --color-primary-bg: #eef2ff;
 
+  // Semantic colors
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
+  --color-danger: #ef4444;
+  --color-info: #3b82f6;
+
   // Semantic backgrounds
   --color-success-bg: #d1fae5;
   --color-warning-bg: #fef3c7;
@@ -72,6 +78,12 @@
 [data-theme="dark"] {
   // Brand
   --color-primary-bg: rgba(99, 102, 241, 0.15);
+
+  // Semantic colors
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
+  --color-danger: #ef4444;
+  --color-info: #3b82f6;
 
   // Semantic backgrounds
   --color-success-bg: rgba(16, 185, 129, 0.15);

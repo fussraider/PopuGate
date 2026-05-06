@@ -14,6 +14,9 @@ export const useSecretsStore = defineStore('secrets', () => {
   const searchResults = ref<Secret[]>([])
   const showArchived = ref(false)
 
+  const allTags = ref<string[]>([])
+  const selectedTagFilter = ref('')
+
   async function load() {
     loading.value = true
     try {
@@ -21,6 +24,13 @@ export const useSecretsStore = defineStore('secrets', () => {
     } finally {
       loading.value = false
     }
+  }
+
+  async function loadTags() {
+    try {
+      const data = await secretsApi.listTags()
+      allTags.value = data.tags || []
+    } catch { /* ignore */ }
   }
 
   async function add(label: string, secret?: string) {
@@ -124,20 +134,44 @@ export const useSecretsStore = defineStore('secrets', () => {
     return res.disabled
   }
 
-  async function bulkExtend(labels: string[], days: number) {
+  async function bulkExtend(labels: string[], days: number, tag?: string) {
     bulkLoading.value = true
     try {
-      await secretsApi.bulkExtend(labels, days)
+      await secretsApi.bulkExtend(labels, days, tag)
       await load()
     } finally {
       bulkLoading.value = false
     }
   }
 
-  async function bulkRotate(labels: string[]) {
+  async function bulkRotate(labels: string[], tag?: string) {
     bulkLoading.value = true
     try {
-      await secretsApi.bulkRotate(labels)
+      await secretsApi.bulkRotate(labels, tag)
+      await load()
+    } finally {
+      bulkLoading.value = false
+    }
+  }
+
+  async function bulkToggle(labels: string[], enable: boolean, tag?: string) {
+    bulkLoading.value = true
+    try {
+      await secretsApi.bulkToggle(labels, enable, tag)
+      await load()
+    } finally {
+      bulkLoading.value = false
+    }
+  }
+
+  async function bulkSetLimits(
+    labels: string[],
+    limits: { max_conns?: number; max_ips?: number; quota_bytes?: number; expires_at?: string },
+    tag?: string,
+  ) {
+    bulkLoading.value = true
+    try {
+      await secretsApi.bulkSetLimits(labels, limits, tag)
       await load()
     } finally {
       bulkLoading.value = false
@@ -179,6 +213,14 @@ export const useSecretsStore = defineStore('secrets', () => {
     searchQuery.value ? searchResults.value : activeSecrets.value,
   )
 
+  const tagFilteredItems = computed(() => {
+    if (!selectedTagFilter.value) return displayItems.value
+    return displayItems.value.filter((s) => {
+      const tags = (s.tags || '').split(',').map((t: string) => t.trim()).filter(Boolean)
+      return tags.includes(selectedTagFilter.value)
+    })
+  })
+
   return {
     secrets,
     loading,
@@ -188,7 +230,10 @@ export const useSecretsStore = defineStore('secrets', () => {
     searchQuery,
     searchResults,
     showArchived,
+    allTags,
+    selectedTagFilter,
     load,
+    loadTags,
     add,
     remove,
     rotate,
@@ -206,11 +251,14 @@ export const useSecretsStore = defineStore('secrets', () => {
     loadTop,
     bulkExtend,
     bulkRotate,
+    bulkToggle,
+    bulkSetLimits,
     search,
     exportAll,
     importSecrets,
     enabledCount,
     activeSecrets,
     displayItems,
+    tagFilteredItems,
   }
 })

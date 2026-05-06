@@ -12,6 +12,14 @@
           </button>
         </div>
         <div class="header-actions">
+          <select v-model="secretsStore.selectedTagFilter" class="input input-sm tag-filter-select">
+            <option value="">{{ t('secrets.all_tags') }}</option>
+            <option v-for="tag in secretsStore.allTags" :key="tag" :value="tag">{{ tag }}</option>
+          </select>
+          <button v-if="secretsStore.selectedTagFilter" class="btn btn-secondary btn-sm"
+                  @click="selectAllByTag(secretsStore.selectedTagFilter)">
+            <Tags :size="14" /> {{ t('secrets.select_by_tag', { tag: secretsStore.selectedTagFilter }) }}
+          </button>
           <label class="toggle-label">
             <input type="checkbox" v-model="secretsStore.showArchived" />
             {{ t('secrets.show_archived') }}
@@ -42,6 +50,15 @@
       <button class="btn btn-warning btn-sm" @click="handleBulkRotate" :disabled="secretsStore.bulkLoading">
         <RotateCw :size="14" /> {{ t('secrets.bulk_rotate') }}
       </button>
+      <button class="btn btn-secondary btn-sm" @click="handleBulkToggle(true)" :disabled="secretsStore.bulkLoading">
+        <Play :size="14" /> {{ t('secrets.bulk_enable') }}
+      </button>
+      <button class="btn btn-secondary btn-sm" @click="handleBulkToggle(false)" :disabled="secretsStore.bulkLoading">
+        <Pause :size="14" /> {{ t('secrets.bulk_disable') }}
+      </button>
+      <button class="btn btn-secondary btn-sm" @click="bulkLimitsModal.open()" :disabled="secretsStore.bulkLoading">
+        <Settings :size="14" /> {{ t('secrets.bulk_set_limits') }}
+      </button>
       <button class="btn btn-ghost btn-sm" @click="selectedLabels = new Set()">
         {{ t('secrets.clear_selection') }}
       </button>
@@ -49,7 +66,7 @@
 
     <DataTable
       :columns="columns"
-      :items="secretsStore.displayItems"
+      :items="secretsStore.tagFilteredItems"
       :loading="secretsStore.loading"
       :empty-icon="KeyRound"
       :empty-message="t('secrets.empty')"
@@ -259,6 +276,32 @@
       </div>
     </FormModal>
 
+    <!-- Bulk Set Limits Modal -->
+    <FormModal v-model="bulkLimitsModal.isOpen.value" :title="t('secrets.bulk_set_limits')" :submitting="bulkLimitsModal.submitting.value"
+               @submit="handleBulkSetLimits()">
+      <p class="text-muted mb-md">{{ selectedLabels.size }} {{ t('secrets.selected') }}</p>
+      <div class="form-row mb-sm">
+        <div class="form-group">
+          <label class="form-label">{{ t('secrets.max_conns') }}</label>
+          <input v-model.number="bulkLimitsModal.form.value.maxConns" class="input" type="number" min="0" :placeholder="t('secrets.unlimited_placeholder')" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">{{ t('secrets.max_ips') }}</label>
+          <input v-model.number="bulkLimitsModal.form.value.maxIPs" class="input" type="number" min="0" :placeholder="t('secrets.unlimited_placeholder')" />
+        </div>
+      </div>
+      <div class="form-row mb-sm">
+        <div class="form-group">
+          <label class="form-label">{{ t('secrets.quota_mb') }}</label>
+          <input v-model.number="bulkLimitsModal.form.value.quotaMB" class="input" type="number" min="0" :placeholder="t('secrets.unlimited_placeholder')" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">{{ t('secrets.table.expires') }}</label>
+          <input v-model="bulkLimitsModal.form.value.expiresAt" class="input" type="date" />
+        </div>
+      </div>
+    </FormModal>
+
     <!-- Import Modal -->
     <Modal v-model="importModal" :title="t('secrets.import_title')">
       <div class="form-group mb-md">
@@ -325,7 +368,7 @@ import {
   KeyRound, RotateCw, Settings, QrCode, Play, Pause, Trash2, Loader2,
   Search, Download, Upload, Copy, Archive as ArchiveIcon, ArchiveRestore,
   Clock, Pencil, PenLine, X as XIcon, TrendingUp, CalendarPlus, Eraser,
-  StickyNote, Ban,
+  StickyNote, Ban, Tags,
 } from '@lucide/vue'
 
 const { t } = useI18n()
@@ -346,6 +389,16 @@ const columns = computed(() => [
 const selectedLabels = ref<Set<string>>(new Set())
 function onSelectionChange(keys: Set<string | number>) {
   selectedLabels.value = new Set([...keys] as string[])
+}
+
+function selectAllByTag(tag: string) {
+  const matching = secretsStore.tagFilteredItems
+    .filter((s) => {
+      const tags = (s.tags || '').split(',').map((t: string) => t.trim()).filter(Boolean)
+      return tags.includes(tag)
+    })
+    .map((s) => s.label)
+  selectedLabels.value = new Set(matching)
 }
 
 // Search
@@ -575,6 +628,39 @@ async function handleBulkRotate() {
   } catch (e: any) { toast.error(e.response?.data?.error ?? e.message) }
 }
 
+// Bulk toggle
+async function handleBulkToggle(enable: boolean) {
+  const labels = [...selectedLabels.value]
+  if (!await confirm({
+    title: enable ? t('secrets.bulk_enable') : t('secrets.bulk_disable'),
+    message: enable ? t('secrets.bulk_enable_confirm', { count: labels.length }) : t('secrets.bulk_disable_confirm', { count: labels.length }),
+    confirmText: enable ? t('secrets.bulk_enable') : t('secrets.bulk_disable'),
+  })) return
+  try {
+    await secretsStore.bulkToggle(labels, enable)
+    toast.success(enable ? t('secrets.bulk_enabled', { count: labels.length }) : t('secrets.bulk_disabled', { count: labels.length }))
+    selectedLabels.value = new Set()
+  } catch (e: any) { toast.error(e.response?.data?.error ?? e.message) }
+}
+
+// Bulk set limits modal
+const bulkLimitsModal = useFormModal({ maxConns: 0, maxIPs: 0, quotaMB: 0, expiresAt: '' })
+async function handleBulkSetLimits() {
+  const labels = [...selectedLabels.value]
+  try {
+    await bulkLimitsModal.submit(async (f) => {
+      const limits: Record<string, any> = {}
+      if (f.maxConns > 0) limits.max_conns = f.maxConns
+      if (f.maxIPs > 0) limits.max_ips = f.maxIPs
+      if (f.quotaMB > 0) limits.quota_bytes = f.quotaMB * 1024 * 1024
+      if (f.expiresAt) limits.expires_at = f.expiresAt
+      await secretsStore.bulkSetLimits(labels, limits)
+    })
+    toast.success(t('secrets.bulk_limits_set', { count: labels.length }))
+    selectedLabels.value = new Set()
+  } catch (e: any) { toast.error(e.response?.data?.error ?? e.message) }
+}
+
 // Export
 async function handleExport() {
   try {
@@ -658,7 +744,10 @@ function quotaPercent(sec: any): number {
   return ((sec.traffic_in || 0) + (sec.traffic_out || 0)) / sec.quota_bytes * 100
 }
 
-onMounted(() => secretsStore.load())
+onMounted(() => {
+  secretsStore.load()
+  secretsStore.loadTags()
+})
 </script>
 
 <style scoped lang="scss">
@@ -703,6 +792,10 @@ onMounted(() => secretsStore.load())
   align-items: center;
   gap: $spacing-sm;
   flex-shrink: 0;
+}
+
+.tag-filter-select {
+  min-width: 120px;
 }
 
 .toggle-label {

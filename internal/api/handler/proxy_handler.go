@@ -43,8 +43,12 @@ func (h *ProxyHandler) SetDockerClient(d *dockerutil.DockerClient) {
 // @Security     BearerAuth
 // @Router       /proxy/start [post]
 func (h *ProxyHandler) Start(c *gin.Context) {
+	if h.container == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "proxy service unavailable (docker might be missing)"})
+		return
+	}
 	if err := h.container.Start(c.Request.Context()); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to start proxy: %v", err)})
 		return
 	}
 
@@ -94,8 +98,12 @@ func (h *ProxyHandler) Start(c *gin.Context) {
 // @Security     BearerAuth
 // @Router       /proxy/stop [post]
 func (h *ProxyHandler) Stop(c *gin.Context) {
+	if h.container == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "proxy service unavailable"})
+		return
+	}
 	if err := h.container.Stop(c.Request.Context()); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to stop proxy: %v", err)})
 		return
 	}
 	auditLog(c, "proxy.stop", "proxy stopped")
@@ -112,8 +120,12 @@ func (h *ProxyHandler) Stop(c *gin.Context) {
 // @Security     BearerAuth
 // @Router       /proxy/restart [post]
 func (h *ProxyHandler) Restart(c *gin.Context) {
+	if h.container == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "proxy service unavailable"})
+		return
+	}
 	if err := h.container.Restart(c.Request.Context()); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to restart proxy: %v", err)})
 		return
 	}
 	auditLog(c, "proxy.restart", "proxy restarted")
@@ -130,8 +142,12 @@ func (h *ProxyHandler) Restart(c *gin.Context) {
 // @Security     BearerAuth
 // @Router       /proxy/reload [post]
 func (h *ProxyHandler) Reload(c *gin.Context) {
+	if h.container == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "proxy service unavailable"})
+		return
+	}
 	if err := h.container.Reload(c.Request.Context()); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to reload proxy: %v", err)})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})
@@ -147,9 +163,13 @@ func (h *ProxyHandler) Reload(c *gin.Context) {
 // @Security     BearerAuth
 // @Router       /proxy/status [get]
 func (h *ProxyHandler) Status(c *gin.Context) {
+	if h.container == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "proxy service unavailable"})
+		return
+	}
 	status, err := h.container.Status(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to get proxy status: %v", err)})
 		return
 	}
 	c.JSON(http.StatusOK, status)
@@ -189,7 +209,7 @@ func (h *ProxyHandler) Logs(c *gin.Context) {
 		if follow {
 			c.SSEvent("error", fmt.Sprintf("failed to get logs: %v", err))
 		} else {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+			HandleError(c, http.StatusInternalServerError, "failed to get logs", err)
 		}
 		return
 	}

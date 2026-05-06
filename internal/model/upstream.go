@@ -22,6 +22,13 @@ type Upstream struct {
 	Weight   int          `json:"weight" db:"weight"`
 	Iface    string       `json:"iface" db:"iface"`
 	Enabled  bool         `json:"enabled" db:"enabled"`
+
+	// Health fields
+	LastCheckAt int64  `json:"last_check_at" db:"last_check_at"` // unix timestamp
+	LastCheckOK *bool  `json:"last_check_ok" db:"last_check_ok"` // nil=never tested
+	LatencyMs   int64  `json:"latency_ms" db:"latency_ms"`       // last test latency
+	LastError   string `json:"last_error" db:"last_error"`       // last error message
+	FailCount   int    `json:"fail_count" db:"fail_count"`       // consecutive failures
 }
 
 // Validate checks upstream fields.

@@ -72,7 +72,7 @@ func NewConfigHandler(settings *store.SettingsStore) *ConfigHandler {
 func (h *ConfigHandler) GetAll(c *gin.Context) {
 	settings, err := h.settings.Load(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		HandleError(c, http.StatusInternalServerError, "failed to load settings", err)
 		return
 	}
 	c.JSON(http.StatusOK, settings)
@@ -125,7 +125,7 @@ func (h *ConfigHandler) Update(c *gin.Context) {
 	}
 
 	if err := h.settings.Save(c.Request.Context(), strUpdates); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		HandleError(c, http.StatusInternalServerError, "failed to save settings", err)
 		return
 	}
 
@@ -154,7 +154,7 @@ func (h *ConfigHandler) GetKey(c *gin.Context) {
 	key := c.Param("key")
 	value, err := h.settings.Get(c.Request.Context(), key)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		HandleError(c, http.StatusInternalServerError, "failed to get setting", err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"key": key, "value": value})

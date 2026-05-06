@@ -458,3 +458,40 @@ func (s *SecretService) ImportSecrets(ctx context.Context, entries []model.Secre
 	}
 	return imported, created, nil
 }
+
+// ListByTag returns secrets matching the given tag.
+func (s *SecretService) ListByTag(ctx context.Context, tag string) ([]model.Secret, error) {
+	return s.secrets.ListByTag(ctx, tag)
+}
+
+// ListAllTags returns all unique tags.
+func (s *SecretService) ListAllTags(ctx context.Context) ([]string, error) {
+	return s.secrets.ListAllTags(ctx)
+}
+
+// LabelsByTag resolves a tag to its constituent labels.
+func (s *SecretService) LabelsByTag(ctx context.Context, tag string) ([]string, error) {
+	if tag == "" {
+		return nil, fmt.Errorf("tag must not be empty")
+	}
+	return s.secrets.LabelsByTag(ctx, tag)
+}
+
+// BulkToggle enables or disables multiple secrets.
+func (s *SecretService) BulkToggle(ctx context.Context, labels []string, enable bool) (int, error) {
+	if !enable {
+		enabled, err := s.secrets.CountEnabled(ctx)
+		if err != nil {
+			return 0, err
+		}
+		if enabled <= len(labels) {
+			return 0, fmt.Errorf("cannot disable all enabled secrets")
+		}
+	}
+	return s.secrets.BulkToggleEnabled(ctx, labels, enable)
+}
+
+// BulkSetLimits sets the same limits for multiple secrets.
+func (s *SecretService) BulkSetLimits(ctx context.Context, labels []string, maxConns, maxIPs int, quotaBytes int64, expiresAt string) (int, error) {
+	return s.secrets.BulkSetLimits(ctx, labels, maxConns, maxIPs, quotaBytes, expiresAt)
+}

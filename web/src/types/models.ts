@@ -78,6 +78,13 @@ export interface Upstream {
   weight: number
   iface: string
   enabled: boolean
+
+  // Health fields
+  last_check_at?: number
+  last_check_ok?: boolean | null
+  latency_ms?: number
+  last_error?: string
+  fail_count?: number
 }
 
 export interface NetInterface {
@@ -338,4 +345,16 @@ export interface SecretTemplate {
 export interface SecretImportItem {
   label: string
   secret_key: string
+}
+
+export interface SystemResources {
+  cpu_usage: number
+  memory_used: number
+  memory_total: number
+  disk_used: number
+  disk_total: number
+  load1: number
+  load5: number
+  load15: number
+  uptime: number
 }

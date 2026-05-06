@@ -7,7 +7,7 @@
     <aside :class="['sidebar', { open: sidebarOpen }]">
       <div class="sidebar-header">
         <router-link to="/" class="logo" @click="sidebarOpen = false">
-          <img src="@/assets/images/icons/icon-180x180.png" alt="PopuGate" class="logo-img" />
+          <img src="@/assets/images/icons/icon-192x192.png" alt="PopuGate" class="logo-img" />
           <span class="logo-text">PopuGate</span>
         </router-link>
         <button class="sidebar-close" @click="sidebarOpen = false"><X :size="20" /></button>
@@ -199,8 +199,8 @@ async function handleLogout() {
 }
 
 .logo-img {
-  width: 56px;
-  height: 56px;
+  width: 42px;
+  height: 42px;
   object-fit: contain;
 }
 

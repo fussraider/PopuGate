@@ -157,7 +157,17 @@ func (s *UpstreamService) Toggle(ctx context.Context, name string, enable bool) 
 	if existing == nil {
 		return fmt.Errorf("upstream '%s' not found", name)
 	}
-	return s.upstreams.UpdateEnabled(ctx, name, enable)
+	if err := s.upstreams.UpdateEnabled(ctx, name, enable); err != nil {
+		return err
+	}
+	// Clear stale health data when disabling — CheckAllUpstreams skips disabled
+	// upstreams, so the last recorded status would be misleading.
+	if !enable {
+		if err := s.upstreams.ClearHealth(ctx, name); err != nil {
+			log.Warnf("failed to clear health for disabled upstream %s: %v", name, err)
+		}
+	}
+	return nil
 }
 
 // Test tests connectivity through an upstream.

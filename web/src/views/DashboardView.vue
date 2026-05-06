@@ -216,7 +216,18 @@ async function proxyAction(action: 'start' | 'stop' | 'restart' | 'reload') {
 function healthStatus(status?: string): 'success' | 'warning' | 'danger' | 'neutral' {
   if (!status) return 'neutral'
   const s = status.toLowerCase()
-  if (s.includes('running') || s.includes('listening') || s.includes('responding') || s === 'installed') return 'success'
+
+  // Parse "X/Y running|listening|responding" format
+  const match = s.match(/^(\d+)\/(\d+)\s/)
+  if (match) {
+    const current = parseInt(match[1], 10)
+    const total = parseInt(match[2], 10)
+    if (current >= total && total > 0) return 'success'
+    if (current > 0) return 'warning'
+    return 'danger'
+  }
+
+  if (s === 'installed') return 'success'
   if (s.includes('error') || s.includes('not')) return 'danger'
   return 'warning'
 }

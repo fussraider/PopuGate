@@ -189,9 +189,11 @@ const { confirmState, confirm, handleConfirm, handleCancel } = useConfirmDialog(
 
 const serviceStatusVariant = computed(() => {
   const status = systemStore.service?.active?.toLowerCase() || ''
-  if (status.includes('active') || status.includes('running')) return 'success'
+  // Check negative states FIRST — "inactive".includes("active") is true in JS,
+  // so the order of conditions matters here.
   if (status.includes('inactive') || status.includes('dead')) return 'danger'
   if (status.includes('failed')) return 'danger'
+  if (status.includes('active') || status.includes('running')) return 'success'
   return 'warning'
 })
 

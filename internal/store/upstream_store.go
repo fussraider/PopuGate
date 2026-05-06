@@ -184,3 +184,12 @@ func (s *UpstreamStore) UpdateEnabled(ctx context.Context, name string, enabled 
 	_, err := s.db.ExecContext(ctx, "UPDATE upstreams SET enabled = ? WHERE name = ?", v, name)
 	return err
 }
+
+// ClearHealth resets all health-related fields to their default values.
+func (s *UpstreamStore) ClearHealth(ctx context.Context, name string) error {
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE upstreams SET last_check_at = 0, last_check_ok = NULL, latency_ms = 0, last_error = '', fail_count = 0
+		WHERE name = ?
+	`, name)
+	return err
+}

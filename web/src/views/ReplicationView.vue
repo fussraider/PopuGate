@@ -64,8 +64,8 @@
           {{ item.last_sync ? new Date(item.last_sync * 1000).toLocaleString() : t('replication.never') }}
         </template>
         <template #cell-status="{ item }">
-          <StatusBadge :variant="item.status === 'ok' ? 'success' : 'danger'">
-            {{ item.status || 'unknown' }}
+          <StatusBadge :variant="item.status === 'ok' ? 'success' : item.status ? 'danger' : 'neutral'">
+            {{ item.status || t('upstreams.health_unknown') }}
           </StatusBadge>
         </template>
         <template #actions="{ item }">

@@ -20,7 +20,8 @@ func setupBackupTestRouter(t *testing.T) (*gin.Engine, *BackupHandler, string) {
 
 	tmpDir := t.TempDir()
 	backupStore := store.NewBackupStore(tmpDir)
-	handler := NewBackupHandler(backupStore)
+	// Create handler with nil dependencies for basic tests
+	handler := NewBackupHandler(backupStore, nil, nil, nil)
 
 	r := gin.New()
 	r.GET("/api/v1/backups", handler.List)
@@ -43,11 +44,16 @@ func TestBackupHandler_List(t *testing.T) {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 	}
 
-	var backups []interface{}
-	if err := json.Unmarshal(w.Body.Bytes(), &backups); err != nil {
+	var resp map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("failed to parse response: %v", err)
 	}
-	// Empty list is valid
+	if _, ok := resp["backups"]; !ok {
+		t.Fatal("expected 'backups' field in response")
+	}
+	if _, ok := resp["encryption_enabled"]; !ok {
+		t.Fatal("expected 'encryption_enabled' field in response")
+	}
 }
 
 func TestBackupHandler_Create(t *testing.T) {

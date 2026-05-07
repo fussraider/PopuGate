@@ -41,7 +41,8 @@ defineProps<{ text: string }>()
   line-height: $line-height-tight;
   font-weight: normal;
   width: max-content;
-  max-width: 200px;
+  max-width: 280px;
+  white-space: pre-line;
   z-index: 100;
   opacity: 0;
   transition: opacity 0.2s, transform 0.2s;

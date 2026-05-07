@@ -306,7 +306,7 @@ export const updateApi = {
 // ─── Backup ────────────────────────────────────────────────────
 
 export const backupApi = {
-  list: () => api.get<BackupInfo[]>('/backups').then((r) => r.data),
+  list: () => api.get<{ backups: BackupInfo[]; encryption_enabled: boolean }>('/backups').then((r) => r.data),
   create: (label?: string) => api.post('/backups', { label }, { timeout: 300000 }),
   restore: (filename: string) => api.post('/backups/restore', { filename }, { timeout: 300000 }),
   download: (filename: string) =>

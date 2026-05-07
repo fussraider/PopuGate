@@ -1,10 +1,17 @@
 <template>
   <div>
     <PageHeader>
-      <button class="btn btn-primary" :disabled="backupStore.creating" @click="handleCreate">
-        <Loader2 v-if="backupStore.creating" :size="16" class="animate-spin" />
-        {{ backupStore.creating ? t('backups.creating') : t('backups.create') }}
-      </button>
+      <div class="header-actions">
+        <span v-if="!backupStore.loading" class="encryption-badge" :class="backupStore.encryptionEnabled ? 'badge-on' : 'badge-off'" v-tooltip="backupStore.encryptionEnabled ? t('backups.encryption_on_hint') : t('backups.encryption_off_hint')">
+          <Shield v-if="backupStore.encryptionEnabled" :size="14" />
+          <ShieldOff v-else :size="14" />
+          {{ backupStore.encryptionEnabled ? t('backups.encryption_on') : t('backups.encryption_off') }}
+        </span>
+        <button class="btn btn-primary" :disabled="backupStore.creating" @click="handleCreate">
+          <Loader2 v-if="backupStore.creating" :size="16" class="animate-spin" />
+          {{ backupStore.creating ? t('backups.creating') : t('backups.create') }}
+        </button>
+      </div>
     </PageHeader>
 
     <DataTable
@@ -16,7 +23,11 @@
       row-key="filename"
     >
       <template #cell-filename="{ item }">
-        <code class="truncate filename-cell">{{ item.filename }}</code>
+        <div class="filename-wrapper">
+          <Lock v-if="item.encrypted" :size="14" class="icon-encrypted" v-tooltip="t('backups.encrypted')" />
+          <Unlock v-else :size="14" class="icon-unencrypted" v-tooltip="t('backups.not_encrypted')" />
+          <code class="truncate filename-cell">{{ item.filename }}</code>
+        </div>
       </template>
       <template #cell-size="{ item }">{{ formatBytes(item.size) }}</template>
       <template #cell-created="{ item }">{{ new Date(item.created_at).toLocaleString() }}</template>
@@ -49,7 +60,7 @@ import { useConfirmDialog } from '@/composables/useConfirmDialog'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import DataTable from '@/components/common/DataTable.vue'
 import PageHeader from '@/components/common/PageHeader.vue'
-import { Save, Download, Trash2, Loader2 } from '@lucide/vue'
+import { Save, Download, Trash2, Loader2, Lock, Unlock, Shield, ShieldOff } from '@lucide/vue'
 
 const { t } = useI18n()
 const backupStore = useBackupStore()
@@ -104,8 +115,51 @@ onMounted(() => backupStore.load())
 </script>
 
 <style scoped lang="scss">
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.encryption-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.badge-on {
+  background: rgba(34, 197, 94, 0.12);
+  color: var(--color-success, #22c55e);
+}
+
+.badge-off {
+  background: rgba(156, 163, 175, 0.12);
+  color: var(--color-muted, #9ca3af);
+}
+
+.filename-wrapper {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .filename-cell {
   display: inline-block;
   max-width: 300px;
+}
+
+.icon-encrypted {
+  color: var(--color-success, #22c55e);
+  flex-shrink: 0;
+}
+
+.icon-unencrypted {
+  color: var(--color-muted, #9ca3af);
+  flex-shrink: 0;
 }
 </style>

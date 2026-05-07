@@ -559,18 +559,16 @@ paths:
       - auth
   /backups:
     get:
-      consumes:
-      - application/json
-      description: Returns a list of all available database backups
+      description: Returns a list of all available backups and whether backup encryption
+        is enabled.
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            items:
-              type: object
-            type: array
+            additionalProperties: true
+            type: object
         "500":
           description: Internal Server Error
           schema:
@@ -583,18 +581,15 @@ paths:
       tags:
       - backup
     post:
-      consumes:
-      - application/json
-      description: Creates a new database backup and returns its filename, size, and
-        creation timestamp
+      description: Creates a new encrypted or unencrypted backup depending on BACKUP_ENCRYPTION_KEY
+        env var. Returns filename, size, checksum, and creation timestamp.
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            additionalProperties:
-              type: string
+            additionalProperties: true
             type: object
         "500":
           description: Internal Server Error
@@ -609,9 +604,7 @@ paths:
       - backup
   /backups/{filename}:
     delete:
-      consumes:
-      - application/json
-      description: Deletes a backup file by its filename
+      description: Deletes a backup file and its checksum sidecar by filename
       parameters:
       - description: Backup filename
         in: path
@@ -646,9 +639,8 @@ paths:
       - backup
   /backups/download/{filename}:
     get:
-      consumes:
-      - application/json
-      description: Downloads a backup file by its filename as a binary attachment
+      description: Downloads a backup file (encrypted or plain) by filename as a binary
+        attachment
       parameters:
       - description: Backup filename
         in: path
@@ -683,8 +675,9 @@ paths:
     post:
       consumes:
       - application/json
-      description: Restores the database from a specified backup file. Overwrites
-        current database and config files.
+      description: Stops the proxy engine, restores database and config from backup,
+        rotates JWT secret, then restarts the engine. Verifies SHA256 checksum if
+        available.
       parameters:
       - description: Backup filename to restore
         in: body
@@ -701,8 +694,7 @@ paths:
         "200":
           description: OK
           schema:
-            additionalProperties:
-              type: string
+            additionalProperties: true
             type: object
         "400":
           description: Bad Request

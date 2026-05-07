@@ -8,11 +8,14 @@ export const useBackupStore = defineStore('backup', () => {
   const loading = ref(false)
   const creating = ref(false)
   const restoring = ref(false)
+  const encryptionEnabled = ref(false)
 
   async function load() {
     loading.value = true
     try {
-      backups.value = await backupApi.list()
+      const data = await backupApi.list()
+      backups.value = data.backups
+      encryptionEnabled.value = data.encryption_enabled
     } finally {
       loading.value = false
     }
@@ -42,5 +45,5 @@ export const useBackupStore = defineStore('backup', () => {
     backups.value = backups.value.filter((b) => b.filename !== filename)
   }
 
-  return { backups, loading, creating, restoring, load, create, restore, remove }
+  return { backups, loading, creating, restoring, encryptionEnabled, load, create, restore, remove }
 })

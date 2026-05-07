@@ -5,7 +5,9 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto/sha1"
+	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -451,5 +453,306 @@ func TestBackupStore_CleanOld_NoOldFiles(t *testing.T) {
 	}
 	if deleted != 0 {
 		t.Fatalf("expected 0 deleted, got %d", deleted)
+	}
+}
+
+// --- Tests for encryption, manifest, and VACUUM ---
+
+func TestBackupStore_CreateWithEncryption(t *testing.T) {
+	tmpDir := t.TempDir()
+	key := make([]byte, 32)
+	for i := range key {
+		key[i] = byte(i)
+	}
+	s := NewBackupStore(tmpDir, key)
+
+	// Create a dummy settings.db
+	os.WriteFile(filepath.Join(tmpDir, "settings.db"), []byte("test db"), 0644)
+
+	backup, err := s.Create(context.Background())
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	// Verify backup was created
+	if backup.Filename == "" {
+		t.Error("expected non-empty filename")
+	}
+
+	// Verify the backup file exists and is encrypted
+	backupPath := filepath.Join(tmpDir, "backups", backup.Filename)
+	if _, err := os.Stat(backupPath); err != nil {
+		t.Fatalf("backup file not created: %v", err)
+	}
+
+	// Verify the file is not a valid gzip (it's encrypted)
+	f, err := os.Open(backupPath)
+	if err != nil {
+		t.Fatalf("open backup: %v", err)
+	}
+	defer f.Close()
+
+	gzReader, err := gzip.NewReader(f)
+	if err == nil {
+		gzReader.Close()
+		t.Error("expected encrypted file to not be valid gzip")
+	}
+}
+
+func TestBackupStore_ManifestInBackup(t *testing.T) {
+	tmpDir := t.TempDir()
+	s := NewBackupStore(tmpDir)
+
+	// Create a dummy settings.db
+	os.WriteFile(filepath.Join(tmpDir, "settings.db"), []byte("test db"), 0644)
+
+	backup, err := s.Create(context.Background())
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	// Read the backup and verify manifest exists
+	backupPath := filepath.Join(tmpDir, "backups", backup.Filename)
+	f, err := os.Open(backupPath)
+	if err != nil {
+		t.Fatalf("open backup: %v", err)
+	}
+	defer f.Close()
+
+	gzReader, err := gzip.NewReader(f)
+	if err != nil {
+		t.Fatalf("gzip reader: %v", err)
+	}
+	defer gzReader.Close()
+
+	tarReader := tar.NewReader(gzReader)
+	manifestFound := false
+	for {
+		header, err := tarReader.Next()
+		if err != nil {
+			break
+		}
+		if header.Name == "manifest.json" {
+			manifestFound = true
+			// Read and parse manifest
+			data, err := io.ReadAll(tarReader)
+			if err != nil {
+				t.Fatalf("read manifest: %v", err)
+			}
+			var manifest Manifest
+			if err := json.Unmarshal(data, &manifest); err != nil {
+				t.Fatalf("parse manifest: %v", err)
+			}
+			if manifest.FormatVersion != 1 {
+				t.Errorf("expected format version 1, got %d", manifest.FormatVersion)
+			}
+			if manifest.Encryption != "none" {
+				t.Errorf("expected encryption 'none', got %s", manifest.Encryption)
+			}
+			break
+		}
+	}
+
+	if !manifestFound {
+		t.Error("manifest.json not found in backup")
+	}
+}
+
+func TestBackupStore_ChecksumInBackup(t *testing.T) {
+	tmpDir := t.TempDir()
+	s := NewBackupStore(tmpDir)
+
+	// Create a dummy settings.db
+	os.WriteFile(filepath.Join(tmpDir, "settings.db"), []byte("test db"), 0644)
+
+	backup, err := s.Create(context.Background())
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	// Verify checksum is calculated
+	if backup.Checksum == "" {
+		t.Error("expected non-empty checksum")
+	}
+
+	// Verify checksum is SHA256 (64 hex chars)
+	if len(backup.Checksum) != 64 {
+		t.Errorf("expected 64-char checksum, got %d", len(backup.Checksum))
+	}
+}
+
+func TestBackupStore_TelemtVersionInBackup(t *testing.T) {
+	tmpDir := t.TempDir()
+	s := NewBackupStore(tmpDir)
+
+	// Create .telemt_version file
+	os.WriteFile(filepath.Join(tmpDir, ".telemt_version"), []byte("3.3.39"), 0644)
+
+	backup, err := s.Create(context.Background())
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	// Read the backup and verify .telemt_version exists
+	backupPath := filepath.Join(tmpDir, "backups", backup.Filename)
+	f, err := os.Open(backupPath)
+	if err != nil {
+		t.Fatalf("open backup: %v", err)
+	}
+	defer f.Close()
+
+	gzReader, err := gzip.NewReader(f)
+	if err != nil {
+		t.Fatalf("gzip reader: %v", err)
+	}
+	defer gzReader.Close()
+
+	tarReader := tar.NewReader(gzReader)
+	telemtVersionFound := false
+	for {
+		header, err := tarReader.Next()
+		if err != nil {
+			break
+		}
+		if header.Name == ".telemt_version" {
+			telemtVersionFound = true
+			break
+		}
+	}
+
+	if !telemtVersionFound {
+		t.Error(".telemt_version not found in backup")
+	}
+}
+
+func TestBackupStore_RestoreWithManifestVersionCheck(t *testing.T) {
+	tmpDir := t.TempDir()
+	s := NewBackupStore(tmpDir)
+
+	// Create a backup with a newer schema version (simulated)
+	backupsDir := filepath.Join(tmpDir, "backups")
+	os.MkdirAll(backupsDir, 0755)
+
+	// Create a backup with manifest that has newer schema version
+	backupPath := filepath.Join(backupsDir, "test.tar.gz")
+	manifest := Manifest{
+		FormatVersion: 1,
+		AppVersion:    "1.0.0",
+		AppCommit:     "abc123",
+		SchemaVersion: 99, // Newer than current
+		CreatedAt:     "2026-01-01T00:00:00Z",
+		Encryption:    "none",
+	}
+
+	// Create minimal backup with manifest
+	f, err := os.Create(backupPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gw := gzip.NewWriter(f)
+	tw := tar.NewWriter(gw)
+
+	manifestData, _ := json.Marshal(manifest)
+	tw.WriteHeader(&tar.Header{
+		Name: "manifest.json",
+		Size: int64(len(manifestData)),
+	})
+	tw.Write(manifestData)
+	tw.Close()
+	gw.Close()
+	f.Close()
+
+	// Restore should fail due to version mismatch
+	err = s.Restore(context.Background(), "test.tar.gz")
+	if err == nil {
+		t.Error("expected error for newer schema version")
+	}
+	if !strings.Contains(err.Error(), "newer than current") {
+		t.Errorf("expected version mismatch error, got: %v", err)
+	}
+}
+
+func TestBackupStore_RestoreOldBackupWithoutManifest(t *testing.T) {
+	tmpDir := t.TempDir()
+	s := NewBackupStore(tmpDir)
+
+	// Create a backup without manifest (old format)
+	backupsDir := filepath.Join(tmpDir, "backups")
+	os.MkdirAll(backupsDir, 0755)
+
+	backupPath := filepath.Join(backupsDir, "old.tar.gz")
+	f, err := os.Create(backupPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gw := gzip.NewWriter(f)
+	tw := tar.NewWriter(gw)
+
+	// Just add a simple file, no manifest
+	tw.WriteHeader(&tar.Header{
+		Name: "test.txt",
+		Size: 4,
+	})
+	tw.Write([]byte("test"))
+	tw.Close()
+	gw.Close()
+	f.Close()
+
+	// Restore should succeed (backward compatibility)
+	err = s.Restore(context.Background(), "old.tar.gz")
+	if err != nil {
+		t.Errorf("expected success for old backup without manifest, got: %v", err)
+	}
+}
+
+func TestBackupStore_Restore_ChecksumMismatch(t *testing.T) {
+	tmpDir := t.TempDir()
+	s := NewBackupStore(tmpDir)
+
+	backupsDir := filepath.Join(tmpDir, "backups")
+	os.MkdirAll(backupsDir, 0755)
+
+	// Create a minimal tar.gz
+	backupPath := filepath.Join(backupsDir, "corrupt.tar.gz")
+	if err := createMinimalTarGz(t, backupPath, map[string]string{
+		"test.txt": "hello",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Write a wrong checksum sidecar
+	os.WriteFile(backupPath+".sha256", []byte("0000000000000000000000000000000000000000000000000000000000000000"), 0644)
+
+	// Restore should fail due to checksum mismatch
+	err := s.Restore(context.Background(), "corrupt.tar.gz")
+	if err == nil {
+		t.Error("expected error for checksum mismatch")
+	}
+	if !strings.Contains(err.Error(), "checksum mismatch") {
+		t.Errorf("expected checksum mismatch error, got: %v", err)
+	}
+}
+
+func TestBackupStore_Restore_ChecksumMatch(t *testing.T) {
+	tmpDir := t.TempDir()
+	s := NewBackupStore(tmpDir)
+
+	os.WriteFile(filepath.Join(tmpDir, "settings.db"), []byte("test"), 0644)
+
+	// Create a proper backup (which writes .sha256 sidecar)
+	backup, err := s.Create(context.Background())
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	// Verify sidecar exists
+	sidecar := filepath.Join(tmpDir, "backups", backup.Filename+".sha256")
+	if _, err := os.Stat(sidecar); os.IsNotExist(err) {
+		t.Fatal("sha256 sidecar not created")
+	}
+
+	// Restore should succeed (checksum matches)
+	if err := s.Restore(context.Background(), backup.Filename); err != nil {
+		t.Errorf("expected success with valid checksum, got: %v", err)
 	}
 }

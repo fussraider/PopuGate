@@ -248,7 +248,13 @@
     "removed_success": "Backup \"{label}\" removed",
     "restored_success": "Backup restored. Restart the service for changes to take effect.",
     "created_success": "Backup created",
-    "download_failed": "Failed to download backup"
+    "download_failed": "Failed to download backup",
+    "encrypted": "Encrypted (AES-256-GCM)",
+    "not_encrypted": "Not encrypted",
+    "encryption_on": "Encrypted",
+    "encryption_off": "Unencrypted",
+    "encryption_on_hint": "Encryption key is set (BACKUP_ENCRYPTION_KEY). New backups are encrypted with AES-256-GCM.",
+    "encryption_off_hint": "No encryption key configured. Backups are stored unencrypted. Set BACKUP_ENCRYPTION_KEY to enable encryption."
   },
   "bot": {
     "title": "Telegram Bot",

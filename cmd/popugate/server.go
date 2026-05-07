@@ -14,6 +14,7 @@ package main
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"net/http"
 	"os"
@@ -103,7 +104,20 @@ func runServer(cmd *cobra.Command, args []string) {
 	blocklistStore := store.NewTokenBlocklistStore(db)
 	quotaStore := store.NewQuotaAlertStore(db)
 	geoblockCache := store.NewGeoblockCacheStore(db)
-	backupStore := store.NewBackupStore(dataDir)
+	// Resolve backup encryption key from environment
+	var backupEncKey []byte
+	if keyHex := os.Getenv("BACKUP_ENCRYPTION_KEY"); keyHex != "" {
+		if len(keyHex) != 64 {
+			logger.Fatalf("BACKUP_ENCRYPTION_KEY must be 64 hex characters (32 bytes), got %d", len(keyHex))
+		}
+		key, err := hex.DecodeString(keyHex)
+		if err != nil {
+			logger.Fatalf("BACKUP_ENCRYPTION_KEY must be a valid hex string: %v", err)
+		}
+		backupEncKey = key
+		srvLog.Infof("Backup encryption key loaded from environment")
+	}
+	backupStore := store.NewBackupStore(dataDir, backupEncKey)
 	schedulerStore := store.NewSchedulerStore(db)
 	auditStore := store.NewAuditStore(db)
 	templateStore := store.NewTemplateStore(db)

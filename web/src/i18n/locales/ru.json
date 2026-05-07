@@ -248,7 +248,13 @@
     "removed_success": "Бэкап \"{label}\" удален",
     "restored_success": "Бэкап восстановлен. Перезапустите сервис для применения изменений.",
     "created_success": "Бэкап создан",
-    "download_failed": "Не удалось скачать бэкап"
+    "download_failed": "Не удалось скачать бэкап",
+    "encrypted": "Зашифрован (AES-256-GCM)",
+    "not_encrypted": "Не зашифрован",
+    "encryption_on": "Шифрование",
+    "encryption_off": "Без шифрования",
+    "encryption_on_hint": "Ключ шифрования задан (BACKUP_ENCRYPTION_KEY). Новые бэкапы шифруются AES-256-GCM.",
+    "encryption_off_hint": "Ключ шифрования не задан. Бэкапы сохраняются без шифрования. Установите BACKUP_ENCRYPTION_KEY для включения шифрования."
   },
   "bot": {
     "title": "Telegram Бот",

@@ -245,7 +245,7 @@ func SetupRouter(cfg RouterConfig) *gin.Engine {
 		protected.POST("/update/apply", updateHandler.Apply)
 
 		// Backup
-		backupHandler := handler.NewBackupHandler(cfg.Backups)
+		backupHandler := handler.NewBackupHandler(cfg.Backups, cfg.Settings, cfg.ContainerSvc, cfg.AuditSvc)
 		protected.GET("/backups", backupHandler.List)
 		protected.POST("/backups", backupHandler.Create)
 		protected.POST("/backups/restore", backupHandler.Restore)

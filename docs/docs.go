@@ -382,10 +382,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Returns a list of all available database backups",
-                "consumes": [
-                    "application/json"
-                ],
+                "description": "Returns a list of all available backups and whether backup encryption is enabled.",
                 "produces": [
                     "application/json"
                 ],
@@ -397,10 +394,8 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "array",
-                            "items": {
-                                "type": "object"
-                            }
+                            "type": "object",
+                            "additionalProperties": true
                         }
                     },
                     "500": {
@@ -420,10 +415,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Creates a new database backup and returns its filename, size, and creation timestamp",
-                "consumes": [
-                    "application/json"
-                ],
+                "description": "Creates a new encrypted or unencrypted backup depending on BACKUP_ENCRYPTION_KEY env var. Returns filename, size, checksum, and creation timestamp.",
                 "produces": [
                     "application/json"
                 ],
@@ -436,9 +428,7 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "additionalProperties": true
                         }
                     },
                     "500": {
@@ -460,10 +450,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Downloads a backup file by its filename as a binary attachment",
-                "consumes": [
-                    "application/json"
-                ],
+                "description": "Downloads a backup file (encrypted or plain) by filename as a binary attachment",
                 "produces": [
                     "application/octet-stream"
                 ],
@@ -515,7 +502,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Restores the database from a specified backup file. Overwrites current database and config files.",
+                "description": "Stops the proxy engine, restores database and config from backup, rotates JWT secret, then restarts the engine. Verifies SHA256 checksum if available.",
                 "consumes": [
                     "application/json"
                 ],
@@ -547,9 +534,7 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "additionalProperties": true
                         }
                     },
                     "400": {
@@ -580,10 +565,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Deletes a backup file by its filename",
-                "consumes": [
-                    "application/json"
-                ],
+                "description": "Deletes a backup file and its checksum sidecar by filename",
                 "produces": [
                     "application/json"
                 ],

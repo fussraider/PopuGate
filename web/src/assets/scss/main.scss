@@ -695,10 +695,9 @@ code {
   line-height: $line-height-tight;
   font-family: $font-family;
   font-weight: $font-weight-normal;
-  white-space: nowrap;
-  max-width: 240px;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: pre-line;
+  max-width: 280px;
+  text-align: center;
   z-index: 99999;
   pointer-events: none;
   opacity: 0;

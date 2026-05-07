@@ -135,6 +135,8 @@ router.beforeEach(async (to) => {
     if (auth.refreshToken) {
       const refreshed = await auth.refresh()
       if (refreshed) return true
+      // Refresh failed - clear invalid tokens
+      auth.logout()
     }
     return { name: 'Login' }
   }

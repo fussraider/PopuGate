@@ -264,6 +264,7 @@ export interface BackupInfo {
   filename: string
   size: number
   created_at: string
+  encrypted: boolean
 }
 
 export interface OSType {

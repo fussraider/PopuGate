@@ -3,6 +3,7 @@ package handler
 import (
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -11,29 +12,37 @@ import (
 	"github.com/fussraider/PopuGate/internal/service"
 )
 
-// allowedWSOrigins controls which origins can open WebSocket connections.
-// Set from router config via SetWSAllowedOrigins.
-var allowedWSOrigins []string
+var (
+	wsOriginsMu sync.RWMutex
+	wsOrigins   []string
+)
 
 // SetWSAllowedOrigins configures allowed WebSocket origins.
 func SetWSAllowedOrigins(origins []string) {
-	allowedWSOrigins = origins
+	wsOriginsMu.Lock()
+	wsOrigins = origins
+	wsOriginsMu.Unlock()
+}
+
+func checkWSOrigin(r *http.Request) bool {
+	origin := r.Header.Get("Origin")
+	wsOriginsMu.RLock()
+	allowed := wsOrigins
+	wsOriginsMu.RUnlock()
+	if len(allowed) == 0 {
+		return true
+	}
+	for _, o := range allowed {
+		if o == "*" || o == origin {
+			return true
+		}
+	}
+	return strings.EqualFold(origin, r.Host)
 }
 
 // WSUpgrader is the shared upgrader for all WebSocket connections.
 var WSUpgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool {
-		origin := r.Header.Get("Origin")
-		if len(allowedWSOrigins) == 0 {
-			return true
-		}
-		for _, o := range allowedWSOrigins {
-			if o == "*" || o == origin {
-				return true
-			}
-		}
-		return strings.EqualFold(origin, r.Host)
-	},
+	CheckOrigin: checkWSOrigin,
 }
 
 // WSHandler handles WebSocket live metrics streaming.

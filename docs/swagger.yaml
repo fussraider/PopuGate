@@ -86,6 +86,36 @@ definitions:
       tag:
         type: string
     type: object
+  handler.bulkSetLimitsRequest:
+    properties:
+      expires_at:
+        type: string
+      labels:
+        items:
+          type: string
+        minItems: 1
+        type: array
+      max_conns:
+        type: integer
+      max_ips:
+        type: integer
+      quota_bytes:
+        type: integer
+      tag:
+        type: string
+    type: object
+  handler.bulkToggleRequest:
+    properties:
+      enable:
+        type: boolean
+      labels:
+        items:
+          type: string
+        minItems: 1
+        type: array
+      tag:
+        type: string
+    type: object
   handler.cloneSecretRequest:
     properties:
       new_label:
@@ -2763,6 +2793,100 @@ paths:
       summary: Bulk rotate secrets
       tags:
       - secrets
+  /secrets/bulk-set-limits:
+    post:
+      consumes:
+      - application/json
+      description: Configure connection, IP, quota, and expiry limits for multiple
+        secrets at once by labels or tag
+      parameters:
+      - description: Labels or tag and limits configuration
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.bulkSetLimitsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Bulk set secret limits
+      tags:
+      - secrets
+  /secrets/bulk-toggle:
+    post:
+      consumes:
+      - application/json
+      description: Enable or disable multiple secrets at once by labels or tag
+      parameters:
+      - description: Labels or tag and enable flag
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.bulkToggleRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Bulk toggle secrets
+      tags:
+      - secrets
+  /secrets/by-tag/{tag}:
+    get:
+      description: Retrieve all secrets that have the specified tag
+      parameters:
+      - description: Tag name
+        in: path
+        name: tag
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              type: object
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List secrets by tag
+      tags:
+      - secrets
   /secrets/disable-expired:
     post:
       description: Disable all secrets whose expiry date has passed
@@ -2891,6 +3015,31 @@ paths:
       security:
       - BearerAuth: []
       summary: Search secrets
+      tags:
+      - secrets
+  /secrets/tags:
+    get:
+      description: Retrieve all unique tags assigned to secrets
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              items:
+                type: string
+              type: array
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List all tags
       tags:
       - secrets
   /secrets/top:

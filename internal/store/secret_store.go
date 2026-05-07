@@ -126,6 +126,25 @@ func (s *SecretStore) CountEnabled(ctx context.Context) (int, error) {
 	return count, err
 }
 
+// CountEnabledByLabels returns the count of enabled secrets among the given labels.
+func (s *SecretStore) CountEnabledByLabels(ctx context.Context, labels []string) (int, error) {
+	if len(labels) == 0 {
+		return 0, nil
+	}
+	placeholders := make([]string, len(labels))
+	args := make([]any, len(labels))
+	for i, l := range labels {
+		placeholders[i] = "?"
+		args[i] = l
+	}
+	var count int
+	err := s.db.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM secrets WHERE enabled = 1 AND label IN ("+strings.Join(placeholders, ",")+")",
+		args...,
+	).Scan(&count)
+	return count, err
+}
+
 // Count returns total number of secrets.
 func (s *SecretStore) Count(ctx context.Context) (int, error) {
 	var count int

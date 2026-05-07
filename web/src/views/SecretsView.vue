@@ -349,7 +349,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useSecretsStore } from '@/stores'
 import { useToastStore } from '@/stores/toast'
@@ -684,12 +684,19 @@ const importing = ref(false)
 function handleImportFile(e: Event) {
   const file = (e.target as HTMLInputElement).files?.[0]
   if (!file) return
+  const MAX_IMPORT_SIZE = 10 * 1024 * 1024 // 10 MB
+  if (file.size > MAX_IMPORT_SIZE) {
+    toast.error(t('secrets.import_failed'))
+    return
+  }
   const reader = new FileReader()
   reader.onload = () => {
     try {
       const parsed = JSON.parse(reader.result as string)
       const items: SecretImportItem[] = Array.isArray(parsed) ? parsed : parsed.secrets || []
-      importData.value = items.filter((i: any) => i.label)
+      importData.value = items.filter((i): i is SecretImportItem =>
+        typeof i === 'object' && i !== null && typeof i.label === 'string' && i.label.trim() !== ''
+      )
       importPreview.value = importData.value.length
     } catch {
       toast.error(t('secrets.import_failed'))
@@ -747,6 +754,11 @@ function quotaPercent(sec: any): number {
 onMounted(() => {
   secretsStore.load()
   secretsStore.loadTags()
+})
+
+onUnmounted(() => {
+  if (qrImage.value) URL.revokeObjectURL(qrImage.value)
+  if (searchTimer) clearTimeout(searchTimer)
 })
 </script>
 

@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"time"
@@ -38,6 +39,10 @@ type procStat struct {
 }
 
 func readCPUUsage() float64 {
+	return readCPUUsageWithContext(context.Background())
+}
+
+func readCPUUsageWithContext(ctx context.Context) float64 {
 	s1, err := parseProcStat()
 	if err != nil {
 		return 0
@@ -49,7 +54,11 @@ func readCPUUsage() float64 {
 		return s1.usagePct
 	}
 
-	time.Sleep(time.Second)
+	select {
+	case <-time.After(time.Second):
+	case <-ctx.Done():
+		return 0
+	}
 	s2, err := parseProcStat()
 	if err != nil {
 		return 0

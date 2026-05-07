@@ -756,3 +756,68 @@ func TestBackupStore_Restore_ChecksumMatch(t *testing.T) {
 		t.Errorf("expected success with valid checksum, got: %v", err)
 	}
 }
+
+func TestBackupStore_EncryptedCreateAndRestore_Roundtrip(t *testing.T) {
+	tmpDir := t.TempDir()
+	key := make([]byte, 32)
+	for i := range key {
+		key[i] = byte(i)
+	}
+	s := NewBackupStore(tmpDir, key)
+
+	// Create files to back up
+	os.MkdirAll(filepath.Join(tmpDir, "mtproxy"), 0755)
+	os.WriteFile(filepath.Join(tmpDir, "settings.db"), []byte("encrypted db content"), 0644)
+	os.WriteFile(filepath.Join(tmpDir, "mtproxy", "config.toml"), []byte("secret=config"), 0644)
+
+	ctx := context.Background()
+	backup, err := s.Create(ctx)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	if !backup.Encrypted {
+		t.Error("expected backup to be encrypted")
+	}
+	if backup.Checksum == "" {
+		t.Error("expected non-empty checksum for encrypted backup")
+	}
+
+	// Verify backup is not valid gzip (it's encrypted)
+	backupPath := filepath.Join(tmpDir, "backups", backup.Filename)
+	f, err := os.Open(backupPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, gzErr := gzip.NewReader(f)
+	f.Close()
+	if gzErr == nil {
+		t.Error("expected encrypted file to not be valid gzip")
+	}
+
+	// Delete original files
+	os.Remove(filepath.Join(tmpDir, "settings.db"))
+	os.Remove(filepath.Join(tmpDir, "mtproxy", "config.toml"))
+
+	// Restore
+	if err := s.Restore(ctx, backup.Filename); err != nil {
+		t.Fatalf("Restore: %v", err)
+	}
+
+	// Verify content
+	data, err := os.ReadFile(filepath.Join(tmpDir, "settings.db"))
+	if err != nil {
+		t.Fatalf("settings.db not restored: %v", err)
+	}
+	if string(data) != "encrypted db content" {
+		t.Errorf("restored content mismatch: got %q", data)
+	}
+
+	data, err = os.ReadFile(filepath.Join(tmpDir, "mtproxy", "config.toml"))
+	if err != nil {
+		t.Fatalf("config.toml not restored: %v", err)
+	}
+	if string(data) != "secret=config" {
+		t.Errorf("restored content mismatch: got %q", data)
+	}
+}

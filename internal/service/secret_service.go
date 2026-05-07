@@ -480,11 +480,15 @@ func (s *SecretService) LabelsByTag(ctx context.Context, tag string) ([]string, 
 // BulkToggle enables or disables multiple secrets.
 func (s *SecretService) BulkToggle(ctx context.Context, labels []string, enable bool) (int, error) {
 	if !enable {
-		enabled, err := s.secrets.CountEnabled(ctx)
+		totalEnabled, err := s.secrets.CountEnabled(ctx)
 		if err != nil {
 			return 0, err
 		}
-		if enabled <= len(labels) {
+		toDisable, err := s.secrets.CountEnabledByLabels(ctx, labels)
+		if err != nil {
+			return 0, err
+		}
+		if toDisable >= totalEnabled {
 			return 0, fmt.Errorf("cannot disable all enabled secrets")
 		}
 	}

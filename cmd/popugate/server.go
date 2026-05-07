@@ -355,6 +355,8 @@ func runServer(cmd *cobra.Command, args []string) {
 			activeBot.Stop()
 		}
 
+		service.GetResourceMonitor().Stop()
+
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()
 

@@ -289,7 +289,7 @@ func (s *UpstreamService) detectIP(client *http.Client) (string, error) {
 			lastErr = err
 			continue
 		}
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
 		resp.Body.Close()
 		if resp.StatusCode == 200 && len(body) > 0 {
 			ip := strings.TrimSpace(string(body))

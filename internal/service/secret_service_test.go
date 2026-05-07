@@ -796,7 +796,11 @@ func TestSecretService_BulkExtend_ZeroDays(t *testing.T) {
 	svc, _ := newTestSecretService(t)
 	ctx := context.Background()
 
-	_, _ = svc.BulkExtend(ctx, []string{"user1"}, 0)
+	svc.Add(ctx, "user1", "0123456789abcdef0123456789abcdef")
+	_, err := svc.BulkExtend(ctx, []string{"user1"}, 0)
+	if err == nil {
+		t.Fatal("expected error for zero days")
+	}
 }
 
 func TestSecretService_BulkRotate(t *testing.T) {

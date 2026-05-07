@@ -837,6 +837,14 @@ func (h *SecretHandler) resolveBulkLabels(c *gin.Context, labels []string, tag s
 }
 
 // ListTags handles GET /api/v1/secrets/tags
+// @Summary      List all tags
+// @Description  Retrieve all unique tags assigned to secrets
+// @Tags         secrets
+// @Produce      json
+// @Success      200  {object}  map[string][]string
+// @Failure      500  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /secrets/tags [get]
 func (h *SecretHandler) ListTags(c *gin.Context) {
 	tags, err := h.secrets.ListAllTags(c.Request.Context())
 	if err != nil {
@@ -850,6 +858,15 @@ func (h *SecretHandler) ListTags(c *gin.Context) {
 }
 
 // ListByTag handles GET /api/v1/secrets/by-tag/:tag
+// @Summary      List secrets by tag
+// @Description  Retrieve all secrets that have the specified tag
+// @Tags         secrets
+// @Produce      json
+// @Param        tag  path  string  true  "Tag name"
+// @Success      200  {array}   object
+// @Failure      500  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /secrets/by-tag/{tag} [get]
 func (h *SecretHandler) ListByTag(c *gin.Context) {
 	tag := c.Param("tag")
 	secrets, err := h.secrets.ListByTag(c.Request.Context(), tag)
@@ -870,6 +887,16 @@ type bulkToggleRequest struct {
 }
 
 // BulkToggle handles POST /api/v1/secrets/bulk-toggle
+// @Summary      Bulk toggle secrets
+// @Description  Enable or disable multiple secrets at once by labels or tag
+// @Tags         secrets
+// @Accept       json
+// @Produce      json
+// @Param        body  body  bulkToggleRequest  true  "Labels or tag and enable flag"
+// @Success      200  {object}  map[string]string
+// @Failure      400  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /secrets/bulk-toggle [post]
 func (h *SecretHandler) BulkToggle(c *gin.Context) {
 	var req bulkToggleRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -901,6 +928,16 @@ type bulkSetLimitsRequest struct {
 }
 
 // BulkSetLimits handles POST /api/v1/secrets/bulk-set-limits
+// @Summary      Bulk set secret limits
+// @Description  Configure connection, IP, quota, and expiry limits for multiple secrets at once by labels or tag
+// @Tags         secrets
+// @Accept       json
+// @Produce      json
+// @Param        body  body  bulkSetLimitsRequest  true  "Labels or tag and limits configuration"
+// @Success      200  {object}  map[string]string
+// @Failure      400  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /secrets/bulk-set-limits [post]
 func (h *SecretHandler) BulkSetLimits(c *gin.Context) {
 	var req bulkSetLimitsRequest
 	if err := c.ShouldBindJSON(&req); err != nil {

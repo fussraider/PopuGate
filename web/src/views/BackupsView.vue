@@ -50,7 +50,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useBackupStore } from '@/stores/backup'
 import { useToastStore } from '@/stores/toast'
@@ -66,11 +66,11 @@ const { t } = useI18n()
 const backupStore = useBackupStore()
 const toast = useToastStore()
 
-const columns = [
+const columns = computed(() => [
   { key: 'filename', header: t('backups.table.filename') },
   { key: 'size', header: t('backups.table.size') },
   { key: 'created', header: t('backups.table.created') },
-]
+])
 
 const { confirmState, confirm, handleConfirm, handleCancel } = useConfirmDialog()
 

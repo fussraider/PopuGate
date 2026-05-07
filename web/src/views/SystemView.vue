@@ -32,8 +32,8 @@
             <div class="progress-bar">
               <div
                 class="progress-inner"
-                :class="getBarVariant((systemStore.resources.memory_used / systemStore.resources.memory_total) * 100)"
-                :style="{ width: (systemStore.resources.memory_used / systemStore.resources.memory_total) * 100 + '%' }"
+                :class="getBarVariant(safePercent(systemStore.resources.memory_used, systemStore.resources.memory_total))"
+                :style="{ width: safePercent(systemStore.resources.memory_used, systemStore.resources.memory_total) + '%' }"
               ></div>
             </div>
           </div>
@@ -50,8 +50,8 @@
             <div class="progress-bar">
               <div
                 class="progress-inner"
-                :class="getBarVariant((systemStore.resources.disk_used / systemStore.resources.disk_total) * 100)"
-                :style="{ width: (systemStore.resources.disk_used / systemStore.resources.disk_total) * 100 + '%' }"
+                :class="getBarVariant(safePercent(systemStore.resources.disk_used, systemStore.resources.disk_total))"
+                :style="{ width: safePercent(systemStore.resources.disk_used, systemStore.resources.disk_total) + '%' }"
               ></div>
             </div>
           </div>
@@ -201,6 +201,10 @@ function getBarVariant(percent: number) {
   if (percent > 90) return 'danger'
   if (percent > 70) return 'warning'
   return 'success'
+}
+
+function safePercent(used: number, total: number): number {
+  return total > 0 ? (used / total) * 100 : 0
 }
 
 function formatUptime(seconds: number) {

@@ -58,7 +58,10 @@ const vTooltip: Directive = {
   updated(node: HTMLElement, binding: DirectiveBinding<string>) {
     node.setAttribute(TOOLTIP_ATTR, binding.value ?? '')
   },
-  beforeUnmount() {
+  beforeUnmount(node: HTMLElement) {
+    node.removeEventListener('mouseenter', onEnter)
+    node.removeEventListener('mouseleave', hide)
+    node.removeEventListener('mousedown', hide)
     hide()
   },
 }

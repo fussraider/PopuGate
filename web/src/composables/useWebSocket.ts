@@ -54,8 +54,8 @@ export function useWebSocket(options: UseWebSocketOptions) {
     if (stopped) return
     if (reconnectTimer) clearTimeout(reconnectTimer)
     reconnectTimer = setTimeout(() => {
-      backoff = Math.min(backoff * 2, 30000)
       connect()
+      backoff = Math.min(backoff * 2, 30000)
     }, backoff)
   }
 

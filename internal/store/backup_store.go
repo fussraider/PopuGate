@@ -96,7 +96,7 @@ func (s *BackupStore) List(ctx context.Context) ([]Backup, error) {
 			Filename:  e.Name(),
 			Size:      info.Size(),
 			CreatedAt: info.ModTime().UTC().Format(time.RFC3339),
-			Encrypted: !isGzipFile(filepath.Join(s.backupsDir, e.Name())),
+			Encrypted: s.encryptionKey != nil,
 		})
 	}
 
@@ -515,6 +515,11 @@ func (s *BackupStore) decryptFile(inputPath, outputPath string) error {
 		return fmt.Errorf("read ciphertext length: %w", err)
 	}
 
+	const maxCiphertextSize = 2 * 1024 * 1024 * 1024 // 2 GB
+	if ctLen > maxCiphertextSize {
+		return fmt.Errorf("ciphertext too large: %d bytes", ctLen)
+	}
+
 	ciphertext := make([]byte, ctLen)
 	if _, err := io.ReadFull(inFile, ciphertext); err != nil {
 		return fmt.Errorf("read ciphertext: %w", err)
@@ -731,16 +736,3 @@ func (s *BackupStore) calculateFileChecksum(path string) (string, error) {
 	return fmt.Sprintf("%x", hash.Sum(nil)), nil
 }
 
-// isGzipFile checks if a file starts with gzip magic bytes (0x1f, 0x8b).
-func isGzipFile(path string) bool {
-	f, err := os.Open(path)
-	if err != nil {
-		return false
-	}
-	defer f.Close()
-	var buf [2]byte
-	if _, err := io.ReadFull(f, buf[:]); err != nil {
-		return false
-	}
-	return buf[0] == 0x1f && buf[1] == 0x8b
-}

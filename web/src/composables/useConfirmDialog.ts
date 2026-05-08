@@ -1,9 +1,10 @@
-import { ref, type Ref } from 'vue'
+import {ref, type Ref} from 'vue'
 
 export interface ConfirmOptions {
   title: string
   message: string
   confirmText?: string
+  variant?: 'danger' | 'warning' | 'primary'
 }
 
 interface ConfirmState {
@@ -11,6 +12,7 @@ interface ConfirmState {
   title: string
   message: string
   confirmText: string
+  variant: string
   resolver: ((value: boolean) => void) | null
 }
 
@@ -20,6 +22,7 @@ export function useConfirmDialog() {
     title: '',
     message: '',
     confirmText: '',
+    variant: 'primary',
     resolver: null,
   })
 
@@ -30,6 +33,7 @@ export function useConfirmDialog() {
         title: options.title,
         message: options.message,
         confirmText: options.confirmText ?? 'Confirm',
+        variant: options.variant ?? 'primary',
         resolver: resolve,
       }
     })

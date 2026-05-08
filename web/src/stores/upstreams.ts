@@ -1,7 +1,7 @@
-import { defineStore } from 'pinia'
-import { ref } from 'vue'
-import { upstreamsApi } from '@/api/endpoints'
-import type { Upstream, NetInterface, UpstreamTestResult } from '@/types/models'
+import {defineStore} from 'pinia'
+import {ref} from 'vue'
+import {upstreamsApi} from '@/api/endpoints'
+import type {NetInterface, Upstream, UpstreamTestResult} from '@/types/models'
 
 export const useUpstreamsStore = defineStore('upstreams', () => {
   const upstreams = ref<Upstream[]>([])
@@ -11,6 +11,7 @@ export const useUpstreamsStore = defineStore('upstreams', () => {
   const toggling = ref<string | null>(null)
   const testingConfig = ref(false)
   const testResult = ref<UpstreamTestResult | null>(null)
+  const checkingHealth = ref<Set<string>>(new Set())
 
   async function load() {
     loading.value = true
@@ -26,8 +27,14 @@ export const useUpstreamsStore = defineStore('upstreams', () => {
   }
 
   async function add(data: Omit<Upstream, 'id'>) {
-    const created = await upstreamsApi.add(data)
-    upstreams.value.push(created)
+    await upstreamsApi.add(data)
+    await load()
+    // Track background health check
+    checkingHealth.value.add(data.name)
+    setTimeout(() => {
+      load()
+      checkingHealth.value.delete(data.name)
+    }, 3000)
   }
 
   async function update(name: string, data: Omit<Upstream, 'id' | 'name' | 'enabled'>) {
@@ -75,5 +82,5 @@ export const useUpstreamsStore = defineStore('upstreams', () => {
     }
   }
 
-  return { upstreams, interfaces, loading, testing, toggling, testingConfig, testResult, load, loadInterfaces, add, update, remove, toggle, test, testConfig }
+  return { upstreams, interfaces, loading, testing, toggling, testingConfig, testResult, checkingHealth, load, loadInterfaces, add, update, remove, toggle, test, testConfig }
 })

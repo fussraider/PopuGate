@@ -47,6 +47,7 @@ type TaskStatus struct {
 	DefaultSchedule   string           `json:"default_schedule"`
 	EffectiveSchedule string           `json:"effective_schedule"`
 	Enabled           bool             `json:"enabled"`
+	DefaultDisabled   bool             `json:"default_disabled"`
 	IsOverridden      bool             `json:"is_overridden"`
 	Timeout           string           `json:"timeout"`
 	LastRun           *ExecutionRecord `json:"last_run,omitempty"`
@@ -81,6 +82,7 @@ type Task struct {
 	Name     string
 	Schedule string        // cron expression
 	Timeout  time.Duration // per-task timeout (0 = defaultTaskTimeout)
+	Disabled bool          // if true, task is off by default (can be enabled via override)
 	Fn       func(ctx context.Context) error
 }
 
@@ -105,7 +107,8 @@ func (s *Scheduler) StartWith(tasks []Task, overrides map[string]TaskOverride, h
 
 		// Apply overrides
 		schedule := task.Schedule
-		if ovr, ok := overrides[task.Name]; ok {
+		ovr, hasOvr := overrides[task.Name]
+		if hasOvr {
 			if !ovr.Enabled {
 				log.Infof("disabled by override: %s", task.Name)
 				continue
@@ -113,6 +116,9 @@ func (s *Scheduler) StartWith(tasks []Task, overrides map[string]TaskOverride, h
 			if ovr.CustomSchedule != "" {
 				schedule = ovr.CustomSchedule
 			}
+		} else if task.Disabled {
+			log.Infof("disabled by default: %s", task.Name)
+			continue
 		}
 
 		s.addTaskToCron(&task, schedule)
@@ -202,6 +208,7 @@ func (s *Scheduler) GetTaskStatuses() []TaskStatus {
 			DefaultSchedule:   dt.Schedule,
 			EffectiveSchedule: effectiveSchedule,
 			Enabled:           enabled,
+			DefaultDisabled:   dt.Disabled,
 			IsOverridden:      isOverridden,
 			Timeout:           timeout,
 		})
@@ -335,7 +342,7 @@ func DefaultTasks() []Task {
 		{Name: "backup-cleanup", Schedule: "0 30 3 * * *"},                              // daily at 3:30
 		{Name: "history-cleanup", Schedule: "0 0 4 * * *"},                              // daily at 4:00
 		{Name: "quota-reset", Schedule: "0 0 0 1 * *", Timeout: 2 * time.Minute},        // monthly on 1st
-		{Name: "auto-rotate", Schedule: "0 0 4 * * *"},                                  // daily at 4:00
+		{Name: "auto-rotate", Schedule: "0 0 4 * * *", Disabled: true},                  // daily at 4:00 (off by default)
 		{Name: "upstream-health", Schedule: "0 */5 * * * *", Timeout: 2 * time.Minute},  // every 5 min
 	}
 }

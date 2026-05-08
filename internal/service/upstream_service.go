@@ -112,7 +112,35 @@ func (s *UpstreamService) Add(ctx context.Context, u *model.Upstream) error {
 	}
 
 	u.Enabled = true
-	return s.upstreams.Create(ctx, u)
+	if err := s.upstreams.Create(ctx, u); err != nil {
+		return err
+	}
+
+	// Run initial health check asynchronously so the API responds immediately.
+	go s.runInitialHealthCheck(u.Name, u)
+
+	return nil
+}
+
+func (s *UpstreamService) runInitialHealthCheck(name string, u *model.Upstream) {
+	bgCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	res, testErr := s.testUpstream(bgCtx, u)
+	ok := testErr == nil && res.OK
+	errMsg := ""
+	if testErr != nil {
+		errMsg = testErr.Error()
+	} else if res != nil && !res.OK {
+		errMsg = res.Error
+	}
+	latency := int64(0)
+	if res != nil {
+		latency = res.LatencyMs
+	}
+	if err := s.upstreams.UpdateHealth(bgCtx, name, ok, latency, errMsg); err != nil {
+		log.Errorf("failed to update initial health for %s: %v", name, err)
+	}
 }
 
 // Update modifies an existing upstream.
@@ -170,7 +198,7 @@ func (s *UpstreamService) Toggle(ctx context.Context, name string, enable bool) 
 	return nil
 }
 
-// Test tests connectivity through an upstream.
+// Test tests connectivity through an upstream and persists the result.
 func (s *UpstreamService) Test(ctx context.Context, name string) (*model.UpstreamTestResult, error) {
 	u, err := s.upstreams.GetByName(ctx, name)
 	if err != nil {
@@ -179,7 +207,25 @@ func (s *UpstreamService) Test(ctx context.Context, name string) (*model.Upstrea
 	if u == nil {
 		return nil, fmt.Errorf("upstream '%s' not found", name)
 	}
-	return s.testUpstream(ctx, u)
+
+	res, testErr := s.testUpstream(ctx, u)
+	ok := testErr == nil && res.OK
+	errMsg := ""
+	if testErr != nil {
+		errMsg = testErr.Error()
+	} else if res != nil && !res.OK {
+		errMsg = res.Error
+	}
+	latency := int64(0)
+	if res != nil {
+		latency = res.LatencyMs
+	}
+
+	if err := s.upstreams.UpdateHealth(ctx, name, ok, latency, errMsg); err != nil {
+		log.Errorf("failed to update health for %s after manual test: %v", name, err)
+	}
+
+	return res, testErr
 }
 
 // TestConfig tests connectivity using raw upstream data (no DB lookup).

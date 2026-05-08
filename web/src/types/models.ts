@@ -302,6 +302,7 @@ export interface SchedulerTask {
   default_schedule: string
   effective_schedule: string
   enabled: boolean
+  default_disabled: boolean
   is_overridden: boolean
   timeout: string
   last_run: SchedulerHistoryRecord | null

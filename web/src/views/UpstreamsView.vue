@@ -20,12 +20,19 @@
       <template #cell-weight="{ item }">{{ item.weight }}</template>
       <template #cell-interface="{ item }">{{ item.iface || '—' }}</template>
       <template #cell-health="{ item }">
-        <StatusBadge :variant="getHealthVariant(item.last_check_ok)">
-          {{ getHealthLabel(item.last_check_ok) }}
-        </StatusBadge>
-        <div v-if="item.latency_ms" class="text-xs text-muted mt-xs">
-          {{ item.latency_ms }}ms
-        </div>
+        <template v-if="store.checkingHealth.has(item.name)">
+          <StatusBadge variant="neutral">
+            <Loader2 :size="12" class="animate-spin" /> {{ t('upstreams.health_checking') }}
+          </StatusBadge>
+        </template>
+        <template v-else>
+          <StatusBadge :variant="getHealthVariant(item.last_check_ok)">
+            {{ getHealthLabel(item.last_check_ok) }}
+          </StatusBadge>
+          <div v-if="item.latency_ms" class="text-xs text-muted mt-xs">
+            {{ item.latency_ms }}ms
+          </div>
+        </template>
       </template>
       <template #cell-status="{ item }">
         <StatusBadge :variant="item.enabled ? 'success' : 'neutral'">
@@ -122,17 +129,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { useI18n } from 'vue-i18n'
-import { useUpstreamsStore } from '@/stores/upstreams'
-import { useToastStore } from '@/stores/toast'
-import { useConfirmDialog } from '@/composables/useConfirmDialog'
+import {onMounted, ref, watch} from 'vue'
+import {useI18n} from 'vue-i18n'
+import {useUpstreamsStore} from '@/stores/upstreams'
+import {useToastStore} from '@/stores/toast'
+import {useConfirmDialog} from '@/composables/useConfirmDialog'
 import FormModal from '@/components/common/FormModal.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import DataTable from '@/components/common/DataTable.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import PageHeader from '@/components/common/PageHeader.vue'
-import { GitBranch, FlaskConical, Play, Pause, Pencil, Trash2, Loader2 } from '@lucide/vue'
+import {FlaskConical, GitBranch, Loader2, Pause, Pencil, Play, Trash2} from '@lucide/vue'
 
 const { t } = useI18n()
 const store = useUpstreamsStore()
@@ -177,6 +184,37 @@ const form = ref({ name: '', type: 'direct' as string, address: '', username: ''
 
 const defaultForm = { name: '', type: 'direct' as string, address: '', username: '', password: '', weight: 1, iface: '' }
 
+// Auto-parse pasted proxy string (host:port:user:pass) into separate fields
+watch(() => form.value.address, (val) => {
+  if (!val || form.value.type === 'direct') return
+
+  let hostPort: string
+  let user: string
+  let pass: string
+
+  if (val.startsWith('[')) {
+    const bracketEnd = val.indexOf(']')
+    if (bracketEnd === -1) return
+    const afterBracket = val.substring(bracketEnd + 1)
+    const parts = afterBracket.split(':')
+    if (parts.length < 4) return
+    hostPort = val.substring(0, bracketEnd + 1) + ':' + parts[1]
+    user = parts[2]
+    pass = parts.slice(3).join(':')
+  } else {
+    const parts = val.split(':')
+    if (parts.length < 4) return
+    hostPort = parts[0] + ':' + parts[1]
+    user = parts[2]
+    pass = parts.slice(3).join(':')
+  }
+
+  form.value.address = hostPort
+  form.value.username = user
+  form.value.password = pass
+  if (form.value.type !== 'socks5') form.value.type = 'socks5'
+})
+
 async function openAddModal() {
   isEdit.value = false
   form.value = { ...defaultForm }
@@ -220,6 +258,13 @@ async function handleSubmit() {
 async function testUpstream(name: string) {
   try {
     const result = await store.test(name)
+    // Update local health state regardless of test outcome
+    const u = store.upstreams.find((x) => x.name === name)
+    if (u && result) {
+      u.last_check_ok = result.ok
+      u.latency_ms = result.latency_ms ?? 0
+      u.last_error = result.error ?? ''
+    }
     if (result?.ok) {
       const parts: string[] = []
       if (result.latency_ms) parts.push(`${result.latency_ms}ms`)

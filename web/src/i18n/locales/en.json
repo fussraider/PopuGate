@@ -435,6 +435,7 @@
     "test": "Test",
     "delete": "Delete",
     "health_unknown": "Unknown",
+    "health_checking": "Checking…",
     "add_title": "Add Upstream",
     "edit": "Edit",
     "edit_title": "Edit Upstream",
@@ -648,12 +649,78 @@
     "history_title": "Execution History",
     "history_empty": "No execution records yet.",
     "default_label": "default",
+    "off_by_default": "off by default",
     "enabled_label": "Enabled",
     "disabled_label": "Disabled",
     "task_enabled": "Task \"{name}\" enabled",
     "task_disabled": "Task \"{name}\" disabled",
     "confirm_disable": "Are you sure you want to disable \"{name}\"? This may affect system functionality.",
     "view_error": "View Error",
-    "no_errors": "No errors"
+    "no_errors": "No errors",
+    "confirm_enable_warning": "Are you sure you want to enable \"{name}\"?",
+    "tasks": {
+      "traffic-flush": {
+        "name": "Traffic Flush",
+        "description": "Scrapes traffic metrics from the telemt engine and writes them to the database."
+      },
+      "quota-check": {
+        "name": "Quota Check",
+        "description": "Checks user traffic quotas and disables secrets that exceed their limits."
+      },
+      "expiry-check": {
+        "name": "Expiry Check",
+        "description": "Checks secret expiration dates and disables expired secrets."
+      },
+      "health-check": {
+        "name": "Health Check",
+        "description": "Verifies the telemt engine container is running and restarts it if necessary."
+      },
+      "telegram-report": {
+        "name": "Telegram Report",
+        "description": "Sends periodic traffic and status reports via the configured Telegram bot."
+      },
+      "replication-sync": {
+        "name": "Replication Sync",
+        "description": "Synchronizes configuration and data to configured slave servers via SSH."
+      },
+      "update-check": {
+        "name": "Update Check",
+        "description": "Checks for new PopuGate releases and notifies via the Telegram bot."
+      },
+      "telemt-check": {
+        "name": "Engine Version Check",
+        "description": "Checks for new telemt engine versions and updates the Docker image."
+      },
+      "token-cleanup": {
+        "name": "Token Cleanup",
+        "description": "Removes expired and revoked JWT tokens from the blocklist."
+      },
+      "daily-backup": {
+        "name": "Daily Backup",
+        "description": "Creates an encrypted backup of the database and configuration files."
+      },
+      "backup-cleanup": {
+        "name": "Backup Cleanup",
+        "description": "Removes old backups that exceed the configured retention period."
+      },
+      "history-cleanup": {
+        "name": "History Cleanup",
+        "description": "Deletes scheduler execution history records older than 7 days."
+      },
+      "quota-reset": {
+        "name": "Monthly Quota Reset",
+        "description": "Resets all user traffic quotas to zero at the start of each month.",
+        "warning": "Enabling this will reset all traffic counters every month. Users will lose their current quota usage data."
+      },
+      "auto-rotate": {
+        "name": "Auto Key Rotation",
+        "description": "Automatically rotates MTProto proxy secrets that are older than the configured number of days.",
+        "warning": "Enabling this will change proxy keys for all users whose secrets exceed the rotation age. Users will need updated links to continue using the proxy."
+      },
+      "upstream-health": {
+        "name": "Upstream Health Check",
+        "description": "Checks connectivity and latency of configured upstream proxy servers."
+      }
+    }
   }
 }

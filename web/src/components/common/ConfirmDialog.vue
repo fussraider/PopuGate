@@ -3,7 +3,7 @@
     <p>{{ message }}</p>
     <template #footer>
       <button class="btn btn-secondary" @click="cancel">{{ t('common.cancel') }}</button>
-      <button class="btn btn-danger" :disabled="confirming || loading" @click="handleConfirm">
+      <button :class="['btn', confirmBtnClass]" :disabled="confirming || loading" @click="handleConfirm">
         <span v-if="confirming || loading" class="spinner" />
         {{ confirmText ?? t('common.save') }}
       </button>
@@ -12,8 +12,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
-import { useI18n } from 'vue-i18n'
+import {computed, ref, watch} from 'vue'
+import {useI18n} from 'vue-i18n'
 import Modal from './Modal.vue'
 
 const { t } = useI18n()
@@ -23,6 +23,7 @@ const props = defineProps<{
   title: string
   message: string
   confirmText?: string
+  variant?: string
   loading?: boolean
 }>()
 
@@ -34,6 +35,12 @@ const emit = defineEmits<{
 
 const visible = ref(props.modelValue)
 const confirming = ref(false)
+
+const confirmBtnClass = computed(() => {
+  if (props.variant === 'warning') return 'btn-warning'
+  if (props.variant === 'primary') return 'btn-primary'
+  return 'btn-danger'
+})
 
 watch(() => props.modelValue, (v) => {
   visible.value = v

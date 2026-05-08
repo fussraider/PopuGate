@@ -15,14 +15,22 @@
       row-key="name"
     >
       <template #cell-name="{ item }">
-        <div>
-          <code>{{ item.name }}</code>
+        <div class="task-name-cell">
+          <div class="task-title">{{ t(`scheduler.tasks.${item.name}.name`) }}</div>
+          <div class="task-description">{{ t(`scheduler.tasks.${item.name}.description`) }}</div>
+          <div v-if="hasWarning(item)" class="task-warning">
+            <AlertTriangle :size="12" />
+            <span>{{ t(`scheduler.tasks.${item.name}.warning`) }}</span>
+          </div>
         </div>
       </template>
 
       <template #cell-schedule="{ item }">
         <div class="schedule-cell">
           <code>{{ item.effective_schedule }}</code>
+          <span v-if="item.default_disabled && !item.enabled" class="badge badge-warning" style="font-size: 10px; padding: 1px 6px;">
+            {{ t('scheduler.off_by_default') }}
+          </span>
           <span v-if="item.is_overridden" class="badge badge-info" style="font-size: 10px; padding: 1px 6px;">
             {{ t('scheduler.default_label') }}: {{ item.default_schedule }}
           </span>
@@ -87,7 +95,7 @@
     >
       <div class="form-group">
         <label class="form-label">{{ t('scheduler.task_name') }}</label>
-        <code>{{ editingTask?.name }}</code>
+        <span>{{ editingTask ? taskName(editingTask.name) : '' }}</span>
       </div>
       <div class="form-group">
         <label class="form-label">{{ t('scheduler.default_schedule') }}</label>
@@ -144,25 +152,22 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
-import { useI18n } from 'vue-i18n'
-import { useSchedulerStore } from '@/stores/scheduler'
-import { useToastStore } from '@/stores/toast'
-import { formatDate } from '@/utils/format'
-import { useConfirmDialog } from '@/composables/useConfirmDialog'
+import {onMounted, ref} from 'vue'
+import {useI18n} from 'vue-i18n'
+import {useSchedulerStore} from '@/stores/scheduler'
+import {useToastStore} from '@/stores/toast'
+import {formatDate} from '@/utils/format'
+import {useConfirmDialog} from '@/composables/useConfirmDialog'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import DataTable from '@/components/common/DataTable.vue'
 import FormModal from '@/components/common/FormModal.vue'
 import Modal from '@/components/common/Modal.vue'
 import PageHeader from '@/components/common/PageHeader.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
-import {
-  CalendarClock, Play, Pencil, History, RefreshCw,
-  Loader2, AlertCircle,
-} from '@lucide/vue'
-import type { SchedulerTask, SchedulerHistoryRecord } from '@/types/models'
+import {AlertCircle, AlertTriangle, CalendarClock, History, Loader2, Pencil, Play, RefreshCw,} from '@lucide/vue'
+import type {SchedulerHistoryRecord, SchedulerTask} from '@/types/models'
 
-const { t } = useI18n()
+const { t, te } = useI18n()
 const schedulerStore = useSchedulerStore()
 const toast = useToastStore()
 const { confirmState, confirm, handleConfirm, handleCancel } = useConfirmDialog()
@@ -183,6 +188,15 @@ const editSchedule = ref('')
 const historyModalTitle = ref('')
 const errorDetail = ref('')
 
+function taskName(key: string): string {
+  return t(`scheduler.tasks.${key}.name`)
+}
+
+function hasWarning(task: SchedulerTask): boolean {
+  const key = `scheduler.tasks.${task.name}.warning`
+  return te(key) && t(key) !== key
+}
+
 function handleRefresh() {
   schedulerStore.load()
 }
@@ -192,16 +206,24 @@ async function handleToggle(task: SchedulerTask) {
   if (!newEnabled) {
     const ok = await confirm({
       title: t('scheduler.disabled_label'),
-      message: t('scheduler.confirm_disable', { name: task.name }),
+      message: t('scheduler.confirm_disable', { name: taskName(task.name) }),
       confirmText: t('scheduler.disabled_label'),
+    })
+    if (!ok) return
+  } else if (hasWarning(task)) {
+    const ok = await confirm({
+      title: t('scheduler.confirm_enable_warning'),
+      message: t(`scheduler.tasks.${task.name}.warning`),
+      confirmText: t('scheduler.enabled_label'),
+      variant: 'warning',
     })
     if (!ok) return
   }
   try {
     await schedulerStore.toggle(task.name, newEnabled)
     toast.success(newEnabled
-      ? t('scheduler.task_enabled', { name: task.name })
-      : t('scheduler.task_disabled', { name: task.name }),
+      ? t('scheduler.task_enabled', { name: taskName(task.name) })
+      : t('scheduler.task_disabled', { name: taskName(task.name) }),
     )
   } catch (e: any) {
     await schedulerStore.load()
@@ -246,7 +268,7 @@ async function handleSaveSchedule() {
 }
 
 async function openHistory(task: SchedulerTask) {
-  historyModalTitle.value = `${t('scheduler.history_title')}: ${task.name}`
+  historyModalTitle.value = `${t('scheduler.history_title')}: ${taskName(task.name)}`
   await schedulerStore.loadTaskHistory(task.name, 30)
   showHistoryModal.value = true
 }
@@ -261,6 +283,30 @@ onMounted(() => schedulerStore.load())
 
 <style scoped lang="scss">
 @use '@/assets/scss/variables' as *;
+
+.task-name-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.task-title {
+  font-weight: 500;
+}
+
+.task-description {
+  font-size: $font-size-xs;
+  color: $text-secondary;
+}
+
+.task-warning {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 2px;
+  font-size: $font-size-xs;
+  color: $color-warning;
+}
 
 .schedule-cell {
   display: flex;

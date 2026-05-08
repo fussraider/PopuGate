@@ -299,6 +299,7 @@ code {
     padding: 10px 16px;
     text-align: left;
     border-bottom: 1px solid $border-color;
+    vertical-align: middle;
   }
 
   th {
@@ -526,10 +527,11 @@ code {
 // ─── Shared Layout Patterns ─────────────────────────────────────────
 
 .actions-cell {
-  display: flex;
-  gap: 2px;
-  flex-wrap: nowrap;
   white-space: nowrap;
+
+  > .btn {
+    vertical-align: middle;
+  }
 }
 
 .status-row {

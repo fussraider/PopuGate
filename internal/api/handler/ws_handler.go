@@ -73,11 +73,24 @@ func (h *WSHandler) Handle(c *gin.Context) {
 	for range ticker.C {
 		live, err := h.traffic.GetLiveMetrics(c.Request.Context())
 		if err != nil {
-			_ = conn.WriteJSON(gin.H{"error": err.Error()}) // best-effort: client may disconnect
+			_ = conn.WriteJSON(gin.H{"error": err.Error()})
 			continue
 		}
-		if err := conn.WriteJSON(live); err != nil {
-			return // client disconnected
+		if err := conn.WriteJSON(gin.H{
+			"connections":                live.ConnsCurrent,
+			"connections_total":          live.ConnsTotal,
+			"connections_bad_total":      live.ConnsBadTotal,
+			"connections_me_current":     live.ConnsMECurrent,
+			"connections_direct_current": live.ConnsDirectCurrent,
+			"upstream_attempt_total":     live.UpstreamAttemptTotal,
+			"upstream_success_total":     live.UpstreamSuccessTotal,
+			"upstream_fail_total":        live.UpstreamFailTotal,
+			"me_writers_active":          live.MEWritersActive,
+			"me_writers_warm":            live.MEWritersWarm,
+			"uptime_seconds":             live.UptimeSeconds,
+			"user_metrics":               live.UserMetrics,
+		}); err != nil {
+			return
 		}
 	}
 }

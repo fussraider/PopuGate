@@ -225,17 +225,17 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, watch, ref } from 'vue'
-import { useI18n } from 'vue-i18n'
-import { useTrafficStore } from '@/stores/traffic'
-import { useProxyStore } from '@/stores/proxy'
-import { formatBytes } from '@/utils/format'
+import {computed, onMounted, onUnmounted, ref, watch} from 'vue'
+import {useI18n} from 'vue-i18n'
+import {useTrafficStore} from '@/stores/traffic'
+import {useProxyStore} from '@/stores/proxy'
+import {formatBytes} from '@/utils/format'
 import DataTable from '@/components/common/DataTable.vue'
 import ToggleSwitch from '@/components/common/ToggleSwitch.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import Tooltip from '@/components/common/Tooltip.vue'
 import TrafficChart from '@/components/traffic/TrafficChart.vue'
-import { Activity, Loader2, BarChart3, Info, TrendingUp } from '@lucide/vue'
+import {Activity, BarChart3, Info, Loader2, TrendingUp} from '@lucide/vue'
 
 const { t } = useI18n()
 const trafficStore = useTrafficStore()
@@ -282,12 +282,6 @@ function selectRange(range: string) {
 
 watch(autoRefresh, (val) => {
   trafficStore.toggleAutoRefresh(val)
-  if (val && proxyRunning.value) {
-    trafficStore.loadLive()
-    trafficStore.startAutoRefresh()
-  } else {
-    trafficStore.stopAutoRefresh()
-  }
 })
 
 const proxyRunning = computed(() => proxyStore.status?.running ?? false)

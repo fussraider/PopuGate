@@ -72,7 +72,10 @@
     "started": "Proxy started",
     "stopped_success": "Proxy stopped",
     "restarted": "Proxy restarted",
-    "reloaded": "Proxy config reloaded"
+    "reloaded": "Proxy config reloaded",
+    "scheduler": "Scheduler",
+    "scheduler_ok": "All tasks running successfully",
+    "scheduler_active": "active"
   },
   "secrets": {
     "add_secret": "Add Secret",
@@ -464,7 +467,10 @@
     "cpu_usage": "CPU Usage",
     "memory_usage": "Memory Usage",
     "disk_usage": "Disk Usage",
-    "load_avg": "Load Average",
+    "load_avg": "Load Average (1 / 5 / 15 min)",
+    "load_1m_tip": "1-minute average",
+    "load_5m_tip": "5-minute average",
+    "load_15m_tip": "15-minute average",
     "os_family": "OS Family",
     "version": "Version",
     "arch": "Architecture",

@@ -39,25 +39,53 @@
           {{ item.enabled ? t('instances.enabled') : t('instances.disabled') }}
         </StatusBadge>
       </template>
-      <template #actions="{ item }">
-        <button class="btn btn-ghost btn-sm" v-tooltip="t('upstreams.test')"
-                :disabled="store.testing === item.name" @click="testUpstream(item.name)">
-          <Loader2 v-if="store.testing === item.name" :size="16" class="animate-spin" />
-          <FlaskConical v-else :size="16" />
-        </button>
-        <button class="btn btn-ghost btn-sm" v-tooltip="t('upstreams.edit')" @click="openEditModal(item)">
-          <Pencil :size="16" />
-        </button>
-        <button class="btn btn-ghost btn-sm" v-tooltip="item.enabled ? t('secrets.disable') : t('secrets.enable')"
-                :disabled="store.toggling === item.name" @click="store.toggle(item.name, !item.enabled)">
-          <Loader2 v-if="store.toggling === item.name" :size="16" class="animate-spin" />
-          <component v-else :is="item.enabled ? Pause : Play" :size="16" />
-        </button>
-        <button class="btn btn-ghost btn-sm" v-tooltip="t('upstreams.delete')" @click="handleRemove(item.name)">
-          <Trash2 :size="16" />
+      <template #mobile-actions="{ item }">
+        <button class="btn btn-ghost btn-sm" @click="upstreamActions.open(item)">
+          <MoreVertical :size="16" />
         </button>
       </template>
+      <template #actions="{ item }">
+        <div class="actions-desktop">
+          <button class="btn btn-ghost btn-sm" v-tooltip="t('upstreams.test')"
+                  :disabled="store.testing === item.name" @click="testUpstream(item.name)">
+            <Loader2 v-if="store.testing === item.name" :size="16" class="animate-spin" />
+            <FlaskConical v-else :size="16" />
+          </button>
+          <button class="btn btn-ghost btn-sm" v-tooltip="t('upstreams.edit')" @click="openEditModal(item)">
+            <Pencil :size="16" />
+          </button>
+          <button class="btn btn-ghost btn-sm" v-tooltip="item.enabled ? t('secrets.disable') : t('secrets.enable')"
+                  :disabled="store.toggling === item.name" @click="store.toggle(item.name, !item.enabled)">
+            <Loader2 v-if="store.toggling === item.name" :size="16" class="animate-spin" />
+            <component v-else :is="item.enabled ? Pause : Play" :size="16" />
+          </button>
+          <button class="btn btn-ghost btn-sm" v-tooltip="t('upstreams.delete')" @click="handleRemove(item.name)">
+            <Trash2 :size="16" />
+          </button>
+        </div>
+      </template>
     </DataTable>
+
+    <!-- Mobile Action Sheet -->
+    <ActionSheet v-model="upstreamActions.isOpen.value" :title="upstreamActions.activeItem.value?.name">
+      <button class="action-sheet-item" :disabled="store.testing === upstreamActions.activeItem.value?.name"
+              @click="testUpstream(upstreamActions.activeItem.value!.name); upstreamActions.close()">
+        <FlaskConical :size="16" /> {{ t('upstreams.test') }}
+      </button>
+      <button class="action-sheet-item" @click="openEditModal(upstreamActions.activeItem.value!); upstreamActions.close()">
+        <Pencil :size="16" /> {{ t('upstreams.edit') }}
+      </button>
+      <button class="action-sheet-item"
+              :disabled="store.toggling === upstreamActions.activeItem.value?.name"
+              @click="store.toggle(upstreamActions.activeItem.value!.name, !upstreamActions.activeItem.value!.enabled); upstreamActions.close()">
+        <component :is="upstreamActions.activeItem.value?.enabled ? Pause : Play" :size="16" />
+        {{ upstreamActions.activeItem.value?.enabled ? t('secrets.disable') : t('secrets.enable') }}
+      </button>
+      <button class="action-sheet-item action-danger"
+              @click="handleRemove(upstreamActions.activeItem.value!.name); upstreamActions.close()">
+        <Trash2 :size="16" /> {{ t('upstreams.delete') }}
+      </button>
+    </ActionSheet>
 
     <!-- Add/Edit Modal -->
     <FormModal v-model="modalOpen" :title="isEdit ? t('upstreams.edit_title') : t('upstreams.add_title')"
@@ -134,16 +162,19 @@ import {useI18n} from 'vue-i18n'
 import {useUpstreamsStore} from '@/stores/upstreams'
 import {useToastStore} from '@/stores/toast'
 import {useConfirmDialog} from '@/composables/useConfirmDialog'
+import {useActionMenu} from '@/composables/useActionMenu'
 import FormModal from '@/components/common/FormModal.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import DataTable from '@/components/common/DataTable.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import PageHeader from '@/components/common/PageHeader.vue'
-import {FlaskConical, GitBranch, Loader2, Pause, Pencil, Play, Trash2} from '@lucide/vue'
+import ActionSheet from '@/components/common/ActionSheet.vue'
+import {FlaskConical, GitBranch, Loader2, MoreVertical, Pause, Pencil, Play, Trash2} from '@lucide/vue'
 
 const { t } = useI18n()
 const store = useUpstreamsStore()
 const toast = useToastStore()
+const upstreamActions = useActionMenu()
 
 const columns = [
   { key: 'name', header: t('upstreams.table.name') },

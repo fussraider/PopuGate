@@ -10,6 +10,9 @@
             {{ proxyRunning ? t('dashboard.running') : t('dashboard.stopped') }}
           </StatusBadge>
         </div>
+        <router-link :to="{ name: 'Proxy' }" class="stat-card-link">
+          <ArrowUpRight :size="16" />
+        </router-link>
       </div>
       <div class="stat-card">
         <div class="stat-icon"><KeyRound :size="28" :stroke-width="1.5" /></div>
@@ -17,6 +20,9 @@
           <div class="stat-label">{{ t('dashboard.secrets') }}</div>
           <div class="stat-value">{{ secretsStore.enabledCount }}/{{ secretsStore.secrets?.length || 0 }}</div>
         </div>
+        <router-link :to="{ name: 'Secrets' }" class="stat-card-link">
+          <ArrowUpRight :size="16" />
+        </router-link>
       </div>
       <div class="stat-card">
         <div class="stat-icon"><Users :size="28" :stroke-width="1.5" /></div>
@@ -24,12 +30,21 @@
           <div class="stat-label">{{ t('dashboard.connections') }}</div>
           <div class="stat-value">{{ proxyStore.status?.conns_current ?? 0 }}</div>
         </div>
+        <router-link :to="{ name: 'Traffic' }" class="stat-card-link">
+          <ArrowUpRight :size="16" />
+        </router-link>
       </div>
-      <div class="stat-card">
+      <div class="stat-card stat-card-sparkline">
         <div class="stat-icon"><TrendingUp :size="28" :stroke-width="1.5" /></div>
         <div class="stat-info">
           <div class="stat-label">{{ t('dashboard.traffic') }}</div>
           <div class="stat-value">{{ totalTraffic }}</div>
+        </div>
+        <router-link :to="{ name: 'Traffic' }" class="stat-card-link">
+          <ArrowUpRight :size="16" />
+        </router-link>
+        <div class="sparkline-wrapper">
+          <canvas ref="sparklineCanvas"></canvas>
         </div>
       </div>
     </div>
@@ -51,6 +66,9 @@
               <div class="progress-inner" :class="getBarVariant(systemStore.resources.cpu_usage)" :style="{ width: systemStore.resources.cpu_usage + '%' }"></div>
             </div>
           </div>
+          <router-link :to="{ name: 'System' }" class="stat-card-link">
+            <ArrowUpRight :size="16" />
+          </router-link>
         </div>
         <div class="stat-card">
           <div class="stat-icon"><Database :size="28" :stroke-width="1.5" /></div>
@@ -61,6 +79,9 @@
               <div class="progress-inner" :class="getBarVariant(ramPercent)" :style="{ width: ramPercent + '%' }"></div>
             </div>
           </div>
+          <router-link :to="{ name: 'System' }" class="stat-card-link">
+            <ArrowUpRight :size="16" />
+          </router-link>
         </div>
         <div class="stat-card">
           <div class="stat-icon"><HardDrive :size="28" :stroke-width="1.5" /></div>
@@ -71,6 +92,9 @@
               <div class="progress-inner" :class="getBarVariant(diskPercent)" :style="{ width: diskPercent + '%' }"></div>
             </div>
           </div>
+          <router-link :to="{ name: 'System' }" class="stat-card-link">
+            <ArrowUpRight :size="16" />
+          </router-link>
         </div>
         <div class="stat-card">
           <div class="stat-icon"><Activity :size="28" :stroke-width="1.5" /></div>
@@ -78,92 +102,156 @@
             <div class="stat-label">LOAD</div>
             <div class="stat-value">{{ systemStore.resources.load1.toFixed(2) }}</div>
           </div>
+          <router-link :to="{ name: 'System' }" class="stat-card-link">
+            <ArrowUpRight :size="16" />
+          </router-link>
         </div>
       </div>
     </template>
 
-    <!-- Quick Actions -->
-    <div class="card mb-lg">
-      <h3 class="mb-md">{{ t('dashboard.quick_actions') }}</h3>
-      <div class="actions-grid">
-        <Tooltip :text="t('dashboard.start_hint')">
-          <button class="btn btn-success" :disabled="proxyStore.loading || proxyRunning" @click="proxyAction('start')">
-            <Loader2 v-if="proxyStore.activeAction === 'start'" :size="16" class="animate-spin" />
-            <Play v-else :size="16" /> {{ t('dashboard.start') }}
-          </button>
-        </Tooltip>
-        <Tooltip :text="t('dashboard.stop_hint')">
-          <button class="btn btn-danger" :disabled="proxyStore.loading || !proxyRunning" @click="proxyAction('stop')">
-            <Loader2 v-if="proxyStore.activeAction === 'stop'" :size="16" class="animate-spin" />
-            <Square v-else :size="16" /> {{ t('dashboard.stop') }}
-          </button>
-        </Tooltip>
-        <Tooltip :text="t('dashboard.restart_hint')">
-          <button class="btn btn-warning" :disabled="proxyStore.loading" @click="proxyAction('restart')">
-            <Loader2 v-if="proxyStore.activeAction === 'restart'" :size="16" class="animate-spin" />
-            <RefreshCw v-else :size="16" /> {{ t('dashboard.restart') }}
-          </button>
-        </Tooltip>
-        <Tooltip :text="t('dashboard.reload_hint')">
-          <button class="btn btn-outline" :disabled="proxyStore.loading" @click="proxyAction('reload')">
-            <Loader2 v-if="proxyStore.activeAction === 'reload'" :size="16" class="animate-spin" />
-            <RotateCw v-else :size="16" /> {{ t('dashboard.reload') }}
-          </button>
-        </Tooltip>
+    <!-- Bottom Grid -->
+    <div class="dashboard-grid">
+      <!-- Quick Actions -->
+      <div class="card">
+        <h3 class="mb-md">{{ t('dashboard.quick_actions') }}</h3>
+        <div class="actions-grid">
+          <Tooltip :text="t('dashboard.start_hint')">
+            <button class="btn btn-success" :disabled="proxyStore.loading || proxyRunning" @click="proxyAction('start')">
+              <Loader2 v-if="proxyStore.activeAction === 'start'" :size="16" class="animate-spin" />
+              <Play v-else :size="16" /> {{ t('dashboard.start') }}
+            </button>
+          </Tooltip>
+          <Tooltip :text="t('dashboard.stop_hint')">
+            <button class="btn btn-danger" :disabled="proxyStore.loading || !proxyRunning" @click="proxyAction('stop')">
+              <Loader2 v-if="proxyStore.activeAction === 'stop'" :size="16" class="animate-spin" />
+              <Square v-else :size="16" /> {{ t('dashboard.stop') }}
+            </button>
+          </Tooltip>
+          <Tooltip :text="t('dashboard.restart_hint')">
+            <button class="btn btn-warning" :disabled="proxyStore.loading" @click="proxyAction('restart')">
+              <Loader2 v-if="proxyStore.activeAction === 'restart'" :size="16" class="animate-spin" />
+              <RefreshCw v-else :size="16" /> {{ t('dashboard.restart') }}
+            </button>
+          </Tooltip>
+          <Tooltip :text="t('dashboard.reload_hint')">
+            <button class="btn btn-outline" :disabled="proxyStore.loading" @click="proxyAction('reload')">
+              <Loader2 v-if="proxyStore.activeAction === 'reload'" :size="16" class="animate-spin" />
+              <RotateCw v-else :size="16" /> {{ t('dashboard.reload') }}
+            </button>
+          </Tooltip>
+        </div>
       </div>
-    </div>
 
-    <!-- Health Status -->
-    <div class="card mb-lg">
-      <h3 class="mb-md">{{ t('dashboard.system_health') }}</h3>
-      <InfoGrid>
-        <InfoItem :label="t('dashboard.docker')">
-          <StatusBadge :variant="healthStatus(proxyStore.health?.docker)">{{ proxyStore.health?.docker || '—' }}</StatusBadge>
-        </InfoItem>
-        <InfoItem :label="t('dashboard.container')">
-          <StatusBadge :variant="healthStatus(proxyStore.health?.container)">{{ proxyStore.health?.container || '—' }}</StatusBadge>
-        </InfoItem>
-        <InfoItem :label="t('dashboard.port')">
-          <StatusBadge :variant="healthStatus(proxyStore.health?.port)">{{ proxyStore.health?.port || '—' }}</StatusBadge>
-        </InfoItem>
-        <InfoItem :label="t('dashboard.metrics')">
-          <StatusBadge :variant="healthStatus(proxyStore.health?.metrics)">{{ proxyStore.health?.metrics || '—' }}</StatusBadge>
-        </InfoItem>
-      </InfoGrid>
-    </div>
+      <!-- Scheduler Status -->
+      <div v-if="schedulerStore.tasks.length > 0" class="card">
+        <h3 class="mb-md card-header">
+          {{ t('dashboard.scheduler') }}
+          <span v-if="errorTasks.length" class="badge badge-danger scheduler-badge">{{ errorTasks.length }}</span>
+          <router-link :to="{ name: 'Scheduler' }" class="card-header-link">
+            <ArrowUpRight :size="14" />
+          </router-link>
+        </h3>
 
-    <!-- Engine Info -->
-    <div class="card">
-      <h3 class="mb-md">{{ t('dashboard.engine') }}</h3>
-      <InfoGrid>
-        <InfoItem :label="t('dashboard.version')">
-          <code>{{ dockerStore.engineStatus?.version || '—' }}</code>
-        </InfoItem>
-        <InfoItem :label="t('dashboard.port')">
-          <span>{{ configStore.settings?.proxy_port }}</span>
-        </InfoItem>
-        <InfoItem :label="t('dashboard.domain')">
-          <span>{{ configStore.settings?.proxy_domain || '—' }}</span>
-        </InfoItem>
-        <InfoItem :label="t('dashboard.uptime')">
-          <span>{{ proxyStore.status?.uptime || '—' }}</span>
-        </InfoItem>
-      </InfoGrid>
+        <div v-if="errorTasks.length" class="scheduler-errors mb-md">
+          <div v-for="task in errorTasks" :key="task.name" class="scheduler-error-item">
+            <AlertCircle :size="14" class="scheduler-error-icon" />
+            <div class="scheduler-error-info">
+              <span class="scheduler-error-name">{{ t(`scheduler.tasks.${task.name}.name`) }}</span>
+              <span v-if="task.last_run?.error" class="scheduler-error-msg">{{ task.last_run.error }}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="scheduler-footer">
+          <div v-if="errorTasks.length === 0" class="scheduler-ok">
+            <CheckCircle :size="14" />
+            <span>{{ t('dashboard.scheduler_ok') }}</span>
+          </div>
+          <span class="text-muted">{{ enabledCount }}/{{ schedulerStore.tasks.length }} {{ t('dashboard.scheduler_active') }}</span>
+          <span v-if="lastActivity" class="text-muted scheduler-last"> · {{ formatDate(lastActivity.last_run!.started_at) }}</span>
+        </div>
+      </div>
+
+      <!-- Health Status -->
+      <div class="card">
+        <h3 class="mb-md card-header">
+          {{ t('dashboard.system_health') }}
+          <router-link :to="{ name: 'Docker' }" class="card-header-link">
+            <ArrowUpRight :size="14" />
+          </router-link>
+        </h3>
+        <InfoGrid>
+          <InfoItem :label="t('dashboard.docker')">
+            <StatusBadge :variant="healthStatus(proxyStore.health?.docker)">{{ proxyStore.health?.docker || '—' }}</StatusBadge>
+          </InfoItem>
+          <InfoItem :label="t('dashboard.container')">
+            <StatusBadge :variant="healthStatus(proxyStore.health?.container)">{{ proxyStore.health?.container || '—' }}</StatusBadge>
+          </InfoItem>
+          <InfoItem :label="t('dashboard.port')">
+            <StatusBadge :variant="healthStatus(proxyStore.health?.port)">{{ proxyStore.health?.port || '—' }}</StatusBadge>
+          </InfoItem>
+          <InfoItem :label="t('dashboard.metrics')">
+            <StatusBadge :variant="healthStatus(proxyStore.health?.metrics)">{{ proxyStore.health?.metrics || '—' }}</StatusBadge>
+          </InfoItem>
+        </InfoGrid>
+      </div>
+
+      <!-- Engine Info -->
+      <div class="card">
+        <h3 class="mb-md card-header">
+          {{ t('dashboard.engine') }}
+          <router-link :to="{ name: 'Docker' }" class="card-header-link">
+            <ArrowUpRight :size="14" />
+          </router-link>
+        </h3>
+        <InfoGrid>
+          <InfoItem :label="t('dashboard.version')">
+            <code>{{ dockerStore.engineStatus?.version || '—' }}</code>
+          </InfoItem>
+          <InfoItem :label="t('dashboard.port')">
+            <span>{{ configStore.settings?.proxy_port }}</span>
+          </InfoItem>
+          <InfoItem :label="t('dashboard.domain')">
+            <span>{{ configStore.settings?.proxy_domain || '—' }}</span>
+          </InfoItem>
+          <InfoItem :label="t('dashboard.uptime')">
+            <span>{{ proxyStore.status?.uptime || '—' }}</span>
+          </InfoItem>
+        </InfoGrid>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted } from 'vue'
-import { useI18n } from 'vue-i18n'
-import { useSecretsStore, useProxyStore, useDockerStore, useConfigStore, useSystemStore } from '@/stores'
-import { useToastStore } from '@/stores/toast'
-import { formatBytes } from '@/utils/format'
+import {computed, onMounted, onUnmounted, ref, watch} from 'vue'
+import {useI18n} from 'vue-i18n'
+import {useConfigStore, useDockerStore, useProxyStore, useSecretsStore, useSystemStore} from '@/stores'
+import {useTrafficStore} from '@/stores/traffic'
+import {useSchedulerStore} from '@/stores/scheduler'
+import {useToastStore} from '@/stores/toast'
+import {formatBytes, formatDate} from '@/utils/format'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import InfoGrid from '@/components/common/InfoGrid.vue'
 import InfoItem from '@/components/common/InfoItem.vue'
 import Tooltip from '@/components/common/Tooltip.vue'
-import { Play, KeyRound, Users, TrendingUp, Square, RefreshCw, RotateCw, Loader2, Cpu, Database, HardDrive, Activity } from '@lucide/vue'
+import {
+  Activity,
+  AlertCircle,
+  ArrowUpRight,
+  CheckCircle,
+  Cpu,
+  Database,
+  HardDrive,
+  KeyRound,
+  Loader2,
+  Play,
+  RefreshCw,
+  RotateCw,
+  Square,
+  TrendingUp,
+  Users
+} from '@lucide/vue'
 
 const { t } = useI18n()
 const secretsStore = useSecretsStore()
@@ -171,7 +259,11 @@ const proxyStore = useProxyStore()
 const dockerStore = useDockerStore()
 const configStore = useConfigStore()
 const systemStore = useSystemStore()
+const trafficStore = useTrafficStore()
+const schedulerStore = useSchedulerStore()
 const toast = useToastStore()
+
+const sparklineCanvas = ref<HTMLCanvasElement | null>(null)
 
 const proxyRunning = computed(() => proxyStore.status?.running)
 const totalTraffic = computed(() => {
@@ -190,6 +282,22 @@ const diskPercent = computed(() => {
   const r = systemStore.resources
   if (!r || r.disk_total === 0) return 0
   return (r.disk_used / r.disk_total) * 100
+})
+
+const errorTasks = computed(() =>
+  schedulerStore.tasks.filter(t => t.last_run?.status === 'error')
+)
+
+const enabledCount = computed(() =>
+  schedulerStore.tasks.filter(t => t.enabled).length
+)
+
+const lastActivity = computed(() => {
+  const withRun = schedulerStore.tasks.filter(t => t.last_run)
+  if (!withRun.length) return null
+  return withRun.reduce((a, b) =>
+    a.last_run!.started_at > b.last_run!.started_at ? a : b
+  )
 })
 
 function getBarVariant(percent: number) {
@@ -232,6 +340,66 @@ function healthStatus(status?: string): 'success' | 'warning' | 'danger' | 'neut
   return 'warning'
 }
 
+function buildSparkline() {
+  const canvas = sparklineCanvas.value
+  if (!canvas) return
+
+  const records = trafficStore.history
+  if (!records || records.length < 2) return
+
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return
+
+  const dpr = window.devicePixelRatio || 1
+  const rect = canvas.getBoundingClientRect()
+  if (rect.width === 0 || rect.height === 0) return
+  canvas.width = rect.width * dpr
+  canvas.height = rect.height * dpr
+  ctx.scale(dpr, dpr)
+
+  const w = rect.width
+  const h = rect.height
+
+  const data = records.map(r => (r.bytes_in || 0) + (r.bytes_out || 0))
+  const max = Math.max(...data)
+  if (max === 0) return
+
+  ctx.clearRect(0, 0, w, h)
+
+  const points = data.map((v, i) => ({
+    x: (i / (data.length - 1)) * w,
+    y: h - (v / max) * h * 0.85,
+  }))
+
+  // Gradient fill
+  const gradient = ctx.createLinearGradient(0, 0, 0, h)
+  gradient.addColorStop(0, 'rgba(59, 130, 246, 0.12)')
+  gradient.addColorStop(1, 'rgba(59, 130, 246, 0.01)')
+
+  ctx.beginPath()
+  ctx.moveTo(points[0].x, h)
+  ctx.lineTo(points[0].x, points[0].y)
+  for (let i = 1; i < points.length; i++) {
+    ctx.lineTo(points[i].x, points[i].y)
+  }
+  ctx.lineTo(points[points.length - 1].x, h)
+  ctx.closePath()
+  ctx.fillStyle = gradient
+  ctx.fill()
+
+  // Line
+  ctx.beginPath()
+  ctx.moveTo(points[0].x, points[0].y)
+  for (let i = 1; i < points.length; i++) {
+    ctx.lineTo(points[i].x, points[i].y)
+  }
+  ctx.strokeStyle = 'rgba(59, 130, 246, 0.35)'
+  ctx.lineWidth = 1.5
+  ctx.stroke()
+}
+
+watch(() => trafficStore.history, () => buildSparkline(), { deep: true })
+
 onMounted(async () => {
   await Promise.all([
     secretsStore.load(),
@@ -239,9 +407,13 @@ onMounted(async () => {
     proxyStore.loadHealth(),
     dockerStore.loadEngineStatus(),
     configStore.load(),
+    schedulerStore.load(),
   ])
 
   systemStore.startResourceStream()
+
+  const now = Math.floor(Date.now() / 1000)
+  trafficStore.loadHistory(now - 3600, now, undefined, 'none').then(() => buildSparkline())
 })
 
 onUnmounted(() => {
@@ -259,7 +431,9 @@ onUnmounted(() => {
   margin-bottom: $spacing-lg;
 
   @media (max-width: 480px) {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, 1fr);
+    gap: $spacing-sm;
+    margin-bottom: $spacing-md;
   }
 }
 
@@ -268,10 +442,40 @@ onUnmounted(() => {
   align-items: center;
   gap: $spacing-md;
   padding: $spacing-lg;
+  min-width: 0;
   background: $bg-card;
   border: 1px solid $border-color;
   border-radius: $border-radius-lg;
   box-shadow: $shadow-sm;
+
+  @media (max-width: 480px) {
+    padding: $spacing-sm $spacing-md;
+    gap: $spacing-sm;
+  }
+}
+
+.stat-card-sparkline {
+  position: relative;
+  overflow: hidden;
+
+  > .stat-icon,
+  > .stat-info,
+  > .stat-card-link {
+    position: relative;
+    z-index: 1;
+  }
+}
+
+.sparkline-wrapper {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+
+  canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
 }
 
 .stat-icon {
@@ -280,13 +484,144 @@ onUnmounted(() => {
   justify-content: center;
   color: $color-primary;
   flex-shrink: 0;
+
+  @media (max-width: 480px) {
+    :deep(svg) {
+      width: 22px;
+      height: 22px;
+    }
+  }
 }
+
 .stat-label { font-size: $font-size-xs; color: $text-secondary; text-transform: uppercase; letter-spacing: 0.05em; }
-.stat-value { font-size: $font-size-xl; font-weight: $font-weight-bold; }
+.stat-value { font-size: $font-size-xl; font-weight: $font-weight-bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.stat-card-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: $text-secondary;
+  opacity: 0.3;
+  transition: opacity 0.2s, color 0.2s;
+  margin-left: auto;
+  text-decoration: none;
+  flex-shrink: 0;
+
+  &:hover {
+    opacity: 1;
+    color: $color-primary;
+  }
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  gap: $spacing-sm;
+}
+
+.card-header-link {
+  display: inline-flex;
+  align-items: center;
+  color: $text-secondary;
+  opacity: 0.3;
+  transition: opacity 0.2s, color 0.2s;
+  text-decoration: none;
+
+  &:hover {
+    opacity: 1;
+    color: $color-primary;
+  }
+}
 
 .actions-grid {
   display: flex;
   gap: $spacing-sm;
   flex-wrap: wrap;
+
+  @media (max-width: 480px) {
+    gap: 6px;
+  }
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: $spacing-md;
+
+  > .card {
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  @media (max-width: 480px) {
+    grid-template-columns: 1fr;
+    gap: $spacing-sm;
+  }
+}
+
+// Scheduler
+.scheduler-badge {
+  font-size: 10px;
+  padding: 1px 6px;
+}
+
+.scheduler-errors {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-xs;
+}
+
+.scheduler-error-item {
+  display: flex;
+  align-items: flex-start;
+  gap: $spacing-sm;
+  padding: $spacing-sm;
+  background: $color-danger-bg;
+  border-radius: $border-radius-sm;
+}
+
+.scheduler-error-icon {
+  color: $color-danger;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.scheduler-error-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.scheduler-error-name {
+  font-weight: $font-weight-medium;
+  font-size: $font-size-sm;
+}
+
+.scheduler-error-msg {
+  font-size: $font-size-xs;
+  color: $text-secondary;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.scheduler-ok {
+  display: inline-flex;
+  align-items: center;
+  gap: $spacing-xs;
+  color: $color-success;
+  font-size: $font-size-sm;
+}
+
+.scheduler-footer {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: $spacing-sm;
+  font-size: $font-size-xs;
+}
+
+.scheduler-last {
+  white-space: nowrap;
 }
 </style>

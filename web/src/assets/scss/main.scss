@@ -534,6 +534,48 @@ code {
   }
 }
 
+.actions-mobile {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .actions-desktop {
+    display: none;
+  }
+
+  .actions-mobile {
+    display: inline-flex;
+  }
+}
+
+// Action sheet items (used inside ActionSheet)
+.action-sheet-item {
+  display: flex;
+  align-items: center;
+  gap: $spacing-sm;
+  width: 100%;
+  padding: $spacing-sm $spacing-md;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: $font-size-sm;
+  color: $text-primary;
+  text-align: left;
+
+  &:hover {
+    background: rgba($color-primary, 0.08);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  &.action-danger {
+    color: $color-danger;
+  }
+}
+
 .status-row {
   display: flex;
   align-items: center;

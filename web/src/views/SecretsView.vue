@@ -25,7 +25,7 @@
             {{ t('secrets.show_archived') }}
           </label>
           <button class="btn btn-secondary btn-sm" :class="{ active: topModal }" @click="toggleTop" v-tooltip="t('secrets.top_hint')">
-            <TrendingUp :size="16" /> {{ t('secrets.top') }}
+            <TrendingUp :size="16" />
           </button>
           <button class="btn btn-secondary btn-sm" @click="handleExport" v-tooltip="t('secrets.export')">
             <Download :size="16" />
@@ -124,46 +124,53 @@
         <span class="text-sm">{{ item.max_conns || '∞' }} {{ t('secrets.conns') }}</span><br />
         <span class="text-sm">{{ item.max_ips || '∞' }} {{ t('secrets.ips') }}</span>
       </template>
+      <template #mobile-actions="{ item }">
+        <button class="btn btn-ghost btn-sm" @click="secretActions.open(item)">
+          <MoreVertical :size="16" />
+        </button>
+      </template>
       <template #actions="{ item }">
-        <button class="btn btn-ghost btn-sm" v-tooltip="t('secrets.rotate')"
-                :disabled="secretsStore.rotating === item.label" @click="handleRotate(item.label)">
-          <Loader2 v-if="secretsStore.rotating === item.label" :size="16" class="animate-spin" />
-          <RotateCw v-else :size="16" />
-        </button>
-        <button class="btn btn-ghost btn-sm" v-tooltip="t('secrets.limits_title')" @click="limitsModal.open(item)">
-          <Settings :size="16" />
-        </button>
-        <button class="btn btn-ghost btn-sm" v-tooltip="t('secrets.qr')" @click="showQR(item.label)">
-          <QrCode :size="16" />
-        </button>
-        <button class="btn btn-ghost btn-sm" v-tooltip="t('secrets.extend')" @click="extendModal.open(item)">
-          <CalendarPlus :size="16" />
-        </button>
-        <button class="btn btn-ghost btn-sm" v-tooltip="t('secrets.reset_traffic')" @click="handleResetTraffic(item.label)">
-          <Eraser :size="16" />
-        </button>
-        <button class="btn btn-ghost btn-sm" v-tooltip="t('secrets.edit_notes')" @click="notesModal.open(item)">
-          <StickyNote :size="16" />
-        </button>
-        <button class="btn btn-ghost btn-sm" v-tooltip="t('secrets.clone')" @click="cloneModal.open(item)">
-          <Copy :size="16" />
-        </button>
-        <button class="btn btn-ghost btn-sm" v-tooltip="t('secrets.rename_title')" @click="renameModal.open(item)">
-          <PenLine :size="16" />
-        </button>
-        <button class="btn btn-ghost btn-sm"
-                v-tooltip="item.archived_at ? t('secrets.unarchive') : t('secrets.archive')"
-                @click="handleArchive(item)">
-          <component :is="item.archived_at ? ArchiveRestore : ArchiveIcon" :size="16" />
-        </button>
-        <button class="btn btn-ghost btn-sm" v-tooltip="item.enabled ? t('secrets.disable') : t('secrets.enable')"
-                :disabled="secretsStore.toggling === item.label" @click="secretsStore.toggle(item.label, !item.enabled)">
-          <Loader2 v-if="secretsStore.toggling === item.label" :size="16" class="animate-spin" />
-          <component v-else :is="item.enabled ? Pause : Play" :size="16" />
-        </button>
-        <button class="btn btn-ghost btn-sm btn-danger-text" v-tooltip="t('secrets.delete')" @click="handleRemove(item.label)">
-          <Trash2 :size="16" />
-        </button>
+        <div class="actions-desktop">
+          <button class="btn btn-ghost btn-sm" v-tooltip="t('secrets.rotate')"
+                  :disabled="secretsStore.rotating === item.label" @click="handleRotate(item.label)">
+            <Loader2 v-if="secretsStore.rotating === item.label" :size="16" class="animate-spin" />
+            <RotateCw v-else :size="16" />
+          </button>
+          <button class="btn btn-ghost btn-sm" v-tooltip="t('secrets.limits_title')" @click="limitsModal.open(item)">
+            <Settings :size="16" />
+          </button>
+          <button class="btn btn-ghost btn-sm" v-tooltip="t('secrets.qr')" @click="showQR(item.label)">
+            <QrCode :size="16" />
+          </button>
+          <button class="btn btn-ghost btn-sm" v-tooltip="t('secrets.extend')" @click="extendModal.open(item)">
+            <CalendarPlus :size="16" />
+          </button>
+          <button class="btn btn-ghost btn-sm" v-tooltip="t('secrets.reset_traffic')" @click="handleResetTraffic(item.label)">
+            <Eraser :size="16" />
+          </button>
+          <button class="btn btn-ghost btn-sm" v-tooltip="t('secrets.edit_notes')" @click="notesModal.open(item)">
+            <StickyNote :size="16" />
+          </button>
+          <button class="btn btn-ghost btn-sm" v-tooltip="t('secrets.clone')" @click="cloneModal.open(item)">
+            <Copy :size="16" />
+          </button>
+          <button class="btn btn-ghost btn-sm" v-tooltip="t('secrets.rename_title')" @click="renameModal.open(item)">
+            <PenLine :size="16" />
+          </button>
+          <button class="btn btn-ghost btn-sm"
+                  v-tooltip="item.archived_at ? t('secrets.unarchive') : t('secrets.archive')"
+                  @click="handleArchive(item)">
+            <component :is="item.archived_at ? ArchiveRestore : ArchiveIcon" :size="16" />
+          </button>
+          <button class="btn btn-ghost btn-sm" v-tooltip="item.enabled ? t('secrets.disable') : t('secrets.enable')"
+                  :disabled="secretsStore.toggling === item.label" @click="secretsStore.toggle(item.label, !item.enabled)">
+            <Loader2 v-if="secretsStore.toggling === item.label" :size="16" class="animate-spin" />
+            <component v-else :is="item.enabled ? Pause : Play" :size="16" />
+          </button>
+          <button class="btn btn-ghost btn-sm btn-danger-text" v-tooltip="t('secrets.delete')" @click="handleRemove(item.label)">
+            <Trash2 :size="16" />
+          </button>
+        </div>
       </template>
     </DataTable>
 
@@ -345,35 +352,102 @@
         </div>
       </div>
     </Modal>
+    <!-- Mobile Action Sheet -->
+    <ActionSheet v-model="secretActions.isOpen.value" :title="secretActions.activeItem.value?.label">
+      <button class="action-sheet-item" :disabled="secretsStore.rotating === secretActions.activeItem.value?.label"
+              @click="handleRotate(secretActions.activeItem.value!.label); secretActions.close()">
+        <RotateCw :size="16" /> {{ t('secrets.rotate') }}
+      </button>
+      <button class="action-sheet-item" @click="limitsModal.open(secretActions.activeItem.value!); secretActions.close()">
+        <Settings :size="16" /> {{ t('secrets.limits_title') }}
+      </button>
+      <button class="action-sheet-item" @click="showQR(secretActions.activeItem.value!.label); secretActions.close()">
+        <QrCode :size="16" /> {{ t('secrets.qr') }}
+      </button>
+      <button class="action-sheet-item" @click="extendModal.open(secretActions.activeItem.value!); secretActions.close()">
+        <CalendarPlus :size="16" /> {{ t('secrets.extend') }}
+      </button>
+      <button class="action-sheet-item" @click="handleResetTraffic(secretActions.activeItem.value!.label); secretActions.close()">
+        <Eraser :size="16" /> {{ t('secrets.reset_traffic') }}
+      </button>
+      <button class="action-sheet-item" @click="notesModal.open(secretActions.activeItem.value!); secretActions.close()">
+        <StickyNote :size="16" /> {{ t('secrets.edit_notes') }}
+      </button>
+      <button class="action-sheet-item" @click="cloneModal.open(secretActions.activeItem.value!); secretActions.close()">
+        <Copy :size="16" /> {{ t('secrets.clone') }}
+      </button>
+      <button class="action-sheet-item" @click="renameModal.open(secretActions.activeItem.value!); secretActions.close()">
+        <PenLine :size="16" /> {{ t('secrets.rename_title') }}
+      </button>
+      <button class="action-sheet-item"
+              @click="handleArchive(secretActions.activeItem.value!); secretActions.close()">
+        <component :is="secretActions.activeItem.value?.archived_at ? ArchiveRestore : ArchiveIcon" :size="16" />
+        {{ secretActions.activeItem.value?.archived_at ? t('secrets.unarchive') : t('secrets.archive') }}
+      </button>
+      <button class="action-sheet-item"
+              :disabled="secretsStore.toggling === secretActions.activeItem.value?.label"
+              @click="secretsStore.toggle(secretActions.activeItem.value!.label, !secretActions.activeItem.value!.enabled); secretActions.close()">
+        <component :is="secretActions.activeItem.value?.enabled ? Pause : Play" :size="16" />
+        {{ secretActions.activeItem.value?.enabled ? t('secrets.disable') : t('secrets.enable') }}
+      </button>
+      <button class="action-sheet-item action-danger"
+              @click="handleRemove(secretActions.activeItem.value!.label); secretActions.close()">
+        <Trash2 :size="16" /> {{ t('secrets.delete') }}
+      </button>
+    </ActionSheet>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
-import { useI18n } from 'vue-i18n'
-import { useSecretsStore } from '@/stores'
-import { useToastStore } from '@/stores/toast'
-import { secretsApi } from '@/api/endpoints'
-import { formatBytes, formatISODate } from '@/utils/format'
-import { useConfirmDialog } from '@/composables/useConfirmDialog'
-import { useFormModal } from '@/composables/useFormModal'
-import type { SecretImportItem } from '@/types/models'
+import {computed, nextTick, onMounted, onUnmounted, ref} from 'vue'
+import {useI18n} from 'vue-i18n'
+import {useSecretsStore} from '@/stores'
+import {useToastStore} from '@/stores/toast'
+import {secretsApi} from '@/api/endpoints'
+import {formatBytes, formatISODate} from '@/utils/format'
+import {useConfirmDialog} from '@/composables/useConfirmDialog'
+import {useFormModal} from '@/composables/useFormModal'
+import {useActionMenu} from '@/composables/useActionMenu'
+import type {SecretImportItem} from '@/types/models'
 import Modal from '@/components/common/Modal.vue'
+import ActionSheet from '@/components/common/ActionSheet.vue'
 import FormModal from '@/components/common/FormModal.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import DataTable from '@/components/common/DataTable.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import PageHeader from '@/components/common/PageHeader.vue'
 import {
-  KeyRound, RotateCw, Settings, QrCode, Play, Pause, Trash2, Loader2,
-  Search, Download, Upload, Copy, Archive as ArchiveIcon, ArchiveRestore,
-  Clock, Pencil, PenLine, X as XIcon, TrendingUp, CalendarPlus, Eraser,
-  StickyNote, Ban, Tags,
+  Archive as ArchiveIcon,
+  ArchiveRestore,
+  Ban,
+  CalendarPlus,
+  Clock,
+  Copy,
+  Download,
+  Eraser,
+  KeyRound,
+  Loader2,
+  MoreVertical,
+  Pause,
+  Pencil,
+  PenLine,
+  Play,
+  QrCode,
+  RotateCw,
+  Search,
+  Settings,
+  StickyNote,
+  Tags,
+  Trash2,
+  TrendingUp,
+  Upload,
+  X as XIcon,
 } from '@lucide/vue'
 
 const { t } = useI18n()
 const secretsStore = useSecretsStore()
 const toast = useToastStore()
+const secretActions = useActionMenu()
 
 const columns = computed(() => [
   { key: 'label', header: t('secrets.table.label') },
@@ -797,6 +871,11 @@ onUnmounted(() => {
     top: 50%;
     transform: translateY(-50%);
   }
+
+  @media (max-width: 480px) {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
 }
 
 .header-actions {
@@ -804,10 +883,20 @@ onUnmounted(() => {
   align-items: center;
   gap: $spacing-sm;
   flex-shrink: 0;
+
+  @media (max-width: 480px) {
+    flex-wrap: wrap;
+    flex-shrink: 1;
+  }
 }
 
 .tag-filter-select {
   min-width: 120px;
+
+  @media (max-width: 480px) {
+    min-width: 0;
+    flex: 1;
+  }
 }
 
 .toggle-label {

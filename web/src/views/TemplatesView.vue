@@ -19,13 +19,20 @@
       <template #cell-tags="{ item }">
         <span v-for="tag in splitTags(item.tags)" :key="tag" class="badge badge-info tag-badge">{{ tag }}</span>
       </template>
+      <template #mobile-actions="{ item }">
+        <button class="btn btn-ghost btn-sm" @click="templateActions.open(item)">
+          <MoreVertical :size="16" />
+        </button>
+      </template>
       <template #actions="{ item }">
-        <button class="btn btn-ghost btn-sm" v-tooltip="t('templates.apply')" @click="openApplyModal(item)">
-          <Play :size="16" />
-        </button>
-        <button class="btn btn-ghost btn-sm btn-danger-text" v-tooltip="t('common.delete')" @click="handleRemove(item.name)">
-          <Trash2 :size="16" />
-        </button>
+        <div class="actions-desktop">
+          <button class="btn btn-ghost btn-sm" v-tooltip="t('templates.apply')" @click="openApplyModal(item)">
+            <Play :size="16" />
+          </button>
+          <button class="btn btn-ghost btn-sm btn-danger-text" v-tooltip="t('common.delete')" @click="handleRemove(item.name)">
+            <Trash2 :size="16" />
+          </button>
+        </div>
       </template>
     </DataTable>
 
@@ -81,29 +88,43 @@
       </div>
     </Modal>
 
+    <!-- Mobile Action Sheet -->
+    <ActionSheet v-model="templateActions.isOpen.value" :title="templateActions.activeItem.value?.name">
+      <button class="action-sheet-item" @click="openApplyModal(templateActions.activeItem.value!); templateActions.close()">
+        <Play :size="16" /> {{ t('templates.apply') }}
+      </button>
+      <button class="action-sheet-item action-danger"
+              @click="handleRemove(templateActions.activeItem.value!.name); templateActions.close()">
+        <Trash2 :size="16" /> {{ t('common.delete') }}
+      </button>
+    </ActionSheet>
+
     <ConfirmDialog v-bind="confirmState" @confirm="handleConfirm" @cancel="handleCancel" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import { useI18n } from 'vue-i18n'
-import { useTemplatesStore, useSecretsStore } from '@/stores'
-import { useToastStore } from '@/stores/toast'
-import { formatBytes } from '@/utils/format'
-import { useConfirmDialog } from '@/composables/useConfirmDialog'
-import { useFormModal } from '@/composables/useFormModal'
+import {computed, onMounted, ref} from 'vue'
+import {useI18n} from 'vue-i18n'
+import {useSecretsStore, useTemplatesStore} from '@/stores'
+import {useToastStore} from '@/stores/toast'
+import {formatBytes} from '@/utils/format'
+import {useConfirmDialog} from '@/composables/useConfirmDialog'
+import {useFormModal} from '@/composables/useFormModal'
+import {useActionMenu} from '@/composables/useActionMenu'
 import Modal from '@/components/common/Modal.vue'
 import FormModal from '@/components/common/FormModal.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import DataTable from '@/components/common/DataTable.vue'
 import PageHeader from '@/components/common/PageHeader.vue'
-import { LayoutTemplate, Play, Trash2 } from '@lucide/vue'
+import ActionSheet from '@/components/common/ActionSheet.vue'
+import {LayoutTemplate, MoreVertical, Play, Trash2} from '@lucide/vue'
 
 const { t } = useI18n()
 const templatesStore = useTemplatesStore()
 const secretsStore = useSecretsStore()
 const toast = useToastStore()
+const templateActions = useActionMenu()
 
 const columns = computed(() => [
   { key: 'name', header: t('templates.table.name') },

@@ -31,40 +31,66 @@
       </template>
       <template #cell-size="{ item }">{{ formatBytes(item.size) }}</template>
       <template #cell-created="{ item }">{{ new Date(item.created_at).toLocaleString() }}</template>
-      <template #actions="{ item }">
-        <button class="btn btn-ghost btn-sm" v-tooltip="t('backups.download')" @click="handleDownload(item.filename)">
-          <Download :size="16" />
-        </button>
-        <button class="btn btn-warning btn-sm" :disabled="backupStore.restoring" @click="handleRestore(item.filename)">
-          <Loader2 v-if="backupStore.restoring" :size="14" class="animate-spin" />
-          {{ t('backups.restore') }}
-        </button>
-        <button class="btn btn-ghost btn-sm btn-danger-text" @click="handleRemove(item.filename)">
-          <Trash2 :size="16" />
+      <template #mobile-actions="{ item }">
+        <button class="btn btn-ghost btn-sm" @click="backupActions.open(item)">
+          <MoreVertical :size="16" />
         </button>
       </template>
+      <template #actions="{ item }">
+        <div class="actions-desktop">
+          <button class="btn btn-ghost btn-sm" v-tooltip="t('backups.download')" @click="handleDownload(item.filename)">
+            <Download :size="16" />
+          </button>
+          <button class="btn btn-warning btn-sm" :disabled="backupStore.restoring" @click="handleRestore(item.filename)">
+            <Loader2 v-if="backupStore.restoring" :size="14" class="animate-spin" />
+            {{ t('backups.restore') }}
+          </button>
+          <button class="btn btn-ghost btn-sm btn-danger-text" @click="handleRemove(item.filename)">
+            <Trash2 :size="16" />
+          </button>
+        </div>
+      </template>
     </DataTable>
+
+    <!-- Mobile Action Sheet -->
+    <ActionSheet v-model="backupActions.isOpen.value" :title="backupActions.activeItem.value?.filename">
+      <button class="action-sheet-item" @click="handleDownload(backupActions.activeItem.value!.filename); backupActions.close()">
+        <Download :size="16" /> {{ t('backups.download') }}
+      </button>
+      <button class="action-sheet-item" :disabled="backupStore.restoring"
+              @click="handleRestore(backupActions.activeItem.value!.filename); backupActions.close()">
+        <Loader2 v-if="backupStore.restoring" :size="14" class="animate-spin" />
+        <RefreshCw v-else :size="16" /> {{ t('backups.restore') }}
+      </button>
+      <button class="action-sheet-item action-danger"
+              @click="handleRemove(backupActions.activeItem.value!.filename); backupActions.close()">
+        <Trash2 :size="16" /> {{ t('common.delete') }}
+      </button>
+    </ActionSheet>
 
     <ConfirmDialog v-bind="confirmState" @confirm="handleConfirm" @cancel="handleCancel" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
-import { useI18n } from 'vue-i18n'
-import { useBackupStore } from '@/stores/backup'
-import { useToastStore } from '@/stores/toast'
-import { backupApi } from '@/api/endpoints'
-import { formatBytes } from '@/utils/format'
-import { useConfirmDialog } from '@/composables/useConfirmDialog'
+import {computed, onMounted} from 'vue'
+import {useI18n} from 'vue-i18n'
+import {useBackupStore} from '@/stores/backup'
+import {useToastStore} from '@/stores/toast'
+import {backupApi} from '@/api/endpoints'
+import {formatBytes} from '@/utils/format'
+import {useConfirmDialog} from '@/composables/useConfirmDialog'
+import {useActionMenu} from '@/composables/useActionMenu'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import DataTable from '@/components/common/DataTable.vue'
 import PageHeader from '@/components/common/PageHeader.vue'
-import { Save, Download, Trash2, Loader2, Lock, Unlock, Shield, ShieldOff } from '@lucide/vue'
+import ActionSheet from '@/components/common/ActionSheet.vue'
+import {Download, Loader2, Lock, MoreVertical, RefreshCw, Save, Shield, ShieldOff, Trash2, Unlock} from '@lucide/vue'
 
 const { t } = useI18n()
 const backupStore = useBackupStore()
 const toast = useToastStore()
+const backupActions = useActionMenu()
 
 const columns = computed(() => [
   { key: 'filename', header: t('backups.table.filename') },

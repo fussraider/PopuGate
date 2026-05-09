@@ -53,7 +53,7 @@
       <DataTable
         :columns="slaveColumns"
         :items="replicationStore.slaves ?? []"
-        :loading="false"
+        :loading="replicationStore.loading"
         :empty-message="t('replication.no_slaves')"
         row-key="host"
       >
@@ -68,17 +68,24 @@
             {{ item.status || t('upstreams.health_unknown') }}
           </StatusBadge>
         </template>
+        <template #mobile-actions="{ item }">
+          <button class="btn btn-ghost btn-sm" @click="slaveActions.open(item)">
+            <MoreVertical :size="16" />
+          </button>
+        </template>
         <template #actions="{ item }">
-          <button class="btn btn-ghost btn-sm" v-tooltip="t('replication.test')" @click="testSlave(item.host)">
-            <FlaskConical :size="16" />
-          </button>
-          <button class="btn btn-ghost btn-sm" v-tooltip="t('replication.sync')" :disabled="replicationStore.syncing"
-                  @click="replicationStore.sync(item.host)">
-            <RefreshCw :size="16" :class="{ 'animate-spin': replicationStore.syncing }" />
-          </button>
-          <button class="btn btn-ghost btn-sm" v-tooltip="t('replication.remove')" @click="handleRemove(item.host)">
-            <Trash2 :size="16" class="text-danger" />
-          </button>
+          <div class="actions-desktop">
+            <button class="btn btn-ghost btn-sm" v-tooltip="t('replication.test')" @click="testSlave(item.host)">
+              <FlaskConical :size="16" />
+            </button>
+            <button class="btn btn-ghost btn-sm" v-tooltip="t('replication.sync')" :disabled="replicationStore.syncing"
+                    @click="replicationStore.sync(item.host)">
+              <RefreshCw :size="16" :class="{ 'animate-spin': replicationStore.syncing }" />
+            </button>
+            <button class="btn btn-ghost btn-sm" v-tooltip="t('replication.remove')" @click="handleRemove(item.host)">
+              <Trash2 :size="16" class="text-danger" />
+            </button>
+          </div>
         </template>
       </DataTable>
     </div>
@@ -112,26 +119,44 @@
       </div>
     </FormModal>
 
+    <!-- Mobile Action Sheet -->
+    <ActionSheet v-model="slaveActions.isOpen.value" :title="slaveActions.activeItem.value?.host">
+      <button class="action-sheet-item" @click="testSlave(slaveActions.activeItem.value!.host); slaveActions.close()">
+        <FlaskConical :size="16" /> {{ t('replication.test') }}
+      </button>
+      <button class="action-sheet-item" :disabled="replicationStore.syncing"
+              @click="replicationStore.sync(slaveActions.activeItem.value!.host); slaveActions.close()">
+        <RefreshCw :size="16" :class="{ 'animate-spin': replicationStore.syncing }" /> {{ t('replication.sync') }}
+      </button>
+      <button class="action-sheet-item action-danger"
+              @click="handleRemove(slaveActions.activeItem.value!.host); slaveActions.close()">
+        <Trash2 :size="16" /> {{ t('replication.remove') }}
+      </button>
+    </ActionSheet>
+
     <ConfirmDialog v-bind="confirmState" @confirm="handleConfirm" @cancel="handleCancel" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import { useI18n } from 'vue-i18n'
-import { useReplicationStore } from '@/stores/replication'
-import { useToastStore } from '@/stores/toast'
-import { useConfirmDialog } from '@/composables/useConfirmDialog'
-import { useFormModal } from '@/composables/useFormModal'
+import {computed, onMounted, ref} from 'vue'
+import {useI18n} from 'vue-i18n'
+import {useReplicationStore} from '@/stores/replication'
+import {useToastStore} from '@/stores/toast'
+import {useConfirmDialog} from '@/composables/useConfirmDialog'
+import {useFormModal} from '@/composables/useFormModal'
+import {useActionMenu} from '@/composables/useActionMenu'
 import FormModal from '@/components/common/FormModal.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import DataTable from '@/components/common/DataTable.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
-import { FlaskConical, RefreshCw, Trash2, Loader2 } from '@lucide/vue'
+import ActionSheet from '@/components/common/ActionSheet.vue'
+import {FlaskConical, Loader2, MoreVertical, RefreshCw, Trash2} from '@lucide/vue'
 
 const { t } = useI18n()
 const replicationStore = useReplicationStore()
 const toast = useToastStore()
+const slaveActions = useActionMenu()
 
 const slaveColumns = [
   { key: 'host', header: t('replication.table.host') },

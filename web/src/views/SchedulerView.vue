@@ -67,22 +67,29 @@
         <span v-else class="text-muted">{{ t('scheduler.never_run') }}</span>
       </template>
 
+      <template #mobile-actions="{ item }">
+        <button class="btn btn-ghost btn-sm" @click="schedulerActions.open(item)">
+          <MoreVertical :size="16" />
+        </button>
+      </template>
       <template #actions="{ item }">
-        <button
-          class="btn btn-ghost btn-sm"
-          :title="t('scheduler.run_now')"
-          :disabled="schedulerStore.running === item.name"
-          @click="handleRunNow(item)"
-        >
-          <Loader2 v-if="schedulerStore.running === item.name" :size="16" class="animate-spin" />
-          <Play v-else :size="16" />
-        </button>
-        <button class="btn btn-ghost btn-sm" v-tooltip="t('scheduler.edit_schedule')" @click="openEditSchedule(item)">
-          <Pencil :size="16" />
-        </button>
-        <button class="btn btn-ghost btn-sm" v-tooltip="t('scheduler.view_history')" @click="openHistory(item)">
-          <History :size="16" />
-        </button>
+        <div class="actions-desktop">
+          <button
+            class="btn btn-ghost btn-sm"
+            :title="t('scheduler.run_now')"
+            :disabled="schedulerStore.running === item.name"
+            @click="handleRunNow(item)"
+          >
+            <Loader2 v-if="schedulerStore.running === item.name" :size="16" class="animate-spin" />
+            <Play v-else :size="16" />
+          </button>
+          <button class="btn btn-ghost btn-sm" v-tooltip="t('scheduler.edit_schedule')" @click="openEditSchedule(item)">
+            <Pencil :size="16" />
+          </button>
+          <button class="btn btn-ghost btn-sm" v-tooltip="t('scheduler.view_history')" @click="openHistory(item)">
+            <History :size="16" />
+          </button>
+        </div>
       </template>
     </DataTable>
 
@@ -147,6 +154,20 @@
       <pre class="error-detail">{{ errorDetail }}</pre>
     </Modal>
 
+    <!-- Mobile Action Sheet -->
+    <ActionSheet v-model="schedulerActions.isOpen.value" :title="schedulerActions.activeItem.value ? taskName(schedulerActions.activeItem.value.name) : ''">
+      <button class="action-sheet-item" :disabled="schedulerStore.running === schedulerActions.activeItem.value?.name"
+              @click="handleRunNow(schedulerActions.activeItem.value!); schedulerActions.close()">
+        <Play :size="16" /> {{ t('scheduler.run_now') }}
+      </button>
+      <button class="action-sheet-item" @click="openEditSchedule(schedulerActions.activeItem.value!); schedulerActions.close()">
+        <Pencil :size="16" /> {{ t('scheduler.edit_schedule') }}
+      </button>
+      <button class="action-sheet-item" @click="openHistory(schedulerActions.activeItem.value!); schedulerActions.close()">
+        <History :size="16" /> {{ t('scheduler.view_history') }}
+      </button>
+    </ActionSheet>
+
     <ConfirmDialog v-bind="confirmState" @confirm="handleConfirm" @cancel="handleCancel" />
   </div>
 </template>
@@ -158,18 +179,31 @@ import {useSchedulerStore} from '@/stores/scheduler'
 import {useToastStore} from '@/stores/toast'
 import {formatDate} from '@/utils/format'
 import {useConfirmDialog} from '@/composables/useConfirmDialog'
+import {useActionMenu} from '@/composables/useActionMenu'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import DataTable from '@/components/common/DataTable.vue'
 import FormModal from '@/components/common/FormModal.vue'
 import Modal from '@/components/common/Modal.vue'
 import PageHeader from '@/components/common/PageHeader.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
-import {AlertCircle, AlertTriangle, CalendarClock, History, Loader2, Pencil, Play, RefreshCw,} from '@lucide/vue'
+import ActionSheet from '@/components/common/ActionSheet.vue'
+import {
+  AlertCircle,
+  AlertTriangle,
+  CalendarClock,
+  History,
+  Loader2,
+  MoreVertical,
+  Pencil,
+  Play,
+  RefreshCw,
+} from '@lucide/vue'
 import type {SchedulerHistoryRecord, SchedulerTask} from '@/types/models'
 
 const { t, te } = useI18n()
 const schedulerStore = useSchedulerStore()
 const toast = useToastStore()
+const schedulerActions = useActionMenu()
 const { confirmState, confirm, handleConfirm, handleCancel } = useConfirmDialog()
 
 const columns = [

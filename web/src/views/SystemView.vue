@@ -59,7 +59,11 @@
 
         <InfoGrid>
           <InfoItem :label="t('system.load_avg')">
-            <span>{{ systemStore.resources.load1.toFixed(2) }} {{ systemStore.resources.load5.toFixed(2) }} {{ systemStore.resources.load15.toFixed(2) }}</span>
+            <span class="load-avg-values">
+              <span v-tooltip="t('system.load_1m_tip')">{{ systemStore.resources.load1.toFixed(2) }}</span>
+              <span v-tooltip="t('system.load_5m_tip')">{{ systemStore.resources.load5.toFixed(2) }}</span>
+              <span v-tooltip="t('system.load_15m_tip')">{{ systemStore.resources.load15.toFixed(2) }}</span>
+            </span>
           </InfoItem>
           <InfoItem :label="t('system.uptime')">
             <span>{{ formatUptime(systemStore.resources.uptime) }}</span>
@@ -169,17 +173,17 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted } from 'vue'
-import { useI18n } from 'vue-i18n'
-import { useSystemStore } from '@/stores/system'
-import { useToastStore } from '@/stores/toast'
-import { useConfirmDialog } from '@/composables/useConfirmDialog'
-import { Loader2 } from '@lucide/vue'
+import {computed, onMounted, onUnmounted} from 'vue'
+import {useI18n} from 'vue-i18n'
+import {useSystemStore} from '@/stores/system'
+import {useToastStore} from '@/stores/toast'
+import {useConfirmDialog} from '@/composables/useConfirmDialog'
+import {Loader2} from '@lucide/vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import InfoGrid from '@/components/common/InfoGrid.vue'
 import InfoItem from '@/components/common/InfoItem.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
-import { formatBytes } from '@/utils/format'
+import {formatBytes} from '@/utils/format'
 
 const { t } = useI18n()
 const systemStore = useSystemStore()
@@ -289,5 +293,18 @@ onUnmounted(() => {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
   gap: $spacing-lg;
+}
+
+.load-avg-values {
+  display: inline-flex;
+  gap: $spacing-sm;
+
+  > span {
+    padding: 1px 6px;
+    background: var(--bg-table-hover);
+    border-radius: 3px;
+    font-family: monospace;
+    cursor: help;
+  }
 }
 </style>

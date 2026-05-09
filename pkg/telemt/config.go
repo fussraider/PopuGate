@@ -153,7 +153,7 @@ func BuildConfig(params *ConfigParams) *TelemtConfig {
 			ListenAddrIPv4:   "0.0.0.0",
 			ListenAddrIPv6:   "::",
 			ProxyProtocol:    s.ProxyProtocol,
-			MetricsListen:    fmt.Sprintf("127.0.0.1:%d", s.ProxyMetricsPort),
+			MetricsListen:    metricsListenAddr(s.ProxyMetricsPort, params.ExtraMetricsWhitelist),
 			MetricsWhitelist: metricsWhitelist,
 		},
 		Timeouts: TimeoutsConfig{
@@ -254,6 +254,16 @@ func BuildConfig(params *ConfigParams) *TelemtConfig {
 	}
 
 	return cfg
+}
+
+// metricsListenAddr returns "0.0.0.0:port" when running inside Docker
+// (so the host can reach metrics via host.docker.internal), otherwise
+// "127.0.0.1:port".
+func metricsListenAddr(port int, extraWhitelist []string) string {
+	if len(extraWhitelist) > 0 {
+		return fmt.Sprintf("0.0.0.0:%d", port)
+	}
+	return fmt.Sprintf("127.0.0.1:%d", port)
 }
 
 // WriteConfigTOML writes the TOML configuration to a file atomically.

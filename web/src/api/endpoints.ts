@@ -1,39 +1,39 @@
 import api from './client'
 import type {
-  LoginRequest,
-  LoginResponse,
-  Settings,
-  Secret,
-  SecretWithLink,
-  Upstream,
-  NetInterface,
-  UpstreamTestResult,
-  Instance,
-  Slave,
-  SlaveTestResult,
-  SyncResult,
-  GlobalTraffic,
-  UserTraffic,
-  LiveMetrics,
-  ProxyStatus,
-  HealthStatus,
-  DockerStatus,
-  EngineStatus,
-  BuildResult,
-  UpdateStatus,
-  UpdateResult,
-  TelemtUpdateStatus,
-  TelemtReleaseListItem,
-  BackupInfo,
-  SystemResources,
-  OSType,
-  ServiceStatus,
-  SchedulerTask,
-  SchedulerHistoryRecord,
-  TrafficHistoryRecord,
-  AuditEntry,
-  SecretTemplate,
-  SecretImportItem,
+    AuditEntry,
+    BackupInfo,
+    BuildResult,
+    DockerStatus,
+    EngineStatus,
+    GlobalTraffic,
+    HealthStatus,
+    Instance,
+    LiveMetrics,
+    LoginRequest,
+    LoginResponse,
+    NetInterface,
+    OSType,
+    ProxyStatus,
+    SchedulerHistoryRecord,
+    SchedulerTask,
+    Secret,
+    SecretImportItem,
+    SecretTemplate,
+    SecretWithLink,
+    ServiceStatus,
+    Settings,
+    Slave,
+    SlaveTestResult,
+    SyncResult,
+    SystemResources,
+    TelemtReleaseListItem,
+    TelemtUpdateStatus,
+    TrafficHistoryRecord,
+    UpdateResult,
+    UpdateStatus,
+    Upstream,
+    UpstreamTestResult,
+    UserTraffic,
 } from '@/types/models'
 
 // ─── Auth ──────────────────────────────────────────────────────
@@ -198,10 +198,42 @@ export const upstreamsApi = {
 export const instancesApi = {
   list: () => api.get<Instance[]>('/instances').then((r) => r.data),
 
-  add: (port: number, label: string) =>
-    api.post<Instance>('/instances', { port, label }).then((r) => r.data),
+  add: (data: {
+    port: number
+    label: string
+    tls_domain: string
+    tls_domains?: string
+    fake_tls?: boolean
+    mask_host?: string
+    mask_port?: number
+    tags?: string
+    metrics_port?: number
+  }) => api.post<Instance>('/instances', data).then((r) => r.data),
 
-  remove: (port: number) => api.delete(`/instances/${port}`),
+  update: (id: number, data: Partial<Instance>) =>
+    api.put<Instance>(`/instances/${id}`, data).then((r) => r.data),
+
+  remove: (id: number) => api.delete(`/instances/${id}`),
+
+  start: (id: number) =>
+    api.post(`/instances/${id}/start`, {}, { timeout: 300000 }),
+
+  stop: (id: number) =>
+    api.post(`/instances/${id}/stop`, {}, { timeout: 300000 }),
+
+  reload: (id: number) =>
+    api.post(`/instances/${id}/reload`, {}, { timeout: 120000 }),
+
+  status: (id: number) =>
+    api.get<{ id: number; status: string }>(`/instances/${id}/status`).then((r) => r.data),
+
+  logs: (id: number, tail = '100') =>
+    api.get<string>(`/instances/${id}/logs?tail=${tail}`).then((r) => r.data),
+
+  checkPort: (port: number, excludeId?: number) =>
+    api.get<{ available: boolean; reason?: string }>('/instances/check-port', {
+      params: { port, exclude: excludeId || undefined },
+    }).then((r) => r.data),
 }
 
 // ─── Proxy Control ─────────────────────────────────────────────
@@ -269,6 +301,8 @@ export const botApi = {
   toggle: (enable: boolean) => api.put('/bot/toggle', { enable }),
 
   detectChatId: () => api.get('/bot/detect-chat-id').then((r) => r.data),
+
+  setCommands: () => api.post('/bot/commands'),
 }
 
 // ─── Replication ───────────────────────────────────────────────
@@ -375,5 +409,5 @@ export const templatesApi = {
     api.delete(`/templates/${name}`),
 
   apply: (templateName: string, secretLabel: string) =>
-    api.post(`/templates/${templateName}/apply`, { label: secretLabel }).then((r) => r.data),
+    api.post(`/templates/${templateName}/apply`, { secret_label: secretLabel }).then((r) => r.data),
 }

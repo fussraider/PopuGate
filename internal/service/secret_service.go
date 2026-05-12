@@ -13,12 +13,14 @@ import (
 
 // SecretService handles secret business logic.
 type SecretService struct {
-	secrets *store.SecretStore
+	secrets   *store.SecretStore
+	instances *store.InstanceStore
+	settings  *store.SettingsStore
 }
 
 // NewSecretService creates a new SecretService.
-func NewSecretService(secrets *store.SecretStore) *SecretService {
-	return &SecretService{secrets: secrets}
+func NewSecretService(secrets *store.SecretStore, instances *store.InstanceStore, settings *store.SettingsStore) *SecretService {
+	return &SecretService{secrets: secrets, instances: instances, settings: settings}
 }
 
 // List returns all secrets with traffic data.
@@ -184,6 +186,55 @@ func (s *SecretService) SetLimits(ctx context.Context, label string, maxConns, m
 	}
 
 	return s.secrets.Update(ctx, sec)
+}
+
+// GetLinks returns all proxy links for a secret across all accessible instances × domains.
+func (s *SecretService) GetLinks(ctx context.Context, label, serverIP string) (*model.SecretWithLinks, error) {
+	sec, err := s.secrets.GetByLabel(ctx, label)
+	if err != nil {
+		return nil, err
+	}
+	if sec == nil {
+		return nil, fmt.Errorf("secret '%s' not found", label)
+	}
+
+	instances, err := s.instances.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	links := BuildLinksForSecret(sec, instances, serverIP)
+
+	return &model.SecretWithLinks{
+		Secret: *sec,
+		Links:  links,
+	}, nil
+}
+
+// GetAllLinks returns proxy links for all enabled secrets.
+func (s *SecretService) GetAllLinks(ctx context.Context, serverIP string) ([]model.SecretWithLinks, error) {
+	secrets, err := s.secrets.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	instances, err := s.instances.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var result []model.SecretWithLinks
+	for _, sec := range secrets {
+		if !sec.Enabled {
+			continue
+		}
+		links := BuildLinksForSecret(&sec, instances, serverIP)
+		result = append(result, model.SecretWithLinks{
+			Secret: sec,
+			Links:  links,
+		})
+	}
+	return result, nil
 }
 
 // GetLink returns the proxy link for a secret.

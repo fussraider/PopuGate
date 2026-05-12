@@ -17,6 +17,7 @@ func TestInstanceValidate(t *testing.T) {
 			instance: Instance{
 				Port:        443,
 				MetricsPort: 9090,
+				TLSDomain:   "cloudflare.com",
 			},
 			wantErr: false,
 		},
@@ -25,6 +26,7 @@ func TestInstanceValidate(t *testing.T) {
 			instance: Instance{
 				Port:        65535,
 				MetricsPort: 9091,
+				TLSDomain:   "cloudflare.com",
 			},
 			wantErr: false,
 		},
@@ -33,6 +35,7 @@ func TestInstanceValidate(t *testing.T) {
 			instance: Instance{
 				Port:        1,
 				MetricsPort: 1,
+				TLSDomain:   "cloudflare.com",
 			},
 			wantErr: false,
 		},
@@ -101,11 +104,11 @@ func TestInstanceContainerName(t *testing.T) {
 		port int
 		want string
 	}{
-		{443, "popugate"},
-		{8443, "popugate-8443"},
-		{1, "popugate-1"},
-		{65535, "popugate-65535"},
-		{8090, "popugate-8090"},
+		{443, "popugate-telemt-443"},
+		{8443, "popugate-telemt-8443"},
+		{1, "popugate-telemt-1"},
+		{65535, "popugate-telemt-65535"},
+		{8090, "popugate-telemt-8090"},
 	}
 
 	for _, tt := range tests {
@@ -147,6 +150,30 @@ func TestInstanceConfigPath(t *testing.T) {
 			}
 			if !strings.Contains(got, fmt.Sprintf("config-%d.toml", tt.port)) {
 				t.Errorf("ConfigPath() = %q should contain 'config-%d.toml'", got, tt.port)
+			}
+		})
+	}
+}
+
+func TestTagsMatch(t *testing.T) {
+	tests := []struct {
+		name         string
+		instanceTags []string
+		secretTags   []string
+		want         bool
+	}{
+		{"both empty", nil, nil, true},
+		{"instance no tags, secret has tags", nil, []string{"premium"}, true},
+		{"secret no tags, instance has tags", []string{"premium"}, nil, false},
+		{"matching tag", []string{"premium"}, []string{"premium"}, true},
+		{"no matching tags", []string{"premium"}, []string{"basic"}, false},
+		{"partial match", []string{"premium", "vip"}, []string{"vip", "test"}, true},
+		{"multiple no match", []string{"premium", "vip"}, []string{"basic", "free"}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := TagsMatch(tt.instanceTags, tt.secretTags); got != tt.want {
+				t.Errorf("TagsMatch() = %v, want %v", got, tt.want)
 			}
 		})
 	}

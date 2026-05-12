@@ -276,12 +276,6 @@ onUnmounted(() => {
 <style scoped lang="scss">
 @use '@/assets/scss/variables' as *;
 
-.actions-grid {
-  display: flex;
-  gap: $spacing-sm;
-  flex-wrap: wrap;
-}
-
 .service-details {
   padding: $spacing-md;
   background: var(--bg-table-hover);

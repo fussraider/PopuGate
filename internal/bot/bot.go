@@ -32,9 +32,12 @@ type Dependencies struct {
 	// Callbacks for actions that need service layer (set by caller)
 	GetPublicIP       func(ctx context.Context) string
 	IsProxyRunning    func(ctx context.Context) bool
+	IsInstanceRunning func(ctx context.Context, containerName string) bool
 	GetUptime         func(ctx context.Context) string
 	GetEngineVersion  func() string
 	RestartProxy      func(ctx context.Context) error
+	StartInstance     func(ctx context.Context, id int64) error
+	StopInstance      func(ctx context.Context, id int64) error
 	GenerateQR        func(ctx context.Context, link string) ([]byte, error)
 	GetSchedulerTasks func(ctx context.Context) []string
 }
@@ -59,6 +62,76 @@ func (b *Bot) telegramAPIURL(method string) string {
 // telegramAPIURLWithQuery builds a Telegram Bot API URL with query parameters.
 func (b *Bot) telegramAPIURLWithQuery(method, query string) string {
 	return fmt.Sprintf("https://api.telegram.org/bot%s/%s?%s", b.token, method, query)
+}
+
+// telegramCommand is a BotCommand for setMyCommands.
+type telegramCommand struct {
+	Command     string `json:"command"`
+	Description string `json:"description"`
+}
+
+// defaultCommands returns the full list of bot commands for setMyCommands.
+func defaultCommands() []telegramCommand {
+	return []telegramCommand{
+		{Command: "status", Description: "Proxy status"},
+		{Command: "secrets", Description: "List secrets"},
+		{Command: "link", Description: "Proxy links + QR"},
+		{Command: "add", Description: "Add secret"},
+		{Command: "remove", Description: "Remove secret"},
+		{Command: "rotate", Description: "Rotate secret"},
+		{Command: "restart", Description: "Restart proxy"},
+		{Command: "start", Description: "Start instance"},
+		{Command: "stop", Description: "Stop instance"},
+		{Command: "enable", Description: "Enable secret"},
+		{Command: "disable", Description: "Disable secret"},
+		{Command: "health", Description: "Health check"},
+		{Command: "traffic", Description: "Traffic report"},
+		{Command: "update", Description: "Version info"},
+		{Command: "limits", Description: "User limits"},
+		{Command: "setlimit", Description: "Set limits"},
+		{Command: "upstreams", Description: "List upstreams"},
+		{Command: "tasks", Description: "Scheduled tasks"},
+		{Command: "help", Description: "Show help"},
+	}
+}
+
+// SetCommands registers bot commands via setMyCommands so they appear as
+// autocomplete suggestions in Telegram clients.
+func (b *Bot) SetCommands(ctx context.Context) error {
+	return setCommandsForTokenWithClient(ctx, b.client, b.token)
+}
+
+// SetCommandsForToken registers bot commands using only a token (no Bot instance needed).
+func SetCommandsForToken(ctx context.Context, token string) error {
+	return setCommandsForTokenWithClient(ctx, &http.Client{Timeout: 10 * time.Second}, token)
+}
+
+func setCommandsForTokenWithClient(ctx context.Context, client *http.Client, token string) error {
+	apiURL := fmt.Sprintf("https://api.telegram.org/bot%s/setMyCommands", token)
+
+	payload, _ := json.Marshal(map[string]any{"commands": defaultCommands()})
+	req, err := http.NewRequestWithContext(ctx, "POST", apiURL, bytes.NewReader(payload))
+	if err != nil {
+		return fmt.Errorf("setMyCommands request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("setMyCommands call: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var result struct {
+		OK bool `json:"ok"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return fmt.Errorf("setMyCommands decode: %w", err)
+	}
+	if !result.OK {
+		return fmt.Errorf("setMyCommands returned ok=false (HTTP %d)", resp.StatusCode)
+	}
+	return nil
 }
 
 // New creates a new Telegram bot.
@@ -294,6 +367,10 @@ func (b *Bot) handleUpdate(ctx context.Context, update TelegramUpdate) {
 		response = b.cmdEnable(ctx, text)
 	case strings.HasPrefix(text, "/disable"):
 		response = b.cmdDisable(ctx, text)
+	case strings.HasPrefix(text, "/start"):
+		response = b.cmdStartInstance(ctx, text)
+	case strings.HasPrefix(text, "/stop"):
+		response = b.cmdStopInstance(ctx, text)
 	case text == "/health":
 		response = b.cmdHealth(ctx)
 	case text == "/traffic":
@@ -327,7 +404,7 @@ func (b *Bot) handleUpdate(ctx context.Context, update TelegramUpdate) {
 func isKnownCommand(cmd string) bool {
 	switch cmd {
 	case "/status", "/secrets", "/link", "/add", "/remove", "/rotate",
-		"/restart", "/enable", "/disable", "/health", "/traffic",
+		"/restart", "/enable", "/disable", "/start", "/stop", "/health", "/traffic",
 		"/update", "/limits", "/setlimit", "/upstreams", "/tasks", "/help":
 		return true
 	}

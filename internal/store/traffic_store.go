@@ -52,10 +52,10 @@ func (s *TrafficStore) ResetGlobal(ctx context.Context) error {
 	return err
 }
 
-// ListUserTraffic returns all per-user traffic stats.
+// ListUserTraffic returns per-user traffic summed across all instances.
 func (s *TrafficStore) ListUserTraffic(ctx context.Context) ([]model.UserTraffic, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT label, bytes_in, bytes_out FROM traffic_user ORDER BY label
+		SELECT label, SUM(bytes_in), SUM(bytes_out) FROM traffic_user GROUP BY label ORDER BY label
 	`)
 	if err != nil {
 		return nil, fmt.Errorf("list user traffic: %w", err)
@@ -76,11 +76,12 @@ func (s *TrafficStore) ListUserTraffic(ctx context.Context) ([]model.UserTraffic
 	return stats, nil
 }
 
-// GetUserTraffic returns traffic for a specific user.
+// GetUserTraffic returns total traffic for a specific user across all instances.
 func (s *TrafficStore) GetUserTraffic(ctx context.Context, label string) (*model.UserTraffic, error) {
 	var u model.UserTraffic
 	err := s.db.QueryRowContext(ctx, `
-		SELECT label, bytes_in, bytes_out FROM traffic_user WHERE label = ?
+		SELECT label, COALESCE(SUM(bytes_in), 0), COALESCE(SUM(bytes_out), 0)
+		FROM traffic_user WHERE label = ? GROUP BY label
 	`, label).Scan(&u.Label, &u.BytesIn, &u.BytesOut)
 	if err == sql.ErrNoRows {
 		return &model.UserTraffic{Label: label}, nil
@@ -91,20 +92,20 @@ func (s *TrafficStore) GetUserTraffic(ctx context.Context, label string) (*model
 	return &u, nil
 }
 
-// GetUserSnapshot returns the raw Prometheus snapshot for a user.
-func (s *TrafficStore) GetUserSnapshot(ctx context.Context, label string) (snapIn, snapOut int64, err error) {
+// GetUserSnapshot returns the raw Prometheus snapshot for a user on a specific instance.
+func (s *TrafficStore) GetUserSnapshot(ctx context.Context, label string, instanceID int64) (snapIn, snapOut int64, err error) {
 	err = s.db.QueryRowContext(ctx, `
-		SELECT snap_in, snap_out FROM traffic_user WHERE label = ?
-	`, label).Scan(&snapIn, &snapOut)
+		SELECT snap_in, snap_out FROM traffic_user WHERE label = ? AND instance_id = ?
+	`, label, instanceID).Scan(&snapIn, &snapOut)
 	if err == sql.ErrNoRows {
 		return 0, 0, nil
 	}
 	return
 }
 
-// GetAllUserSnapshots returns all user snapshots in a single query.
-func (s *TrafficStore) GetAllUserSnapshots(ctx context.Context) (map[string][2]int64, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT label, snap_in, snap_out FROM traffic_user`)
+// GetAllUserSnapshots returns all user snapshots for a specific instance in a single query.
+func (s *TrafficStore) GetAllUserSnapshots(ctx context.Context, instanceID int64) (map[string][2]int64, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT label, snap_in, snap_out FROM traffic_user WHERE instance_id = ?`, instanceID)
 	if err != nil {
 		return nil, fmt.Errorf("get user snapshots: %w", err)
 	}
@@ -125,29 +126,28 @@ func (s *TrafficStore) GetAllUserSnapshots(ctx context.Context) (map[string][2]i
 	return result, nil
 }
 
-// UpdateUserTraffic adds deltas to a user's traffic and updates the snapshot.
-func (s *TrafficStore) UpdateUserTraffic(ctx context.Context, label string, deltaIn, deltaOut, snapIn, snapOut int64) error {
+// UpdateUserTraffic adds deltas to a user's traffic for a specific instance.
+func (s *TrafficStore) UpdateUserTraffic(ctx context.Context, label string, instanceID int64, deltaIn, deltaOut, snapIn, snapOut int64) error {
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO traffic_user (label, bytes_in, bytes_out, snap_in, snap_out)
-		VALUES (?, ?, ?, ?, ?)
-		ON CONFLICT(label) DO UPDATE SET
+		INSERT INTO traffic_user (label, instance_id, bytes_in, bytes_out, snap_in, snap_out)
+		VALUES (?, ?, ?, ?, ?, ?)
+		ON CONFLICT(label, instance_id) DO UPDATE SET
 			bytes_in = bytes_in + excluded.bytes_in,
 			bytes_out = bytes_out + excluded.bytes_out,
 			snap_in = excluded.snap_in,
 			snap_out = excluded.snap_out
-	`, label, deltaIn, deltaOut, snapIn, snapOut)
+	`, label, instanceID, deltaIn, deltaOut, snapIn, snapOut)
 	return err
 }
 
-// FlushTraffic persists all traffic deltas in a single transaction.
-func (s *TrafficStore) FlushTraffic(ctx context.Context, global model.TrafficSnapshot, users map[string]model.TrafficSnapshot) error {
+// FlushTraffic persists global and per-user traffic deltas in a single transaction.
+func (s *TrafficStore) FlushTraffic(ctx context.Context, global model.TrafficSnapshot, users map[string]model.TrafficSnapshot, instanceID int64) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin flush tx: %w", err)
 	}
 	defer tx.Rollback()
 
-	// Update global
 	if _, err := tx.ExecContext(ctx, `
 		UPDATE traffic_global SET
 			bytes_in = bytes_in + ?, bytes_out = bytes_out + ?,
@@ -157,11 +157,33 @@ func (s *TrafficStore) FlushTraffic(ctx context.Context, global model.TrafficSna
 		return fmt.Errorf("flush global: %w", err)
 	}
 
-	// Update per-user
+	if err := s.flushUsers(tx, ctx, users, instanceID); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+// FlushInstanceTraffic persists per-user traffic for one instance without touching global counters.
+func (s *TrafficStore) FlushInstanceTraffic(ctx context.Context, users map[string]model.TrafficSnapshot, instanceID int64) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin instance flush tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	if err := s.flushUsers(tx, ctx, users, instanceID); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+func (s *TrafficStore) flushUsers(tx *sql.Tx, ctx context.Context, users map[string]model.TrafficSnapshot, instanceID int64) error {
 	stmt, err := tx.PrepareContext(ctx, `
-		INSERT INTO traffic_user (label, bytes_in, bytes_out, snap_in, snap_out)
-		VALUES (?, ?, ?, ?, ?)
-		ON CONFLICT(label) DO UPDATE SET
+		INSERT INTO traffic_user (label, instance_id, bytes_in, bytes_out, snap_in, snap_out)
+		VALUES (?, ?, ?, ?, ?, ?)
+		ON CONFLICT(label, instance_id) DO UPDATE SET
 			bytes_in = bytes_in + excluded.bytes_in,
 			bytes_out = bytes_out + excluded.bytes_out,
 			snap_in = excluded.snap_in,
@@ -173,12 +195,11 @@ func (s *TrafficStore) FlushTraffic(ctx context.Context, global model.TrafficSna
 	defer stmt.Close()
 
 	for label, snap := range users {
-		if _, err := stmt.ExecContext(ctx, label, snap.BytesIn, snap.BytesOut, snap.SnapIn, snap.SnapOut); err != nil {
-			return fmt.Errorf("flush user %s: %w", label, err)
+		if _, err := stmt.ExecContext(ctx, label, instanceID, snap.BytesIn, snap.BytesOut, snap.SnapIn, snap.SnapOut); err != nil {
+			return fmt.Errorf("flush user %s instance %d: %w", label, instanceID, err)
 		}
 	}
-
-	return tx.Commit()
+	return nil
 }
 
 // InsertHistoryBatch persists traffic deltas as history records in a single transaction.

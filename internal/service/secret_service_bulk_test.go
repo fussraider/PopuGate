@@ -10,7 +10,7 @@ import (
 // ---------------------------------------------------------------------------
 
 func TestSecretService_BulkToggle_Enable(t *testing.T) {
-	svc, _ := newTestSecretService(t)
+	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
 	svc.Add(ctx, "u1", "")
@@ -33,7 +33,7 @@ func TestSecretService_BulkToggle_Enable(t *testing.T) {
 }
 
 func TestSecretService_BulkToggle_DisableAll_Rejected(t *testing.T) {
-	svc, _ := newTestSecretService(t)
+	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
 	svc.Add(ctx, "only", "")
@@ -45,7 +45,7 @@ func TestSecretService_BulkToggle_DisableAll_Rejected(t *testing.T) {
 }
 
 func TestSecretService_BulkToggle_DisablePartial(t *testing.T) {
-	svc, _ := newTestSecretService(t)
+	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
 	svc.Add(ctx, "a", "")
@@ -77,7 +77,7 @@ func TestSecretService_BulkToggle_DisablePartial(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestSecretService_BulkSetLimits(t *testing.T) {
-	svc, _ := newTestSecretService(t)
+	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
 	svc.Add(ctx, "m1", "")
@@ -102,7 +102,7 @@ func TestSecretService_BulkSetLimits(t *testing.T) {
 }
 
 func TestSecretService_BulkSetLimits_Empty(t *testing.T) {
-	svc, _ := newTestSecretService(t)
+	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
 	n, err := svc.BulkSetLimits(ctx, []string{}, 5, 3, 0, "")

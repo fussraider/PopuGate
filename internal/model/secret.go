@@ -1,6 +1,7 @@
 package model
 
 import (
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"time"
@@ -106,6 +107,33 @@ func (s *Secret) QuotaExceeded() bool {
 // QuotaWarning returns true if traffic is at or above 80% of quota.
 func (s *Secret) QuotaWarning() bool {
 	return s.QuotaPercent() >= 80
+}
+
+// GetTags parses the JSON tags array.
+func (s *Secret) GetTags() []string {
+	if s.Tags == "" || s.Tags == "[]" {
+		return nil
+	}
+	var tags []string
+	json.Unmarshal([]byte(s.Tags), &tags)
+	return tags
+}
+
+// ValidateTags checks that tags is a valid JSON array of strings.
+func ValidateTags(tags string) error {
+	if tags == "" || tags == "[]" {
+		return nil
+	}
+	var result []string
+	if err := json.Unmarshal([]byte(tags), &result); err != nil {
+		return fmt.Errorf("tags must be a valid JSON array")
+	}
+	for _, t := range result {
+		if !labelRe.MatchString(t) {
+			return fmt.Errorf("invalid tag %q: must be 1-32 chars, alphanumeric/underscore/hyphen only", t)
+		}
+	}
+	return nil
 }
 
 // SecretWithLink extends Secret with proxy link info.

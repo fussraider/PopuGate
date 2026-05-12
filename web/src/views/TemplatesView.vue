@@ -17,7 +17,7 @@
       <template #cell-quota_bytes="{ item }">{{ item.quota_bytes ? formatBytes(item.quota_bytes) : '∞' }}</template>
       <template #cell-expires_days="{ item }">{{ item.expires_days || '∞' }}</template>
       <template #cell-tags="{ item }">
-        <span v-for="tag in splitTags(item.tags)" :key="tag" class="badge badge-info tag-badge">{{ tag }}</span>
+        <span v-for="tag in parseJSONTags(item.tags)" :key="tag" class="badge badge-info tag-badge">{{ tag }}</span>
       </template>
       <template #mobile-actions="{ item }">
         <button class="btn btn-ghost btn-sm" @click="templateActions.open(item)">
@@ -65,7 +65,7 @@
       </div>
       <div class="form-group mb-sm">
         <label class="form-label">{{ t('templates.tags_label') }}</label>
-        <input v-model="addModal.form.value.tags" class="input" :placeholder="t('secrets.tags_placeholder')" />
+        <TagInput v-model="addModal.form.value.tags" :placeholder="t('secrets.tags_placeholder')" />
       </div>
       <div class="form-group">
         <label class="form-label">{{ t('templates.notes_label') }}</label>
@@ -108,7 +108,7 @@ import {computed, onMounted, ref} from 'vue'
 import {useI18n} from 'vue-i18n'
 import {useSecretsStore, useTemplatesStore} from '@/stores'
 import {useToastStore} from '@/stores/toast'
-import {formatBytes} from '@/utils/format'
+import {formatBytes, parseJSONTags} from '@/utils/format'
 import {useConfirmDialog} from '@/composables/useConfirmDialog'
 import {useFormModal} from '@/composables/useFormModal'
 import {useActionMenu} from '@/composables/useActionMenu'
@@ -117,6 +117,7 @@ import FormModal from '@/components/common/FormModal.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import DataTable from '@/components/common/DataTable.vue'
 import PageHeader from '@/components/common/PageHeader.vue'
+import TagInput from '@/components/common/TagInput.vue'
 import ActionSheet from '@/components/common/ActionSheet.vue'
 import {LayoutTemplate, MoreVertical, Play, Trash2} from '@lucide/vue'
 
@@ -135,12 +136,8 @@ const columns = computed(() => [
   { key: 'tags', header: t('templates.table.tags') },
 ])
 
-function splitTags(tags?: string): string[] {
-  return (tags || '').split(',').map((s: string) => s.trim()).filter(Boolean)
-}
-
 // Add
-const addModal = useFormModal({ name: '', max_conns: 0, max_ips: 0, quota_mb: 0, expires_days: 0, tags: '', notes: '' })
+const addModal = useFormModal({ name: '', max_conns: 0, max_ips: 0, quota_mb: 0, expires_days: 0, tags: '[]', notes: '' })
 async function handleAdd() {
   try {
     await addModal.submit(async (f) => {

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -15,13 +16,19 @@ import (
 
 // SecretHandler handles secret endpoints.
 type SecretHandler struct {
-	secrets  *service.SecretService
-	settings *store.SettingsStore
+	secrets      *service.SecretService
+	settings     *store.SettingsStore
+	containerSvc *service.ContainerService
 }
 
 // NewSecretHandler creates a new SecretHandler.
 func NewSecretHandler(secrets *service.SecretService, settings *store.SettingsStore) *SecretHandler {
 	return &SecretHandler{secrets: secrets, settings: settings}
+}
+
+// SetContainerSvc sets the container service for revalidation after secret changes.
+func (h *SecretHandler) SetContainerSvc(svc *service.ContainerService) {
+	h.containerSvc = svc
 }
 
 // List handles GET /api/v1/secrets
@@ -120,6 +127,7 @@ func (h *SecretHandler) Remove(c *gin.Context) {
 		return
 	}
 	auditLog(c, "secret.delete", fmt.Sprintf("label=%s", label))
+	h.revalidateInstances(c.Request.Context())
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
@@ -173,6 +181,7 @@ func (h *SecretHandler) Toggle(c *gin.Context) {
 		return
 	}
 	auditLog(c, "secret.toggle", fmt.Sprintf("label=%s enabled=%v", label, *req.Enabled))
+	h.revalidateInstances(c.Request.Context())
 	c.JSON(http.StatusOK, gin.H{"ok": true, "enabled": *req.Enabled})
 }
 
@@ -289,12 +298,12 @@ func (h *SecretHandler) GetLink(c *gin.Context) {
 		}
 	}
 
-	link, err := h.secrets.GetLink(c.Request.Context(), label, serverIP, settings.ProxyPort, settings.MaskingEnabled, settings.ProxyDomain)
+	result, err := h.secrets.GetLinks(c.Request.Context(), label, serverIP)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, link)
+	c.JSON(http.StatusOK, result)
 }
 
 // GetQR handles GET /api/v1/secrets/:label/qr
@@ -501,7 +510,7 @@ type setTagsRequest struct {
 
 // SetTags handles PUT /api/v1/secrets/:label/tags
 // @Summary      Set secret tags
-// @Description  Set comma-separated tags for a secret
+// @Description  Set tags as JSON array for a secret
 // @Tags         secrets
 // @Accept       json
 // @Produce      json
@@ -518,11 +527,19 @@ func (h *SecretHandler) SetTags(c *gin.Context) {
 		HandleBindError(c, err)
 		return
 	}
+	if req.Tags == "" {
+		req.Tags = "[]"
+	}
+	if err := model.ValidateTags(req.Tags); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 	if err := h.secrets.SetTags(c.Request.Context(), label, req.Tags); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	auditLog(c, "secret.set_tags", fmt.Sprintf("label=%s tags=%s", label, req.Tags))
+	h.revalidateInstances(c.Request.Context())
 	c.JSON(http.StatusOK, gin.H{"ok": true, "tags": req.Tags})
 }
 
@@ -543,6 +560,7 @@ func (h *SecretHandler) Archive(c *gin.Context) {
 		return
 	}
 	auditLog(c, "secret.archive", fmt.Sprintf("label=%s", label))
+	h.revalidateInstances(c.Request.Context())
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
@@ -915,6 +933,7 @@ func (h *SecretHandler) BulkToggle(c *gin.Context) {
 		return
 	}
 	auditLog(c, "secret.bulk_toggle", fmt.Sprintf("count=%d enable=%v", updated, req.Enable))
+	h.revalidateInstances(c.Request.Context())
 	c.JSON(http.StatusOK, gin.H{"ok": true, "updated": updated})
 }
 
@@ -970,4 +989,11 @@ func (h *SecretHandler) BulkSetLimits(c *gin.Context) {
 	}
 	auditLog(c, "secret.bulk_set_limits", fmt.Sprintf("count=%d", updated))
 	c.JSON(http.StatusOK, gin.H{"ok": true, "updated": updated})
+}
+
+// revalidateInstances rechecks running instances after a secret change.
+func (h *SecretHandler) revalidateInstances(ctx context.Context) {
+	if h.containerSvc != nil {
+		h.containerSvc.RevalidateAllInstances(ctx)
+	}
 }

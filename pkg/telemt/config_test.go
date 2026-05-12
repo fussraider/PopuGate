@@ -354,8 +354,9 @@ func TestRenderTOML_WithMaskingHost(t *testing.T) {
 		Server:   ServerConfig{MetricsWhitelist: []string{}},
 		Timeouts: TimeoutsConfig{},
 		Censorship: CensorshipConfig{
-			Mask:     true,
-			MaskHost: "mask.example.com",
+			TLSDomain: "example.com",
+			Mask:      true,
+			MaskHost:  "mask.example.com",
 		},
 		Access: AccessConfig{Users: map[string]string{}},
 	}

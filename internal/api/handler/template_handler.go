@@ -73,6 +73,7 @@ type createTemplateRequest struct {
 	QuotaBytes  int64  `json:"quota_bytes"`
 	ExpiresDays int    `json:"expires_days"`
 	Notes       string `json:"notes" binding:"max=500"`
+	Tags        string `json:"tags"`
 }
 
 // Create handles POST /api/v1/templates
@@ -93,6 +94,14 @@ func (h *TemplateHandler) Create(c *gin.Context) {
 		return
 	}
 
+	if req.Tags == "" {
+		req.Tags = "[]"
+	}
+	if err := model.ValidateTags(req.Tags); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
 	tmpl := &model.SecretTemplate{
 		Name:        req.Name,
 		MaxConns:    req.MaxConns,
@@ -100,6 +109,7 @@ func (h *TemplateHandler) Create(c *gin.Context) {
 		QuotaBytes:  req.QuotaBytes,
 		ExpiresDays: req.ExpiresDays,
 		Notes:       req.Notes,
+		Tags:        req.Tags,
 	}
 
 	if err := h.templates.Create(c.Request.Context(), tmpl); err != nil {

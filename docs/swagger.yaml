@@ -2,9 +2,18 @@ basePath: /api/v1
 definitions:
   handler.addInstanceRequest:
     properties:
+      fake_tls:
+        description: pointer to distinguish unset from false
+        type: boolean
       label:
         maxLength: 32
         type: string
+      mask_host:
+        type: string
+      mask_port:
+        maximum: 65535
+        minimum: 1
+        type: integer
       metrics_port:
         maximum: 65535
         minimum: 1
@@ -13,8 +22,17 @@ definitions:
         maximum: 65535
         minimum: 1
         type: integer
+      tags:
+        description: JSON array
+        type: string
+      tls_domain:
+        type: string
+      tls_domains:
+        description: JSON array
+        type: string
     required:
     - port
+    - tls_domain
     type: object
   handler.addSecretRequest:
     properties:
@@ -140,6 +158,8 @@ definitions:
         type: string
       quota_bytes:
         type: integer
+      tags:
+        type: string
     required:
     - name
     type: object
@@ -281,6 +301,35 @@ definitions:
         type: string
     required:
     - type
+    type: object
+  handler.updateInstanceRequest:
+    properties:
+      enabled:
+        type: boolean
+      fake_tls:
+        type: boolean
+      label:
+        maxLength: 32
+        type: string
+      mask_host:
+        type: string
+      mask_port:
+        maximum: 65535
+        minimum: 1
+        type: integer
+      metrics_port:
+        maximum: 65535
+        type: integer
+      port:
+        maximum: 65535
+        minimum: 1
+        type: integer
+      tags:
+        type: string
+      tls_domain:
+        type: string
+      tls_domains:
+        type: string
     type: object
   handler.updateNotesRequest:
     properties:
@@ -743,6 +792,35 @@ paths:
       summary: Restore backup
       tags:
       - backup
+  /bot/commands:
+    post:
+      description: Registers the current command list with Telegram via setMyCommands
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Update bot commands
+      tags:
+      - bot
   /bot/detect-chat-id:
     get:
       consumes:
@@ -1477,13 +1555,13 @@ paths:
       summary: Add an instance
       tags:
       - instances
-  /instances/{port}:
+  /instances/{id}:
     delete:
-      description: Delete a proxy instance by port. The last instance cannot be removed.
+      description: Delete a proxy instance by ID. The last instance cannot be removed.
       parameters:
-      - description: Instance port
+      - description: Instance ID
         in: path
-        name: port
+        name: id
         required: true
         type: integer
       produces:
@@ -1501,6 +1579,12 @@ paths:
             additionalProperties:
               type: string
             type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
         "500":
           description: Internal Server Error
           schema:
@@ -1510,6 +1594,253 @@ paths:
       security:
       - BearerAuth: []
       summary: Remove an instance
+      tags:
+      - instances
+    put:
+      consumes:
+      - application/json
+      description: Update an existing proxy instance configuration
+      parameters:
+      - description: Instance ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Instance updates
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.updateInstanceRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Update an instance
+      tags:
+      - instances
+  /instances/{id}/logs:
+    get:
+      description: Retrieve logs for a specific proxy instance. Supports SSE streaming
+        when follow=true.
+      parameters:
+      - description: Instance ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Number of log lines to return (default 100)
+        in: query
+        name: tail
+        type: integer
+      - description: Enable SSE streaming of log output
+        in: query
+        name: follow
+        type: boolean
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "503":
+          description: Service Unavailable
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Instance logs
+      tags:
+      - instances
+  /instances/{id}/reload:
+    post:
+      description: Reload a specific proxy instance configuration
+      parameters:
+      - description: Instance ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Reload an instance
+      tags:
+      - instances
+  /instances/{id}/start:
+    post:
+      description: Start a specific proxy instance container
+      parameters:
+      - description: Instance ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Start an instance
+      tags:
+      - instances
+  /instances/{id}/status:
+    get:
+      description: Retrieve the current status of a specific proxy instance
+      parameters:
+      - description: Instance ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Instance status
+      tags:
+      - instances
+  /instances/{id}/stop:
+    post:
+      description: Stop a specific proxy instance container
+      parameters:
+      - description: Instance ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Stop an instance
+      tags:
+      - instances
+  /instances/check-port:
+    get:
+      description: Check if a TCP port is available for a new instance
+      parameters:
+      - description: Port number to check
+        in: query
+        name: port
+        required: true
+        type: integer
+      - description: Instance ID to exclude from conflict check
+        in: query
+        name: exclude
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Check port availability
       tags:
       - instances
   /proxy/logs:
@@ -2630,7 +2961,7 @@ paths:
     put:
       consumes:
       - application/json
-      description: Set comma-separated tags for a secret
+      description: Set tags as JSON array for a secret
       parameters:
       - description: Secret label
         in: path

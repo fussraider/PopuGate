@@ -58,7 +58,7 @@ func (d *DockerClient) Info(ctx context.Context) (system.Info, error) {
 }
 
 // ContainerName is the default container name.
-const ContainerName = "popugate"
+const ContainerName = "popugate-telemt"
 
 // IsRunning checks if the proxy container is running.
 func (d *DockerClient) IsRunning(ctx context.Context) (bool, error) {
@@ -169,6 +169,16 @@ func (d *DockerClient) UpdateRestartPolicy(ctx context.Context, policy container
 // Logs returns container logs as a readcloser.
 func (d *DockerClient) Logs(ctx context.Context, tail string, follow bool) (io.ReadCloser, error) {
 	return d.cli.ContainerLogs(ctx, ContainerName, container.LogsOptions{
+		ShowStdout: true,
+		ShowStderr: true,
+		Follow:     follow,
+		Tail:       tail,
+	})
+}
+
+// InstanceLogs returns logs for a specific instance container by name.
+func (d *DockerClient) InstanceLogs(ctx context.Context, containerName, tail string, follow bool) (io.ReadCloser, error) {
+	return d.cli.ContainerLogs(ctx, containerName, container.LogsOptions{
 		ShowStdout: true,
 		ShowStderr: true,
 		Follow:     follow,
@@ -380,4 +390,27 @@ func EnsureDockerInstalled(ctx context.Context) error {
 		return nil
 	}
 	return fmt.Errorf("docker not installed; use the installation wizard")
+}
+
+var (
+	dockerEnvOnce  sync.Once
+	dockerEnvCheck bool
+)
+
+// IsDockerEnv returns true if the current process runs inside a Docker container.
+func IsDockerEnv() bool {
+	dockerEnvOnce.Do(func() {
+		_, err := os.Stat("/.dockerenv")
+		dockerEnvCheck = err == nil
+	})
+	return dockerEnvCheck
+}
+
+// DockerHostAddr returns the address to reach the host from inside a container,
+// or localhost when not running in Docker.
+func DockerHostAddr() string {
+	if IsDockerEnv() {
+		return "host.docker.internal"
+	}
+	return "127.0.0.1"
 }

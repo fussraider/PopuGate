@@ -1,10 +1,8 @@
 package handler
 
 import (
-	"bufio"
 	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -12,7 +10,6 @@ import (
 	"github.com/fussraider/PopuGate/internal/store"
 	"github.com/fussraider/PopuGate/pkg/dockerutil"
 	"github.com/fussraider/PopuGate/pkg/netutil"
-	"github.com/fussraider/PopuGate/pkg/telemt"
 )
 
 // ProxyHandler handles proxy control endpoints.
@@ -20,12 +17,19 @@ type ProxyHandler struct {
 	container *service.ContainerService
 	secrets   *store.SecretStore
 	settings  *store.SettingsStore
+	secretSvc *service.SecretService
 	docker    *dockerutil.DockerClient
+	instances *store.InstanceStore
 }
 
 // NewProxyHandler creates a new ProxyHandler.
-func NewProxyHandler(container *service.ContainerService, secrets *store.SecretStore, settings *store.SettingsStore) *ProxyHandler {
-	return &ProxyHandler{container: container, secrets: secrets, settings: settings}
+func NewProxyHandler(container *service.ContainerService, secrets *store.SecretStore, settings *store.SettingsStore, secretSvc *service.SecretService) *ProxyHandler {
+	return &ProxyHandler{container: container, secrets: secrets, settings: settings, secretSvc: secretSvc}
+}
+
+// SetInstanceStore sets the instance store for log streaming.
+func (h *ProxyHandler) SetInstanceStore(s *store.InstanceStore) {
+	h.instances = s
 }
 
 // SetDockerClient sets the Docker client for log streaming.
@@ -52,17 +56,8 @@ func (h *ProxyHandler) Start(c *gin.Context) {
 		return
 	}
 
-	// Return links for all enabled secrets
+	// Return links for all enabled secrets across all instances
 	settings, _ := h.settings.Load(c.Request.Context())
-	secrets, _ := h.secrets.List(c.Request.Context())
-
-	type linkEntry struct {
-		Label   string `json:"label"`
-		TGLink  string `json:"tg_link"`
-		WebLink string `json:"web_link"`
-	}
-	var links []linkEntry
-
 	serverIP := settings.CustomIP
 	if serverIP == "" {
 		if ip, err := netutil.GetPublicIP(); err == nil {
@@ -72,20 +67,15 @@ func (h *ProxyHandler) Start(c *gin.Context) {
 		}
 	}
 
-	for _, sec := range secrets {
-		if !sec.Enabled {
-			continue
-		}
-		fullSecret := telemt.BuildFakeTLSSecret(sec.SecretKey, settings.ProxyDomain, settings.MaskingEnabled)
-		links = append(links, linkEntry{
-			Label:   sec.Label,
-			TGLink:  telemt.BuildProxyLink(serverIP, settings.ProxyPort, fullSecret),
-			WebLink: telemt.BuildWebLink(serverIP, settings.ProxyPort, fullSecret),
-		})
+	allLinks, err := h.secretSvc.GetAllLinks(c.Request.Context(), serverIP)
+	if err != nil {
+		auditLog(c, "proxy.start", "proxy started (links unavailable)")
+		c.JSON(http.StatusOK, gin.H{"ok": true, "warning": "links unavailable"})
+		return
 	}
 
 	auditLog(c, "proxy.start", "proxy started")
-	c.JSON(http.StatusOK, gin.H{"ok": true, "links": links})
+	c.JSON(http.StatusOK, gin.H{"ok": true, "links": allLinks})
 }
 
 // Stop handles POST /api/v1/proxy/stop
@@ -193,65 +183,31 @@ func (h *ProxyHandler) Logs(c *gin.Context) {
 		return
 	}
 
-	tail := c.DefaultQuery("tail", "100")
-	follow := c.Query("follow") == "true"
-
-	if follow {
-		c.Header("Content-Type", "text/event-stream")
-		c.Header("Cache-Control", "no-cache")
-		c.Header("Connection", "keep-alive")
-	} else {
-		c.Header("Content-Type", "text/plain")
-	}
-
-	logs, err := h.docker.Logs(c.Request.Context(), tail, follow)
-	if err != nil {
-		if follow {
-			c.SSEvent("error", fmt.Sprintf("failed to get logs: %v", err))
-		} else {
-			HandleError(c, http.StatusInternalServerError, "failed to get logs", err)
-		}
-		return
-	}
-	defer logs.Close()
-
-	scanner := bufio.NewScanner(logs)
-
-	// Heartbeat ticker for SSE to detect dead connections (L-P06)
-	var heartbeat *time.Ticker
-	var done chan struct{}
-	if follow {
-		heartbeat = time.NewTicker(15 * time.Second)
-		done = make(chan struct{})
-		defer func() {
-			heartbeat.Stop()
-			close(done)
-		}()
-		go func() {
-			for {
-				select {
-				case <-heartbeat.C:
-					c.SSEvent("heartbeat", time.Now().Unix())
-					c.Writer.Flush()
-				case <-done:
-					return
+	// Find first running instance container for log streaming
+	var containerName string
+	if h.container != nil {
+		status, _ := h.container.Status(c.Request.Context())
+		if status != nil {
+			for _, is := range status.Instances {
+				if is.Running {
+					containerName = is.ContainerName
+					break
 				}
 			}
-		}()
+		}
+	}
+	if containerName == "" && h.instances != nil {
+		insts, err := h.instances.List(c.Request.Context())
+		if err == nil && len(insts) > 0 {
+			containerName = insts[0].ContainerName()
+		}
+	}
+	if containerName == "" {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "no instances available"})
+		return
 	}
 
-	for scanner.Scan() {
-		line := scanner.Text()
-		// Docker log format: first 8 bytes are header (usually), then payload
-		// However, when using a TTY, the header is not present.
-		if len(line) > 8 {
-			line = line[8:]
-		}
-		if follow {
-			c.SSEvent("message", line)
-			c.Writer.Flush()
-		} else {
-			fmt.Fprintln(c.Writer, line)
-		}
-	}
+	tail := c.DefaultQuery("tail", "100")
+	follow := c.Query("follow") == "true"
+	streamLogs(c, h.docker, containerName, tail, follow)
 }

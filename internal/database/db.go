@@ -3,6 +3,7 @@ package database
 import (
 	"database/sql"
 	"embed"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -68,6 +69,11 @@ func openDB(cfg Config) (*sql.DB, error) {
 	db.SetMaxOpenConns(1)
 
 	if err := runMigrations(db); err != nil {
+		db.Close()
+		return nil, err
+	}
+
+	if err := migrateSecretTagsToJSON(db); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -236,4 +242,46 @@ func Reset() {
 	mu.Lock()
 	defer mu.Unlock()
 	instance = nil
+}
+
+// migrateSecretTagsToJSON converts existing comma-separated secret tags to JSON arrays.
+// Idempotent: rows already containing JSON arrays are excluded by the WHERE clause.
+func migrateSecretTagsToJSON(db *sql.DB) error {
+	rows, err := db.Query("SELECT rowid, tags FROM secrets WHERE tags != '' AND tags != '[]' AND tags NOT LIKE '[%'")
+	if err != nil {
+		return fmt.Errorf("migrate secret tags: %w", err)
+	}
+	defer rows.Close()
+
+	type row struct {
+		rowid int64
+		tags  string
+	}
+	var toUpdate []row
+	for rows.Next() {
+		var r row
+		if err := rows.Scan(&r.rowid, &r.tags); err != nil {
+			continue
+		}
+		toUpdate = append(toUpdate, r)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("migrate secret tags: %w", err)
+	}
+
+	for _, r := range toUpdate {
+		parts := strings.Split(r.tags, ",")
+		clean := make([]string, 0, len(parts))
+		for _, p := range parts {
+			p = strings.TrimSpace(p)
+			if p != "" {
+				clean = append(clean, p)
+			}
+		}
+		jsonTags, _ := json.Marshal(clean)
+		if _, err := db.Exec("UPDATE secrets SET tags = ? WHERE rowid = ?", string(jsonTags), r.rowid); err != nil {
+			return fmt.Errorf("migrate secret tags row %d: %w", r.rowid, err)
+		}
+	}
+	return nil
 }

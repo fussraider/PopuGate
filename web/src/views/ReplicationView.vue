@@ -17,10 +17,12 @@
             <option value="master">{{ t('replication.master') }}</option>
             <option value="slave">{{ t('replication.slave') }}</option>
           </select>
+          <small class="text-muted">{{ t('replication.hint_role') }}</small>
         </div>
         <div class="form-group">
           <label class="form-label">{{ t('replication.sync_interval') }}</label>
           <input v-model.number="roleForm.interval" class="input" type="number" min="10" />
+          <small class="text-muted">{{ t('replication.hint_sync_interval') }}</small>
         </div>
       </div>
       <button class="btn btn-primary" :disabled="replicationStore.settingUp" @click="handleSetupRole">
@@ -106,15 +108,18 @@
       <div class="form-group mb-md">
         <label class="form-label">{{ t('replication.table.host') }}</label>
         <input v-model="slaveModal.form.value.host" class="input" required :placeholder="t('replication.host_placeholder')" />
+        <small class="text-muted">{{ t('replication.hint_host') }}</small>
       </div>
       <div class="form-row mb-md">
         <div class="form-group">
           <label class="form-label">{{ t('replication.table.port') }}</label>
           <input v-model.number="slaveModal.form.value.port" class="input" type="number" value="22" />
+          <small class="text-muted">{{ t('replication.hint_port') }}</small>
         </div>
         <div class="form-group">
           <label class="form-label">{{ t('replication.table.label') }}</label>
           <input v-model="slaveModal.form.value.label" class="input" :placeholder="t('replication.slave_placeholder')" />
+          <small class="text-muted">{{ t('replication.hint_slave_label') }}</small>
         </div>
       </div>
     </FormModal>

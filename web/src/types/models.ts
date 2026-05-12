@@ -1,7 +1,4 @@
 export interface Settings {
-  proxy_port: number
-  proxy_metrics_port: number
-  proxy_domain: string
   proxy_concurrency: number
   proxy_cpus: string
   proxy_memory: string
@@ -12,11 +9,6 @@ export interface Settings {
   ad_tag: string
   geoblock_mode: 'blacklist' | 'whitelist'
   blocklist_countries: string
-  masking_enabled: boolean
-  masking_host: string
-  masking_port: number
-  masking_relay_max_bytes: number
-  unknown_sni_action: 'mask' | 'drop'
   proxy_secret_url: string
   proxy_config_v4_url: string
   proxy_config_v6_url: string
@@ -66,6 +58,15 @@ export interface Secret {
 export interface SecretWithLink extends Secret {
   tg_link?: string
   web_link?: string
+  links?: ProxyLink[]
+}
+
+export interface ProxyLink {
+  instance_label: string
+  instance_port: number
+  domain: string
+  tg_link: string
+  web_link: string
 }
 
 export interface Upstream {
@@ -105,6 +106,12 @@ export interface Instance {
   metrics_port: number
   enabled: boolean
   label: string
+  tls_domain: string
+  tls_domains: string
+  fake_tls: boolean
+  mask_host: string
+  mask_port: number
+  tags: string
 }
 
 export interface Slave {
@@ -183,9 +190,14 @@ export interface ProxyStatus {
 }
 
 export interface InstanceStatus {
+  id: number
   port: number
   running: boolean
   label: string
+  tls_domain: string
+  fake_tls: boolean
+  status: string
+  matching_secret_count: number
 }
 
 export interface HealthStatus {

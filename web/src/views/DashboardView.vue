@@ -2,15 +2,44 @@
   <div class="dashboard">
     <!-- Status Cards -->
     <div class="stats-grid">
-      <div class="stat-card">
+      <div class="stat-card stat-card-proxy">
         <div class="stat-icon"><Play :size="28" :stroke-width="1.5" /></div>
         <div class="stat-info">
           <div class="stat-label">{{ t('dashboard.proxy') }}</div>
-          <StatusBadge :variant="proxyRunning ? 'success' : 'danger'">
-            {{ proxyRunning ? t('dashboard.running') : t('dashboard.stopped') }}
-          </StatusBadge>
+          <div class="stat-proxy-row">
+            <StatusBadge :variant="proxyRunning ? 'success' : 'danger'">
+              {{ proxyRunning ? t('dashboard.running') : t('dashboard.stopped') }}
+            </StatusBadge>
+            <span v-if="proxyStore.status?.uptime" class="stat-uptime">{{ proxyStore.status.uptime }}</span>
+            <div class="proxy-actions">
+              <Tooltip :text="t('dashboard.start_hint')">
+                <button class="proxy-action-btn" :disabled="proxyStore.loading || proxyRunning" @click="proxyAction('start')">
+                  <Loader2 v-if="proxyStore.activeAction === 'start'" :size="11" class="animate-spin" />
+                  <Play v-else :size="11" />
+                </button>
+              </Tooltip>
+              <Tooltip :text="t('dashboard.stop_hint')">
+                <button class="proxy-action-btn" :disabled="proxyStore.loading || !proxyRunning" @click="proxyAction('stop')">
+                  <Loader2 v-if="proxyStore.activeAction === 'stop'" :size="11" class="animate-spin" />
+                  <Square v-else :size="11" />
+                </button>
+              </Tooltip>
+              <Tooltip :text="t('dashboard.restart_hint')">
+                <button class="proxy-action-btn" :disabled="proxyStore.loading" @click="proxyAction('restart')">
+                  <Loader2 v-if="proxyStore.activeAction === 'restart'" :size="11" class="animate-spin" />
+                  <RefreshCw v-else :size="11" />
+                </button>
+              </Tooltip>
+              <Tooltip :text="t('dashboard.reload_hint')">
+                <button class="proxy-action-btn" :disabled="proxyStore.loading" @click="proxyAction('reload')">
+                  <Loader2 v-if="proxyStore.activeAction === 'reload'" :size="11" class="animate-spin" />
+                  <RotateCw v-else :size="11" />
+                </button>
+              </Tooltip>
+            </div>
+          </div>
         </div>
-        <router-link :to="{ name: 'Proxy' }" class="stat-card-link">
+        <router-link :to="{ name: 'Instances' }" class="stat-card-link">
           <ArrowUpRight :size="16" />
         </router-link>
       </div>
@@ -49,101 +78,177 @@
       </div>
     </div>
 
-    <!-- Resource Cards -->
-    <div v-if="!systemStore.resources" class="stats-grid mb-lg">
-      <div v-for="i in 4" :key="i" class="stat-card">
-        <div class="skeleton" style="height: 56px; width: 100%; border-radius: 4px;"></div>
-      </div>
-    </div>
-    <template v-else>
-      <div class="stats-grid mb-lg">
-        <div class="stat-card">
-          <div class="stat-icon"><Cpu :size="28" :stroke-width="1.5" /></div>
-          <div class="stat-info w-full">
-            <div class="stat-label">CPU</div>
-            <div class="stat-value mb-xs">{{ systemStore.resources.cpu_usage.toFixed(1) }}%</div>
-            <div class="progress-bar" style="height: 4px;">
-              <div class="progress-inner" :class="getBarVariant(systemStore.resources.cpu_usage)" :style="{ width: systemStore.resources.cpu_usage + '%' }"></div>
-            </div>
-          </div>
-          <router-link :to="{ name: 'System' }" class="stat-card-link">
-            <ArrowUpRight :size="16" />
-          </router-link>
-        </div>
-        <div class="stat-card">
-          <div class="stat-icon"><Database :size="28" :stroke-width="1.5" /></div>
-          <div class="stat-info w-full">
-            <div class="stat-label">RAM</div>
-            <div class="stat-value mb-xs">{{ ramPercent.toFixed(1) }}%</div>
-            <div class="progress-bar" style="height: 4px;">
-              <div class="progress-inner" :class="getBarVariant(ramPercent)" :style="{ width: ramPercent + '%' }"></div>
-            </div>
-          </div>
-          <router-link :to="{ name: 'System' }" class="stat-card-link">
-            <ArrowUpRight :size="16" />
-          </router-link>
-        </div>
-        <div class="stat-card">
-          <div class="stat-icon"><HardDrive :size="28" :stroke-width="1.5" /></div>
-          <div class="stat-info w-full">
-            <div class="stat-label">DISK</div>
-            <div class="stat-value mb-xs">{{ diskPercent.toFixed(1) }}%</div>
-            <div class="progress-bar" style="height: 4px;">
-              <div class="progress-inner" :class="getBarVariant(diskPercent)" :style="{ width: diskPercent + '%' }"></div>
-            </div>
-          </div>
-          <router-link :to="{ name: 'System' }" class="stat-card-link">
-            <ArrowUpRight :size="16" />
-          </router-link>
-        </div>
-        <div class="stat-card">
-          <div class="stat-icon"><Activity :size="28" :stroke-width="1.5" /></div>
-          <div class="stat-info">
-            <div class="stat-label">LOAD</div>
-            <div class="stat-value">{{ systemStore.resources.load1.toFixed(2) }}</div>
-          </div>
-          <router-link :to="{ name: 'System' }" class="stat-card-link">
-            <ArrowUpRight :size="16" />
-          </router-link>
-        </div>
-      </div>
-    </template>
-
     <!-- Bottom Grid -->
     <div class="dashboard-grid">
-      <!-- Quick Actions -->
+      <!-- Resources -->
       <div class="card">
-        <h3 class="mb-md">{{ t('dashboard.quick_actions') }}</h3>
-        <div class="actions-grid">
-          <Tooltip :text="t('dashboard.start_hint')">
-            <button class="btn btn-success" :disabled="proxyStore.loading || proxyRunning" @click="proxyAction('start')">
-              <Loader2 v-if="proxyStore.activeAction === 'start'" :size="16" class="animate-spin" />
-              <Play v-else :size="16" /> {{ t('dashboard.start') }}
-            </button>
-          </Tooltip>
-          <Tooltip :text="t('dashboard.stop_hint')">
-            <button class="btn btn-danger" :disabled="proxyStore.loading || !proxyRunning" @click="proxyAction('stop')">
-              <Loader2 v-if="proxyStore.activeAction === 'stop'" :size="16" class="animate-spin" />
-              <Square v-else :size="16" /> {{ t('dashboard.stop') }}
-            </button>
-          </Tooltip>
-          <Tooltip :text="t('dashboard.restart_hint')">
-            <button class="btn btn-warning" :disabled="proxyStore.loading" @click="proxyAction('restart')">
-              <Loader2 v-if="proxyStore.activeAction === 'restart'" :size="16" class="animate-spin" />
-              <RefreshCw v-else :size="16" /> {{ t('dashboard.restart') }}
-            </button>
-          </Tooltip>
-          <Tooltip :text="t('dashboard.reload_hint')">
-            <button class="btn btn-outline" :disabled="proxyStore.loading" @click="proxyAction('reload')">
-              <Loader2 v-if="proxyStore.activeAction === 'reload'" :size="16" class="animate-spin" />
-              <RotateCw v-else :size="16" /> {{ t('dashboard.reload') }}
-            </button>
-          </Tooltip>
+        <h3 class="mb-md card-header">
+          {{ t('dashboard.resources') }}
+          <router-link :to="{ name: 'System' }" class="card-header-link">
+            <ArrowUpRight :size="14" />
+          </router-link>
+        </h3>
+        <div v-if="!systemStore.resources" class="skeleton" style="height: 80px; width: 100%; border-radius: 4px;"></div>
+        <div v-else class="resource-grid">
+          <div class="resource-row">
+            <Cpu :size="14" class="resource-icon" />
+            <span class="resource-label">CPU</span>
+            <div class="resource-bar">
+              <div class="progress-bar" style="height: 4px;">
+                <div class="progress-inner" :class="getBarVariant(systemStore.resources.cpu_usage)" :style="{ width: systemStore.resources.cpu_usage + '%' }"></div>
+              </div>
+            </div>
+            <span class="resource-value">{{ systemStore.resources.cpu_usage.toFixed(1) }}%</span>
+          </div>
+          <div class="resource-row">
+            <Database :size="14" class="resource-icon" />
+            <span class="resource-label">RAM</span>
+            <div class="resource-bar">
+              <div class="progress-bar" style="height: 4px;">
+                <div class="progress-inner" :class="getBarVariant(ramPercent)" :style="{ width: ramPercent + '%' }"></div>
+              </div>
+            </div>
+            <span class="resource-value">{{ ramPercent.toFixed(1) }}%</span>
+          </div>
+          <div class="resource-row">
+            <HardDrive :size="14" class="resource-icon" />
+            <span class="resource-label">DISK</span>
+            <div class="resource-bar">
+              <div class="progress-bar" style="height: 4px;">
+                <div class="progress-inner" :class="getBarVariant(diskPercent)" :style="{ width: diskPercent + '%' }"></div>
+              </div>
+            </div>
+            <span class="resource-value">{{ diskPercent.toFixed(1) }}%</span>
+          </div>
+          <div class="resource-row">
+            <Activity :size="14" class="resource-icon" />
+            <span class="resource-label">LOAD</span>
+            <span class="resource-value">{{ systemStore.resources.load1.toFixed(2) }}</span>
+          </div>
+          <div v-if="systemStore.resources.uptime" class="resource-footer">
+            <span class="text-muted">{{ t('dashboard.uptime') }}: {{ formatUptime(systemStore.resources.uptime) }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Engine & Health -->
+      <div class="card">
+        <h3 class="mb-md card-header">
+          {{ t('dashboard.engine') }}
+          <router-link :to="{ name: 'Docker' }" class="card-header-link">
+            <ArrowUpRight :size="14" />
+          </router-link>
+        </h3>
+
+        <div class="engine-health-grid">
+          <div class="engine-health-item">
+            <span class="engine-health-label">{{ t('dashboard.docker') }}</span>
+            <span class="engine-health-dots"></span>
+            <StatusBadge :variant="healthStatus(proxyStore.health?.docker)">{{ proxyStore.health?.docker || '—' }}</StatusBadge>
+          </div>
+          <div class="engine-health-item">
+            <span class="engine-health-label">{{ t('dashboard.health_containers') }}</span>
+            <span class="engine-health-dots"></span>
+            <StatusBadge :variant="healthStatus(proxyStore.health?.container)">{{ proxyStore.health?.container || '—' }}</StatusBadge>
+          </div>
+          <div class="engine-health-item">
+            <span class="engine-health-label">{{ t('dashboard.health_ports') }}</span>
+            <span class="engine-health-dots"></span>
+            <StatusBadge :variant="healthStatus(proxyStore.health?.port)">{{ proxyStore.health?.port || '—' }}</StatusBadge>
+          </div>
+          <div class="engine-health-item">
+            <span class="engine-health-label">{{ t('dashboard.metrics') }}</span>
+            <span class="engine-health-dots"></span>
+            <StatusBadge :variant="healthStatus(proxyStore.health?.metrics)">{{ proxyStore.health?.metrics || '—' }}</StatusBadge>
+          </div>
+        </div>
+
+        <div class="engine-divider"></div>
+
+        <div class="engine-info-grid">
+          <div class="engine-info-item">
+            <span class="engine-info-label">{{ t('dashboard.version') }}</span>
+            <code>{{ dockerStore.engineStatus?.version || '—' }}</code>
+          </div>
+          <div class="engine-info-item">
+            <span class="engine-info-label">{{ t('dashboard.instances') }}</span>
+            <span>{{ runningInstances }}/{{ totalInstances }}</span>
+          </div>
+          <div class="engine-info-item">
+            <span class="engine-info-label">{{ t('dashboard.image') }}</span>
+            <StatusBadge :variant="dockerStore.engineStatus?.image_exists ? 'success' : 'danger'">
+              {{ dockerStore.engineStatus?.image_exists ? t('dashboard.image_ready') : t('dashboard.image_missing') }}
+            </StatusBadge>
+          </div>
+          <div class="engine-info-item">
+            <span class="engine-info-label">{{ t('dashboard.update') }}</span>
+            <StatusBadge v-if="dockerStore.telemtUpdateStatus?.update_available" variant="warning">
+              {{ t('dashboard.update_available') }} v{{ dockerStore.telemtUpdateStatus.latest?.version }}
+            </StatusBadge>
+            <StatusBadge v-else variant="success">{{ t('dashboard.up_to_date') }}</StatusBadge>
+          </div>
+        </div>
+      </div>
+
+      <!-- Secrets Health -->
+      <div class="card">
+        <h3 class="mb-md card-header">
+          {{ t('dashboard.secrets_health') }}
+          <router-link :to="{ name: 'Secrets' }" class="card-header-link">
+            <ArrowUpRight :size="14" />
+          </router-link>
+        </h3>
+        <div v-if="secretsAttention === 0" class="scheduler-ok">
+          <CheckCircle :size="14" />
+          <span>{{ t('dashboard.secrets_ok') }}</span>
+        </div>
+        <div v-else class="secrets-issues">
+          <div v-if="expiredSecrets > 0" class="secrets-issue">
+            <AlertCircle :size="14" class="secrets-issue-icon secrets-issue-danger" />
+            <span><strong>{{ expiredSecrets }}</strong> {{ t('dashboard.secrets_expired') }}</span>
+          </div>
+          <div v-if="quotaWarnSecrets > 0" class="secrets-issue">
+            <AlertCircle :size="14" class="secrets-issue-icon secrets-issue-warn" />
+            <span><strong>{{ quotaWarnSecrets }}</strong> {{ t('dashboard.secrets_quota') }}</span>
+          </div>
+          <div v-if="disabledSecrets > 0" class="secrets-issue">
+            <AlertCircle :size="14" class="secrets-issue-icon secrets-issue-muted" />
+            <span><strong>{{ disabledSecrets }}</strong> {{ t('dashboard.secrets_disabled') }}</span>
+          </div>
+          <router-link v-if="noSecretInstances > 0" :to="{ name: 'Instances' }" class="secrets-issue secrets-issue-link">
+            <AlertCircle :size="14" class="secrets-issue-icon secrets-issue-danger" />
+            <span><strong>{{ noSecretInstances }}</strong> {{ t('dashboard.no_secret_instances') }}</span>
+            <ArrowUpRight :size="12" class="secrets-issue-arrow" />
+          </router-link>
+        </div>
+      </div>
+
+      <!-- Top Users -->
+      <div class="card">
+        <h3 class="mb-md card-header">
+          {{ t('dashboard.top_users') }}
+          <router-link :to="{ name: 'Traffic' }" class="card-header-link">
+            <ArrowUpRight :size="14" />
+          </router-link>
+        </h3>
+        <div v-if="topUsers.length === 0" class="text-muted" style="font-size: $font-size-sm;">
+          {{ t('dashboard.no_data') }}
+        </div>
+        <div v-else class="top-users-list">
+          <div v-for="user in topUsers" :key="user.label" class="top-user-row">
+            <span class="top-user-label">{{ user.label }}</span>
+            <div class="top-user-bar">
+              <div class="progress-bar" style="height: 4px;">
+                <div class="progress-inner" :style="{ width: user.percent + '%' }"></div>
+              </div>
+            </div>
+            <span class="top-user-value">{{ user.total }}</span>
+          </div>
         </div>
       </div>
 
       <!-- Scheduler Status -->
-      <div v-if="schedulerStore.tasks.length > 0" class="card">
+      <div v-if="schedulerStore.tasks.length > 0" class="card card-full">
         <h3 class="mb-md card-header">
           {{ t('dashboard.scheduler') }}
           <span v-if="errorTasks.length" class="badge badge-danger scheduler-badge">{{ errorTasks.length }}</span>
@@ -171,54 +276,6 @@
           <span v-if="lastActivity" class="text-muted scheduler-last"> · {{ formatDate(lastActivity.last_run!.started_at) }}</span>
         </div>
       </div>
-
-      <!-- Health Status -->
-      <div class="card">
-        <h3 class="mb-md card-header">
-          {{ t('dashboard.system_health') }}
-          <router-link :to="{ name: 'Docker' }" class="card-header-link">
-            <ArrowUpRight :size="14" />
-          </router-link>
-        </h3>
-        <InfoGrid>
-          <InfoItem :label="t('dashboard.docker')">
-            <StatusBadge :variant="healthStatus(proxyStore.health?.docker)">{{ proxyStore.health?.docker || '—' }}</StatusBadge>
-          </InfoItem>
-          <InfoItem :label="t('dashboard.container')">
-            <StatusBadge :variant="healthStatus(proxyStore.health?.container)">{{ proxyStore.health?.container || '—' }}</StatusBadge>
-          </InfoItem>
-          <InfoItem :label="t('dashboard.port')">
-            <StatusBadge :variant="healthStatus(proxyStore.health?.port)">{{ proxyStore.health?.port || '—' }}</StatusBadge>
-          </InfoItem>
-          <InfoItem :label="t('dashboard.metrics')">
-            <StatusBadge :variant="healthStatus(proxyStore.health?.metrics)">{{ proxyStore.health?.metrics || '—' }}</StatusBadge>
-          </InfoItem>
-        </InfoGrid>
-      </div>
-
-      <!-- Engine Info -->
-      <div class="card">
-        <h3 class="mb-md card-header">
-          {{ t('dashboard.engine') }}
-          <router-link :to="{ name: 'Docker' }" class="card-header-link">
-            <ArrowUpRight :size="14" />
-          </router-link>
-        </h3>
-        <InfoGrid>
-          <InfoItem :label="t('dashboard.version')">
-            <code>{{ dockerStore.engineStatus?.version || '—' }}</code>
-          </InfoItem>
-          <InfoItem :label="t('dashboard.port')">
-            <span>{{ configStore.settings?.proxy_port }}</span>
-          </InfoItem>
-          <InfoItem :label="t('dashboard.domain')">
-            <span>{{ configStore.settings?.proxy_domain || '—' }}</span>
-          </InfoItem>
-          <InfoItem :label="t('dashboard.uptime')">
-            <span>{{ proxyStore.status?.uptime || '—' }}</span>
-          </InfoItem>
-        </InfoGrid>
-      </div>
     </div>
   </div>
 </template>
@@ -232,8 +289,6 @@ import {useSchedulerStore} from '@/stores/scheduler'
 import {useToastStore} from '@/stores/toast'
 import {formatBytes, formatDate} from '@/utils/format'
 import StatusBadge from '@/components/common/StatusBadge.vue'
-import InfoGrid from '@/components/common/InfoGrid.vue'
-import InfoItem from '@/components/common/InfoItem.vue'
 import Tooltip from '@/components/common/Tooltip.vue'
 import {
   Activity,
@@ -266,6 +321,9 @@ const toast = useToastStore()
 const sparklineCanvas = ref<HTMLCanvasElement | null>(null)
 
 const proxyRunning = computed(() => proxyStore.status?.running)
+
+const runningInstances = computed(() => proxyStore.status?.instances?.filter(i => i.running).length ?? 0)
+const totalInstances = computed(() => proxyStore.status?.instances?.length ?? 0)
 const totalTraffic = computed(() => {
   const s = proxyStore.status
   if (!s) return '0 B'
@@ -300,10 +358,59 @@ const lastActivity = computed(() => {
   )
 })
 
+const expiredSecrets = computed(() => {
+  const now = Date.now()
+  return secretsStore.secrets.filter(s =>
+    s.expires_at && !s.archived_at && new Date(s.expires_at).getTime() < now
+  ).length
+})
+
+const quotaWarnSecrets = computed(() => {
+  return secretsStore.secrets.filter(s => {
+    if (s.archived_at || !s.quota_bytes || s.quota_bytes === 0) return false
+    const used = (s.traffic_in || 0) + (s.traffic_out || 0)
+    return used / s.quota_bytes > 0.8
+  }).length
+})
+
+const disabledSecrets = computed(() => {
+  return secretsStore.secrets.filter(s => !s.enabled && !s.archived_at).length
+})
+
+const noSecretInstances = computed(() =>
+  (proxyStore.status?.instances ?? []).filter(i => i.matching_secret_count === 0).length
+)
+
+const secretsAttention = computed(() => expiredSecrets.value + quotaWarnSecrets.value + disabledSecrets.value + noSecretInstances.value)
+
+const topUsers = computed(() => {
+  const users = trafficStore.users
+  if (!users || users.length === 0) return []
+  const sorted = [...users]
+    .map(u => ({ ...u, totalBytes: (u.bytes_in || 0) + (u.bytes_out || 0) }))
+    .sort((a, b) => b.totalBytes - a.totalBytes)
+    .slice(0, 5)
+  const maxBytes = sorted[0]?.totalBytes || 1
+  return sorted.map(u => ({
+    label: u.label,
+    total: formatBytes(u.totalBytes),
+    percent: (u.totalBytes / maxBytes) * 100,
+  }))
+})
+
 function getBarVariant(percent: number) {
   if (percent > 90) return 'danger'
   if (percent > 70) return 'warning'
   return 'success'
+}
+
+function formatUptime(seconds: number): string {
+  const d = Math.floor(seconds / 86400)
+  const h = Math.floor((seconds % 86400) / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  if (d > 0) return `${d}d ${h}h`
+  if (h > 0) return `${h}h ${m}m`
+  return `${m}m`
 }
 
 async function proxyAction(action: 'start' | 'stop' | 'restart' | 'reload') {
@@ -406,8 +513,10 @@ onMounted(async () => {
     proxyStore.loadStatus(),
     proxyStore.loadHealth(),
     dockerStore.loadEngineStatus(),
+    dockerStore.loadTelemtUpdateStatus(),
     configStore.load(),
     schedulerStore.load(),
+    trafficStore.load(),
   ])
 
   systemStore.startResourceStream()
@@ -513,6 +622,95 @@ onUnmounted(() => {
   }
 }
 
+.stat-uptime {
+  font-size: $font-size-xs;
+  color: $text-secondary;
+}
+
+.stat-proxy-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.proxy-actions {
+  display: flex;
+  gap: 2px;
+  margin-left: auto;
+}
+
+.proxy-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 1px solid $border-color;
+  border-radius: $border-radius-sm;
+  background: transparent;
+  color: $text-secondary;
+  cursor: pointer;
+  padding: 0;
+  transition: all 0.15s;
+
+  &:hover:not(:disabled) {
+    background: rgba(99, 102, 241, 0.08);
+    color: $color-primary;
+    border-color: $color-primary;
+  }
+
+  &:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+  }
+}
+
+.resource-grid {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-sm;
+}
+
+.resource-row {
+  display: flex;
+  align-items: center;
+  gap: $spacing-sm;
+}
+
+.resource-icon {
+  color: $text-secondary;
+  flex-shrink: 0;
+}
+
+.resource-label {
+  font-size: $font-size-xs;
+  color: $text-secondary;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  width: 36px;
+  flex-shrink: 0;
+}
+
+.resource-bar {
+  flex: 1;
+  min-width: 80px;
+}
+
+.resource-value {
+  font-size: $font-size-sm;
+  font-weight: $font-weight-semibold;
+  width: 48px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.resource-footer {
+  padding-top: $spacing-xs;
+  border-top: 1px solid $border-color;
+  font-size: $font-size-xs;
+}
+
 .card-header {
   display: flex;
   align-items: center;
@@ -533,14 +731,53 @@ onUnmounted(() => {
   }
 }
 
-.actions-grid {
-  display: flex;
-  gap: $spacing-sm;
-  flex-wrap: wrap;
+// Engine card
+.engine-health-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: $spacing-sm $spacing-md;
+}
 
-  @media (max-width: 480px) {
-    gap: 6px;
-  }
+.engine-health-item {
+  display: flex;
+  align-items: center;
+  gap: $spacing-xs;
+}
+
+.engine-health-label {
+  font-size: $font-size-xs;
+  color: $text-secondary;
+  white-space: nowrap;
+}
+
+.engine-health-dots {
+  flex: 1;
+  min-width: 8px;
+  border-bottom: 1px dotted $border-color;
+}
+
+.engine-divider {
+  border-top: 1px solid $border-color;
+  margin: $spacing-md 0;
+}
+
+.engine-info-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: $spacing-sm $spacing-md;
+}
+
+.engine-info-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.engine-info-label {
+  font-size: $font-size-xs;
+  color: $text-secondary;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .dashboard-grid {
@@ -550,13 +787,95 @@ onUnmounted(() => {
 
   > .card {
     min-width: 0;
-    overflow: hidden;
+  }
+
+  > .card-full {
+    grid-column: 1 / -1;
   }
 
   @media (max-width: 480px) {
     grid-template-columns: 1fr;
     gap: $spacing-sm;
   }
+}
+
+// Secrets Health
+.secrets-issues {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-xs;
+}
+
+.secrets-issue {
+  display: flex;
+  align-items: center;
+  gap: $spacing-sm;
+  font-size: $font-size-sm;
+}
+
+.secrets-issue-icon { flex-shrink: 0; }
+.secrets-issue-danger { color: $color-danger; }
+.secrets-issue-warn { color: $color-warning; }
+.secrets-issue-muted { color: $text-secondary; }
+
+.secrets-issue-link {
+  text-decoration: none;
+  color: inherit;
+  border-radius: $border-radius-sm;
+  padding: 2px 4px;
+  margin: -2px -4px;
+  transition: background 0.15s;
+
+  &:hover {
+    background: rgba(239, 68, 68, 0.06);
+  }
+}
+
+.secrets-issue-arrow {
+  margin-left: auto;
+  color: $text-secondary;
+  opacity: 0;
+  transition: opacity 0.15s;
+  flex-shrink: 0;
+}
+
+.secrets-issue-link:hover .secrets-issue-arrow {
+  opacity: 0.6;
+}
+
+// Top Users
+.top-users-list {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-sm;
+}
+
+.top-user-row {
+  display: flex;
+  align-items: center;
+  gap: $spacing-sm;
+}
+
+.top-user-label {
+  font-size: $font-size-sm;
+  width: 80px;
+  flex-shrink: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.top-user-bar {
+  flex: 1;
+  min-width: 40px;
+}
+
+.top-user-value {
+  font-size: $font-size-xs;
+  color: $text-secondary;
+  width: 56px;
+  text-align: right;
+  flex-shrink: 0;
 }
 
 // Scheduler

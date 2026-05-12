@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"database/sql"
 	"strconv"
 	"strings"
 	"testing"
@@ -11,15 +12,17 @@ import (
 	"github.com/fussraider/PopuGate/internal/testutil"
 )
 
-func newTestSecretService(t *testing.T) (*SecretService, *store.SecretStore) {
+func newTestSecretService(t *testing.T) (*SecretService, *store.SecretStore, *sql.DB) {
 	t.Helper()
 	db := testutil.OpenTestDB(t)
 	secrets := store.NewSecretStore(db)
-	return NewSecretService(secrets), secrets
+	instances := store.NewInstanceStore(db)
+	settings := store.NewSettingsStore(db)
+	return NewSecretService(secrets, instances, settings), secrets, db
 }
 
 func TestSecretService_Add_Valid(t *testing.T) {
-	svc, _ := newTestSecretService(t)
+	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
 	sec, err := svc.Add(ctx, "user1", "")
@@ -38,7 +41,7 @@ func TestSecretService_Add_Valid(t *testing.T) {
 }
 
 func TestSecretService_Add_WithCustomKey(t *testing.T) {
-	svc, _ := newTestSecretService(t)
+	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
 	customKey := "0123456789abcdef0123456789abcdef"
@@ -52,7 +55,7 @@ func TestSecretService_Add_WithCustomKey(t *testing.T) {
 }
 
 func TestSecretService_Add_DuplicateLabel(t *testing.T) {
-	svc, _ := newTestSecretService(t)
+	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
 	_, err := svc.Add(ctx, "user1", "")
@@ -70,7 +73,7 @@ func TestSecretService_Add_DuplicateLabel(t *testing.T) {
 }
 
 func TestSecretService_Add_InvalidLabel(t *testing.T) {
-	svc, _ := newTestSecretService(t)
+	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
 	tests := []string{
@@ -89,7 +92,7 @@ func TestSecretService_Add_InvalidLabel(t *testing.T) {
 }
 
 func TestSecretService_Add_InvalidKey(t *testing.T) {
-	svc, _ := newTestSecretService(t)
+	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
 	_, err := svc.Add(ctx, "user1", "not-hex!")
@@ -102,7 +105,7 @@ func TestSecretService_Add_InvalidKey(t *testing.T) {
 }
 
 func TestSecretService_Add_MaxCountExceeded(t *testing.T) {
-	svc, _ := newTestSecretService(t)
+	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
 	// Fill up to MaxSecrets
@@ -127,7 +130,7 @@ func TestSecretService_Add_MaxCountExceeded(t *testing.T) {
 }
 
 func TestSecretService_Remove(t *testing.T) {
-	svc, _ := newTestSecretService(t)
+	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
 	// Create two secrets so removing one is safe
@@ -149,7 +152,7 @@ func TestSecretService_Remove(t *testing.T) {
 }
 
 func TestSecretService_Remove_NotFound(t *testing.T) {
-	svc, _ := newTestSecretService(t)
+	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
 	err := svc.Remove(ctx, "nonexistent", false)
@@ -162,7 +165,7 @@ func TestSecretService_Remove_NotFound(t *testing.T) {
 }
 
 func TestSecretService_Remove_LastEnabled(t *testing.T) {
-	svc, _ := newTestSecretService(t)
+	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
 	_, _ = svc.Add(ctx, "user1", "")
@@ -177,7 +180,7 @@ func TestSecretService_Remove_LastEnabled(t *testing.T) {
 }
 
 func TestSecretService_Remove_LastEnabled_WithForce(t *testing.T) {
-	svc, _ := newTestSecretService(t)
+	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
 	_, _ = svc.Add(ctx, "user1", "")
@@ -194,7 +197,7 @@ func TestSecretService_Remove_LastEnabled_WithForce(t *testing.T) {
 }
 
 func TestSecretService_Remove_DisabledLastEnabled(t *testing.T) {
-	svc, _ := newTestSecretService(t)
+	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
 	_, _ = svc.Add(ctx, "user1", "")
@@ -211,7 +214,7 @@ func TestSecretService_Remove_DisabledLastEnabled(t *testing.T) {
 }
 
 func TestSecretService_Toggle_DisableLastEnabled(t *testing.T) {
-	svc, _ := newTestSecretService(t)
+	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
 	_, _ = svc.Add(ctx, "user1", "")
@@ -226,7 +229,7 @@ func TestSecretService_Toggle_DisableLastEnabled(t *testing.T) {
 }
 
 func TestSecretService_Toggle_Enable(t *testing.T) {
-	svc, _ := newTestSecretService(t)
+	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
 	_, _ = svc.Add(ctx, "user1", "")
@@ -256,7 +259,7 @@ func TestSecretService_Toggle_Enable(t *testing.T) {
 }
 
 func TestSecretService_Toggle_NotFound(t *testing.T) {
-	svc, _ := newTestSecretService(t)
+	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
 	err := svc.Toggle(ctx, "nonexistent", true)
@@ -266,7 +269,7 @@ func TestSecretService_Toggle_NotFound(t *testing.T) {
 }
 
 func TestSecretService_Rotate(t *testing.T) {
-	svc, _ := newTestSecretService(t)
+	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
 	sec, _ := svc.Add(ctx, "user1", "")
@@ -285,7 +288,7 @@ func TestSecretService_Rotate(t *testing.T) {
 }
 
 func TestSecretService_Rotate_NotFound(t *testing.T) {
-	svc, _ := newTestSecretService(t)
+	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
 	_, err := svc.Rotate(ctx, "nonexistent")
@@ -295,7 +298,7 @@ func TestSecretService_Rotate_NotFound(t *testing.T) {
 }
 
 func TestSecretService_SetLimits(t *testing.T) {
-	svc, _ := newTestSecretService(t)
+	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
 	_, _ = svc.Add(ctx, "user1", "")
@@ -321,7 +324,7 @@ func TestSecretService_SetLimits(t *testing.T) {
 }
 
 func TestSecretService_SetLimits_NotFound(t *testing.T) {
-	svc, _ := newTestSecretService(t)
+	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
 	err := svc.SetLimits(ctx, "nonexistent", 10, 5, 1024, "")
@@ -331,7 +334,7 @@ func TestSecretService_SetLimits_NotFound(t *testing.T) {
 }
 
 func TestSecretService_SetLimits_ExceedsMax(t *testing.T) {
-	svc, _ := newTestSecretService(t)
+	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
 	_, _ = svc.Add(ctx, "user1", "")
@@ -351,7 +354,7 @@ func TestSecretService_SetLimits_ExceedsMax(t *testing.T) {
 }
 
 func TestSecretService_SetLimits_NegativePreservesOldValue(t *testing.T) {
-	svc, _ := newTestSecretService(t)
+	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
 	_, _ = svc.Add(ctx, "user1", "")
@@ -378,7 +381,7 @@ func TestSecretService_SetLimits_NegativePreservesOldValue(t *testing.T) {
 }
 
 func TestSecretService_GetLink(t *testing.T) {
-	svc, _ := newTestSecretService(t)
+	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
 	_, _ = svc.Add(ctx, "user1", "0123456789abcdef0123456789abcdef")
@@ -399,7 +402,7 @@ func TestSecretService_GetLink(t *testing.T) {
 }
 
 func TestSecretService_GetLink_NotFound(t *testing.T) {
-	svc, _ := newTestSecretService(t)
+	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
 	_, err := svc.GetLink(ctx, "nonexistent", "1.2.3.4", 443, false, "")
@@ -409,7 +412,7 @@ func TestSecretService_GetLink_NotFound(t *testing.T) {
 }
 
 func TestSecretService_UpdateNotes(t *testing.T) {
-	svc, _ := newTestSecretService(t)
+	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
 	_, _ = svc.Add(ctx, "user1", "")
@@ -426,7 +429,7 @@ func TestSecretService_UpdateNotes(t *testing.T) {
 }
 
 func TestSecretService_UpdateNotes_NotFound(t *testing.T) {
-	svc, _ := newTestSecretService(t)
+	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
 	err := svc.UpdateNotes(ctx, "nonexistent", "notes")
@@ -436,7 +439,7 @@ func TestSecretService_UpdateNotes_NotFound(t *testing.T) {
 }
 
 func TestSecretService_GetEnabledLabels(t *testing.T) {
-	svc, _ := newTestSecretService(t)
+	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
 	_, _ = svc.Add(ctx, "user1", "")
@@ -472,7 +475,7 @@ func TestSecretService_GetEnabledLabels(t *testing.T) {
 }
 
 func TestSecretService_List(t *testing.T) {
-	svc, _ := newTestSecretService(t)
+	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
 	_, _ = svc.Add(ctx, "user1", "")
@@ -488,7 +491,7 @@ func TestSecretService_List(t *testing.T) {
 }
 
 func TestSecretService_Get(t *testing.T) {
-	svc, _ := newTestSecretService(t)
+	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
 	_, _ = svc.Add(ctx, "user1", "")
@@ -506,7 +509,7 @@ func TestSecretService_Get(t *testing.T) {
 }
 
 func TestSecretService_Get_NotFound(t *testing.T) {
-	svc, _ := newTestSecretService(t)
+	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
 	sec, err := svc.Get(ctx, "nonexistent")
@@ -519,7 +522,7 @@ func TestSecretService_Get_NotFound(t *testing.T) {
 }
 
 func TestSecretService_Rename(t *testing.T) {
-	svc, _ := newTestSecretService(t)
+	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
 	_, _ = svc.Add(ctx, "old-name", "")
@@ -539,7 +542,7 @@ func TestSecretService_Rename(t *testing.T) {
 }
 
 func TestSecretService_Rename_NotFound(t *testing.T) {
-	svc, _ := newTestSecretService(t)
+	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
 	err := svc.Rename(ctx, "ghost", "new-ghost")
@@ -549,7 +552,7 @@ func TestSecretService_Rename_NotFound(t *testing.T) {
 }
 
 func TestSecretService_Rename_DuplicateNew(t *testing.T) {
-	svc, _ := newTestSecretService(t)
+	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
 	_, _ = svc.Add(ctx, "user1", "")
@@ -565,7 +568,7 @@ func TestSecretService_Rename_DuplicateNew(t *testing.T) {
 }
 
 func TestSecretService_Rename_InvalidNewLabel(t *testing.T) {
-	svc, _ := newTestSecretService(t)
+	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
 	_, _ = svc.Add(ctx, "user1", "")
@@ -577,7 +580,7 @@ func TestSecretService_Rename_InvalidNewLabel(t *testing.T) {
 }
 
 func TestSecretService_Extend(t *testing.T) {
-	svc, _ := newTestSecretService(t)
+	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
 	_, _ = svc.Add(ctx, "user1", "")
@@ -594,7 +597,7 @@ func TestSecretService_Extend(t *testing.T) {
 }
 
 func TestSecretService_Extend_Reenables(t *testing.T) {
-	svc, _ := newTestSecretService(t)
+	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
 	_, _ = svc.Add(ctx, "user1", "")
@@ -613,7 +616,7 @@ func TestSecretService_Extend_Reenables(t *testing.T) {
 }
 
 func TestSecretService_Extend_NotFound(t *testing.T) {
-	svc, _ := newTestSecretService(t)
+	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
 	err := svc.Extend(ctx, "ghost", 30)
@@ -623,7 +626,7 @@ func TestSecretService_Extend_NotFound(t *testing.T) {
 }
 
 func TestSecretService_Extend_ZeroDays(t *testing.T) {
-	svc, _ := newTestSecretService(t)
+	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
 	_, _ = svc.Add(ctx, "user1", "")
@@ -635,7 +638,7 @@ func TestSecretService_Extend_ZeroDays(t *testing.T) {
 }
 
 func TestSecretService_DisableExpired(t *testing.T) {
-	svc, store := newTestSecretService(t)
+	svc, store, _ := newTestSecretService(t)
 	ctx := context.Background()
 
 	// Create secret with past expiry
@@ -661,7 +664,7 @@ func TestSecretService_DisableExpired(t *testing.T) {
 }
 
 func TestSecretService_Clone(t *testing.T) {
-	svc, _ := newTestSecretService(t)
+	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
 	_, _ = svc.Add(ctx, "src", "0123456789abcdef0123456789abcdef")
@@ -682,7 +685,7 @@ func TestSecretService_Clone(t *testing.T) {
 }
 
 func TestSecretService_Clone_SourceNotFound(t *testing.T) {
-	svc, _ := newTestSecretService(t)
+	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
 	_, err := svc.Clone(ctx, "ghost", "dst")
@@ -695,7 +698,7 @@ func TestSecretService_Clone_SourceNotFound(t *testing.T) {
 }
 
 func TestSecretService_Clone_DuplicateLabel(t *testing.T) {
-	svc, _ := newTestSecretService(t)
+	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
 	_, _ = svc.Add(ctx, "src", "")
@@ -708,7 +711,7 @@ func TestSecretService_Clone_DuplicateLabel(t *testing.T) {
 }
 
 func TestSecretService_SetTags(t *testing.T) {
-	svc, _ := newTestSecretService(t)
+	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
 	_, _ = svc.Add(ctx, "user1", "")
@@ -725,7 +728,7 @@ func TestSecretService_SetTags(t *testing.T) {
 }
 
 func TestSecretService_SetTags_NotFound(t *testing.T) {
-	svc, _ := newTestSecretService(t)
+	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
 	err := svc.SetTags(ctx, "ghost", "tag")
@@ -735,7 +738,7 @@ func TestSecretService_SetTags_NotFound(t *testing.T) {
 }
 
 func TestSecretService_Archive_Unarchive(t *testing.T) {
-	svc, _ := newTestSecretService(t)
+	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
 	_, _ = svc.Add(ctx, "user1", "")
@@ -762,7 +765,7 @@ func TestSecretService_Archive_Unarchive(t *testing.T) {
 }
 
 func TestSecretService_Archive_NotFound(t *testing.T) {
-	svc, _ := newTestSecretService(t)
+	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
 	err := svc.Archive(ctx, "ghost")
@@ -772,7 +775,7 @@ func TestSecretService_Archive_NotFound(t *testing.T) {
 }
 
 func TestSecretService_BulkExtend(t *testing.T) {
-	svc, _ := newTestSecretService(t)
+	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
 	_, _ = svc.Add(ctx, "user1", "")
@@ -793,7 +796,7 @@ func TestSecretService_BulkExtend(t *testing.T) {
 }
 
 func TestSecretService_BulkExtend_ZeroDays(t *testing.T) {
-	svc, _ := newTestSecretService(t)
+	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
 	svc.Add(ctx, "user1", "0123456789abcdef0123456789abcdef")
@@ -804,7 +807,7 @@ func TestSecretService_BulkExtend_ZeroDays(t *testing.T) {
 }
 
 func TestSecretService_BulkRotate(t *testing.T) {
-	svc, _ := newTestSecretService(t)
+	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
 	_, _ = svc.Add(ctx, "user1", "0123456789abcdef0123456789abcdef")
@@ -828,7 +831,7 @@ func TestSecretService_BulkRotate(t *testing.T) {
 }
 
 func TestSecretService_Search(t *testing.T) {
-	svc, _ := newTestSecretService(t)
+	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
 	_, _ = svc.Add(ctx, "alice", "")
@@ -848,7 +851,7 @@ func TestSecretService_Search(t *testing.T) {
 }
 
 func TestSecretService_Search_ByNotes(t *testing.T) {
-	svc, _ := newTestSecretService(t)
+	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
 	_, _ = svc.Add(ctx, "user1", "")
@@ -865,7 +868,7 @@ func TestSecretService_Search_ByNotes(t *testing.T) {
 }
 
 func TestSecretService_Search_Empty(t *testing.T) {
-	svc, _ := newTestSecretService(t)
+	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
 	_, _ = svc.Add(ctx, "user1", "")
@@ -880,14 +883,14 @@ func TestSecretService_Search_Empty(t *testing.T) {
 }
 
 func TestSecretService_Top(t *testing.T) {
-	svc, store := newTestSecretService(t)
+	svc, _, db := newTestSecretService(t)
 	ctx := context.Background()
 
 	_, _ = svc.Add(ctx, "low", "")
 	_, _ = svc.Add(ctx, "high", "")
 
 	// Give "high" more traffic
-	store.UpdateTraffic(ctx, "high", 10000, 5000)
+	testutil.SeedTraffic(t, db, "high", 10000, 5000)
 
 	results, err := svc.Top(ctx, 10)
 	if err != nil {
@@ -902,7 +905,7 @@ func TestSecretService_Top(t *testing.T) {
 }
 
 func TestSecretService_ExportJSON(t *testing.T) {
-	svc, _ := newTestSecretService(t)
+	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
 	_, _ = svc.Add(ctx, "user1", "0123456789abcdef0123456789abcdef")
@@ -918,7 +921,7 @@ func TestSecretService_ExportJSON(t *testing.T) {
 }
 
 func TestSecretService_ImportSecrets(t *testing.T) {
-	svc, _ := newTestSecretService(t)
+	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
 	entries := []model.Secret{
@@ -955,7 +958,7 @@ func TestSecretService_ImportSecrets(t *testing.T) {
 }
 
 func TestSecretService_ImportSecrets_SkipsDuplicates(t *testing.T) {
-	svc, _ := newTestSecretService(t)
+	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
 	_, _ = svc.Add(ctx, "existing", "")
@@ -978,7 +981,7 @@ func TestSecretService_ImportSecrets_SkipsDuplicates(t *testing.T) {
 }
 
 func TestSecretService_ImportSecrets_SkipsInvalidKeys(t *testing.T) {
-	svc, _ := newTestSecretService(t)
+	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
 	entries := []model.Secret{
@@ -996,7 +999,7 @@ func TestSecretService_ImportSecrets_SkipsInvalidKeys(t *testing.T) {
 }
 
 func TestSecretService_DisableExpired_LastEnabledGuard(t *testing.T) {
-	svc, store := newTestSecretService(t)
+	svc, store, _ := newTestSecretService(t)
 	ctx := context.Background()
 
 	// Only one secret, and it's expired — should NOT be disabled
@@ -1020,11 +1023,11 @@ func TestSecretService_DisableExpired_LastEnabledGuard(t *testing.T) {
 }
 
 func TestSecretService_ResetTraffic(t *testing.T) {
-	svc, store := newTestSecretService(t)
+	svc, _, db := newTestSecretService(t)
 	ctx := context.Background()
 
 	_, _ = svc.Add(ctx, "user1", "")
-	store.UpdateTraffic(ctx, "user1", 1000, 500)
+	testutil.SeedTraffic(t, db, "user1", 1000, 500)
 
 	err := svc.ResetTraffic(ctx, "user1")
 	if err != nil {
@@ -1038,13 +1041,13 @@ func TestSecretService_ResetTraffic(t *testing.T) {
 }
 
 func TestSecretService_ResetAllTraffic(t *testing.T) {
-	svc, store := newTestSecretService(t)
+	svc, _, db := newTestSecretService(t)
 	ctx := context.Background()
 
 	_, _ = svc.Add(ctx, "user1", "")
 	_, _ = svc.Add(ctx, "user2", "")
-	store.UpdateTraffic(ctx, "user1", 1000, 500)
-	store.UpdateTraffic(ctx, "user2", 2000, 1000)
+	testutil.SeedTraffic(t, db, "user1", 1000, 500)
+	testutil.SeedTraffic(t, db, "user2", 2000, 1000)
 
 	err := svc.ResetAllTraffic(ctx)
 	if err != nil {

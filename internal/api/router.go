@@ -117,6 +117,7 @@ func SetupRouter(cfg RouterConfig) *gin.Engine {
 
 		// Secrets — static paths before :label
 		secretHandler := handler.NewSecretHandler(cfg.SecretSvc, cfg.Settings)
+		secretHandler.SetContainerSvc(cfg.ContainerSvc)
 		protected.GET("/secrets", secretHandler.List)
 		protected.POST("/secrets", secretHandler.Add)
 		protected.GET("/secrets/search", secretHandler.Search)
@@ -162,13 +163,23 @@ func SetupRouter(cfg RouterConfig) *gin.Engine {
 
 		// Instances
 		instanceHandler := handler.NewInstanceHandler(cfg.Instances)
+		instanceHandler.SetContainerSvc(cfg.ContainerSvc)
+		instanceHandler.SetDockerClient(cfg.Docker)
 		protected.GET("/instances", instanceHandler.List)
 		protected.POST("/instances", instanceHandler.Add)
-		protected.DELETE("/instances/:port", instanceHandler.Remove)
+		protected.GET("/instances/check-port", instanceHandler.CheckPort)
+		protected.PUT("/instances/:id", instanceHandler.Update)
+		protected.DELETE("/instances/:id", instanceHandler.Remove)
+		protected.POST("/instances/:id/start", instanceHandler.StartInstance)
+		protected.POST("/instances/:id/stop", instanceHandler.StopInstance)
+		protected.POST("/instances/:id/reload", instanceHandler.ReloadInstance)
+		protected.GET("/instances/:id/status", instanceHandler.InstanceStatus)
+		protected.GET("/instances/:id/logs", instanceHandler.InstanceLogs)
 
 		// Proxy control
-		proxyHandler := handler.NewProxyHandler(cfg.ContainerSvc, cfg.Secrets, cfg.Settings)
+		proxyHandler := handler.NewProxyHandler(cfg.ContainerSvc, cfg.Secrets, cfg.Settings, cfg.SecretSvc)
 		proxyHandler.SetDockerClient(cfg.Docker)
+		proxyHandler.SetInstanceStore(cfg.Instances)
 		protected.POST("/proxy/start", proxyHandler.Start)
 		protected.POST("/proxy/stop", proxyHandler.Stop)
 		protected.POST("/proxy/restart", proxyHandler.Restart)
@@ -225,6 +236,7 @@ func SetupRouter(cfg RouterConfig) *gin.Engine {
 		protected.GET("/bot/status", botHandler.Status)
 		protected.PUT("/bot/toggle", botHandler.Toggle)
 		protected.GET("/bot/detect-chat-id", botHandler.DetectChatID)
+		protected.POST("/bot/commands", botHandler.SetCommands)
 
 		// Replication
 		replHandler := handler.NewReplicationHandler(cfg.Settings, cfg.Slaves)

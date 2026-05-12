@@ -26,7 +26,7 @@ func TestInstanceStore_EnsureDefaultInstanceSeeds(t *testing.T) {
 	s := NewInstanceStore(db)
 	ctx := context.Background()
 
-	if err := s.EnsureDefaultInstance(ctx, 443, 9090); err != nil {
+	if err := s.EnsureDefaultInstance(ctx, 443, 9090, "cloudflare.com", "", true); err != nil {
 		t.Fatalf("EnsureDefaultInstance: %v", err)
 	}
 
@@ -64,10 +64,10 @@ func TestInstanceStore_EnsureDefaultInstanceNoOpIfPopulated(t *testing.T) {
 	s := NewInstanceStore(db)
 	ctx := context.Background()
 
-	if err := s.EnsureDefaultInstance(ctx, 443, 9090); err != nil {
+	if err := s.EnsureDefaultInstance(ctx, 443, 9090, "cloudflare.com", "", true); err != nil {
 		t.Fatalf("EnsureDefaultInstance first: %v", err)
 	}
-	if err := s.EnsureDefaultInstance(ctx, 8090, 9091); err != nil {
+	if err := s.EnsureDefaultInstance(ctx, 8090, 9091, "cloudflare.com", "", true); err != nil {
 		t.Fatalf("EnsureDefaultInstance second: %v", err)
 	}
 

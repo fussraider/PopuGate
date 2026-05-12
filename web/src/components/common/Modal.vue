@@ -2,7 +2,7 @@
   <Teleport to="body">
     <Transition name="modal">
       <div v-if="modelValue" class="modal-overlay" @click.self="$emit('update:modelValue', false)">
-        <div class="modal" :style="{ maxWidth }">
+        <div class="modal" v-bind="$attrs" :style="{ maxWidth }">
           <div class="modal-header">
             <h3>{{ title }}</h3>
             <button class="btn btn-ghost btn-icon" @click="$emit('update:modelValue', false)">&times;</button>
@@ -20,6 +20,8 @@
 </template>
 
 <script setup lang="ts">
+defineOptions({ inheritAttrs: false })
+
 defineProps<{
   modelValue: boolean
   title: string

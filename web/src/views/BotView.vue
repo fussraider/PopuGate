@@ -12,36 +12,44 @@
       <div class="form-group mb-md">
         <label class="form-label">{{ t('bot.token') }}</label>
         <input v-model="form.token" class="input" placeholder="123456:ABC-DEF..." type="password" />
+        <small class="text-muted">{{ t('bot.hint_token') }}</small>
       </div>
       <div class="form-group mb-md">
         <label class="form-label">{{ t('bot.chat_id') }}</label>
         <div class="input-group">
           <input v-model="form.chatId" class="input" placeholder="-1001234567890" />
-          <button class="btn btn-secondary btn-sm" @click="handleDetectChatId">{{ t('bot.detect') }}</button>
+          <button class="btn btn-secondary btn-sm" :disabled="!form.token" @click="handleDetectChatId">{{ t('bot.detect') }}</button>
         </div>
+        <small class="text-muted">{{ t('bot.hint_chat_id') }}</small>
       </div>
       <div class="form-row mb-md">
         <div class="form-group">
           <label class="form-label">{{ t('bot.interval') }}</label>
           <input v-model.number="form.interval" class="input" type="number" min="1" />
+          <small class="text-muted">{{ t('bot.hint_interval') }}</small>
         </div>
         <div class="form-group">
           <label class="form-label">{{ t('bot.server_label') }}</label>
           <input v-model="form.label" class="input" placeholder="My Server" />
+          <small class="text-muted">{{ t('bot.hint_label') }}</small>
         </div>
       </div>
 
       <div class="bot-actions">
-        <button class="btn btn-primary" :disabled="botStore.loading" @click="handleSetup">
+        <button class="btn btn-primary" :disabled="botStore.loading || !canSetup" @click="handleSetup">
           <Loader2 v-if="botStore.loading" :size="16" class="animate-spin" />
           {{ botStore.enabled ? t('bot.update') : t('bot.setup') }}
         </button>
-        <button class="btn btn-secondary" :disabled="botStore.loading" @click="botStore.test()">
+        <button class="btn btn-secondary" :disabled="botStore.loading || !isConfigured" @click="botStore.test()">
           <Loader2 v-if="botStore.loading" :size="16" class="animate-spin" />
           {{ t('bot.test') }}
         </button>
+        <button class="btn btn-secondary" :disabled="botStore.loading || !isConfigured" @click="botStore.setCommands()">
+          <Loader2 v-if="botStore.loading" :size="16" class="animate-spin" />
+          {{ t('bot.refresh_commands') }}
+        </button>
         <button v-if="botStore.enabled" class="btn btn-warning" :disabled="botStore.loading" @click="botStore.toggle(false)">{{ t('secrets.disable') }}</button>
-        <button v-else class="btn btn-success" :disabled="botStore.loading" @click="botStore.toggle(true)">{{ t('secrets.enable') }}</button>
+        <button v-else-if="isConfigured" class="btn btn-success" :disabled="botStore.loading" @click="botStore.toggle(true)">{{ t('secrets.enable') }}</button>
       </div>
 
       <div v-if="botStore.message" class="alert alert-info mt-md">{{ botStore.message }}</div>
@@ -60,10 +68,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
-import { useI18n } from 'vue-i18n'
-import { useBotStore, useConfigStore } from '@/stores'
-import { Loader2 } from '@lucide/vue'
+import {computed, onMounted, ref} from 'vue'
+import {useI18n} from 'vue-i18n'
+import {useBotStore, useConfigStore} from '@/stores'
+import {Loader2} from '@lucide/vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 
 const { t } = useI18n()
@@ -71,6 +79,9 @@ const botStore = useBotStore()
 const configStore = useConfigStore()
 
 const form = ref({ token: '', chatId: '', interval: 6, label: 'PopuGate' })
+
+const canSetup = computed(() => !!form.value.token && !!form.value.chatId)
+const isConfigured = computed(() => !!form.value.token)
 
 const localizedCommands = computed(() => [
   { cmd: '/status', desc: t('bot.proxy_status') },

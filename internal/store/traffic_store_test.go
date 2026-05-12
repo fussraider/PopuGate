@@ -86,7 +86,7 @@ func TestTrafficStore_UpdateUserTrafficUpsert(t *testing.T) {
 	ctx := context.Background()
 
 	// Insert
-	if err := s.UpdateUserTraffic(ctx, "user1", 100, 200, 50, 100); err != nil {
+	if err := s.UpdateUserTraffic(ctx, "user1", 1, 100, 200, 50, 100); err != nil {
 		t.Fatalf("UpdateUserTraffic insert: %v", err)
 	}
 
@@ -98,7 +98,7 @@ func TestTrafficStore_UpdateUserTrafficUpsert(t *testing.T) {
 		t.Fatalf("expected in=100 out=200, got in=%d out=%d", got.BytesIn, got.BytesOut)
 	}
 
-	snapIn, snapOut, err := s.GetUserSnapshot(ctx, "user1")
+	snapIn, snapOut, err := s.GetUserSnapshot(ctx, "user1", 1)
 	if err != nil {
 		t.Fatalf("GetUserSnapshot: %v", err)
 	}
@@ -107,7 +107,7 @@ func TestTrafficStore_UpdateUserTrafficUpsert(t *testing.T) {
 	}
 
 	// Upsert (update) - cumulative bytes, overwritten snap
-	if err := s.UpdateUserTraffic(ctx, "user1", 300, 400, 150, 200); err != nil {
+	if err := s.UpdateUserTraffic(ctx, "user1", 1, 300, 400, 150, 200); err != nil {
 		t.Fatalf("UpdateUserTraffic upsert: %v", err)
 	}
 
@@ -122,7 +122,7 @@ func TestTrafficStore_UpdateUserTrafficUpsert(t *testing.T) {
 		t.Fatalf("expected cumulative bytes_out=600, got %d", got.BytesOut)
 	}
 
-	snapIn, snapOut, err = s.GetUserSnapshot(ctx, "user1")
+	snapIn, snapOut, err = s.GetUserSnapshot(ctx, "user1", 1)
 	if err != nil {
 		t.Fatalf("GetUserSnapshot after upsert: %v", err)
 	}
@@ -151,7 +151,7 @@ func TestTrafficStore_GetUserSnapshotNonexistent(t *testing.T) {
 	db := testutil.OpenTestDB(t)
 	s := NewTrafficStore(db)
 
-	snapIn, snapOut, err := s.GetUserSnapshot(context.Background(), "noone")
+	snapIn, snapOut, err := s.GetUserSnapshot(context.Background(), "noone", 1)
 	if err != nil {
 		t.Fatalf("GetUserSnapshot: %v", err)
 	}
@@ -171,7 +171,7 @@ func TestTrafficStore_FlushTrafficWithMultipleUsers(t *testing.T) {
 		"user2": {BytesIn: 300, BytesOut: 400, SnapIn: 150, SnapOut: 200},
 	}
 
-	if err := s.FlushTraffic(ctx, global, users); err != nil {
+	if err := s.FlushTraffic(ctx, global, users, 1); err != nil {
 		t.Fatalf("FlushTraffic: %v", err)
 	}
 
@@ -217,6 +217,7 @@ func TestTrafficStore_FlushTrafficAtomicity(t *testing.T) {
 		map[string]model.TrafficSnapshot{
 			"user1": {BytesIn: 10, BytesOut: 20, SnapIn: 5, SnapOut: 10},
 		},
+		1,
 	)
 
 	// Second flush - cumulative
@@ -225,6 +226,7 @@ func TestTrafficStore_FlushTrafficAtomicity(t *testing.T) {
 		map[string]model.TrafficSnapshot{
 			"user1": {BytesIn: 50, BytesOut: 60, SnapIn: 25, SnapOut: 30},
 		},
+		1,
 	)
 
 	// Both global and user should be updated atomically
@@ -244,10 +246,10 @@ func TestTrafficStore_GetAllUserSnapshots(t *testing.T) {
 	s := NewTrafficStore(db)
 	ctx := context.Background()
 
-	s.UpdateUserTraffic(ctx, "alice", 100, 200, 50, 80)
-	s.UpdateUserTraffic(ctx, "bob", 300, 400, 150, 200)
+	s.UpdateUserTraffic(ctx, "alice", 1, 100, 200, 50, 80)
+	s.UpdateUserTraffic(ctx, "bob", 1, 300, 400, 150, 200)
 
-	snaps, err := s.GetAllUserSnapshots(ctx)
+	snaps, err := s.GetAllUserSnapshots(ctx, 1)
 	if err != nil {
 		t.Fatalf("GetAllUserSnapshots: %v", err)
 	}
@@ -266,7 +268,7 @@ func TestTrafficStore_GetAllUserSnapshots_Empty(t *testing.T) {
 	db := testutil.OpenTestDB(t)
 	s := NewTrafficStore(db)
 
-	snaps, err := s.GetAllUserSnapshots(context.Background())
+	snaps, err := s.GetAllUserSnapshots(context.Background(), 1)
 	if err != nil {
 		t.Fatalf("GetAllUserSnapshots: %v", err)
 	}
@@ -435,8 +437,8 @@ func TestTrafficStore_ListUserTraffic(t *testing.T) {
 	s := NewTrafficStore(db)
 	ctx := context.Background()
 
-	s.UpdateUserTraffic(ctx, "alice", 100, 200, 0, 0)
-	s.UpdateUserTraffic(ctx, "bob", 300, 400, 0, 0)
+	s.UpdateUserTraffic(ctx, "alice", 1, 100, 200, 0, 0)
+	s.UpdateUserTraffic(ctx, "bob", 1, 300, 400, 0, 0)
 
 	users, err := s.ListUserTraffic(ctx)
 	if err != nil {

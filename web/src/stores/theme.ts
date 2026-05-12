@@ -1,5 +1,5 @@
-import { ref, computed, onScopeDispose } from 'vue'
-import { defineStore } from 'pinia'
+import {computed, onScopeDispose, ref} from 'vue'
+import {defineStore} from 'pinia'
 
 export type ThemePreference = 'light' | 'dark' | 'auto'
 
@@ -39,11 +39,13 @@ export const useThemeStore = defineStore('theme', () => {
     systemIsDark.value = mediaQuery.matches
     mediaQuery.addEventListener('change', onMediaChange)
     apply()
-
-    onScopeDispose(() => {
-      mediaQuery?.removeEventListener('change', onMediaChange)
-    })
   }
 
-  return { preference, resolved, setTheme, init }
+  function destroy() {
+    mediaQuery?.removeEventListener('change', onMediaChange)
+  }
+
+  onScopeDispose(destroy)
+
+  return { preference, resolved, setTheme, init, destroy }
 })

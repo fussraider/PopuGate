@@ -1,11 +1,13 @@
-import { defineStore } from 'pinia'
-import { ref } from 'vue'
-import { instancesApi } from '@/api/endpoints'
-import type { Instance } from '@/types/models'
+import {defineStore} from 'pinia'
+import {ref} from 'vue'
+import {instancesApi} from '@/api/endpoints'
+import type {Instance} from '@/types/models'
 
 export const useInstancesStore = defineStore('instances', () => {
   const instances = ref<Instance[]>([])
   const loading = ref(false)
+  const actionLoading = ref<Map<number, string>>(new Map())
+  const bulkLoading = ref(false)
 
   async function load() {
     loading.value = true
@@ -16,15 +18,55 @@ export const useInstancesStore = defineStore('instances', () => {
     }
   }
 
-  async function add(port: number, label: string) {
-    const created = await instancesApi.add(port, label)
-    instances.value.push(created)
+  async function removeById(id: number) {
+    await instancesApi.remove(id)
+    instances.value = instances.value.filter(i => i.id !== id)
   }
 
-  async function remove(port: number) {
-    await instancesApi.remove(port)
-    instances.value = instances.value.filter((i) => i.port !== port)
+  function setActionLoading(id: number, action: string | null) {
+    if (action) {
+      actionLoading.value.set(id, action)
+    } else {
+      actionLoading.value.delete(id)
+    }
   }
 
-  return { instances, loading, load, add, remove }
+  async function bulkAction(ids: number[], action: 'start' | 'stop' | 'reload') {
+    bulkLoading.value = true
+    try {
+      const results = await Promise.allSettled(ids.map(id => instancesApi[action](id)))
+      const succeeded = results.filter(r => r.status === 'fulfilled').length
+      return succeeded
+    } finally {
+      bulkLoading.value = false
+    }
+  }
+
+  async function bulkToggle(ids: number[], enabled: boolean) {
+    bulkLoading.value = true
+    try {
+      const results = await Promise.allSettled(ids.map(id => instancesApi.update(id, { enabled } as Partial<Instance>)))
+      const succeeded = results.filter(r => r.status === 'fulfilled').length
+      return succeeded
+    } finally {
+      bulkLoading.value = false
+    }
+  }
+
+  async function bulkRemove(ids: number[]) {
+    bulkLoading.value = true
+    try {
+      const results = await Promise.allSettled(ids.map(id => instancesApi.remove(id)))
+      const succeeded = results.filter(r => r.status === 'fulfilled').length
+      if (succeeded > 0) {
+        const removedSet = new Set(ids)
+        instances.value = instances.value.filter(i => !removedSet.has(i.id))
+      }
+      return succeeded
+    } finally {
+      bulkLoading.value = false
+    }
+  }
+
+  return { instances, loading, actionLoading, bulkLoading, load, removeById, setActionLoading, bulkAction, bulkToggle, bulkRemove }
 })

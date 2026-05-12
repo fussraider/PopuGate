@@ -8,20 +8,9 @@
         <h3 class="mb-md">{{ t('settings_view.title') }}</h3>
         <div class="settings-grid">
           <div class="form-group">
-            <label class="form-label">{{ t('instances.table.port') }}</label>
-            <input v-model.number="form.proxy_port" class="input" type="number" min="1" max="65535" />
-          </div>
-          <div class="form-group">
-            <label class="form-label">{{ t('settings_view.metrics_port') }}</label>
-            <input v-model.number="form.proxy_metrics_port" class="input" type="number" min="1" max="65535" />
-          </div>
-          <div class="form-group">
-            <label class="form-label">{{ t('settings_view.domain') }}</label>
-            <input v-model="form.proxy_domain" class="input" placeholder="cloudflare.com" />
-          </div>
-          <div class="form-group">
             <label class="form-label">{{ t('settings_view.concurrency') }}</label>
             <input v-model.number="form.proxy_concurrency" class="input" type="number" min="1" />
+            <small class="text-muted">{{ t('settings_view.hint_concurrency') }}</small>
           </div>
           <div class="form-group">
             <label class="form-label">{{ t('settings_view.cpu_limit') }}</label>
@@ -38,6 +27,7 @@
           <div class="form-group">
             <label class="form-label">{{ t('settings_view.cert_len') }}</label>
             <input v-model.number="form.fake_cert_len" class="input" type="number" />
+            <small class="text-muted">{{ t('settings_view.hint_cert_len') }}</small>
           </div>
         </div>
       </div>
@@ -52,36 +42,6 @@
         <div class="form-group">
           <label class="form-label">{{ t('settings_view.trusted_cidrs') }}</label>
           <input v-model="form.proxy_protocol_trusted_cidrs" class="input" :placeholder="t('settings_view.cidrs_placeholder')" />
-        </div>
-      </div>
-
-      <!-- Masking -->
-      <div class="card mb-lg">
-        <h3 class="mb-md">{{ t('settings_view.masking_title') }}</h3>
-        <label class="checkbox-label mb-md">
-          <input v-model="form.masking_enabled" type="checkbox" />
-          {{ t('settings_view.enable_masking') }}
-        </label>
-        <div class="settings-grid">
-          <div class="form-group">
-            <label class="form-label">{{ t('settings_view.masking_host') }}</label>
-            <input v-model="form.masking_host" class="input" :placeholder="t('settings_view.masking_host_tip')" />
-          </div>
-          <div class="form-group">
-            <label class="form-label">{{ t('settings_view.masking_port') }}</label>
-            <input v-model.number="form.masking_port" class="input" type="number" />
-          </div>
-          <div class="form-group">
-            <label class="form-label">{{ t('settings_view.unknown_sni') }}</label>
-            <select v-model="form.unknown_sni_action" class="select">
-              <option value="mask">{{ t('settings_view.mask_action') }}</option>
-              <option value="drop">{{ t('settings_view.drop_action') }}</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label class="form-label">{{ t('settings_view.mask_relay_max') }}</label>
-            <input v-model.number="form.masking_relay_max_bytes" class="input" type="number" min="0" :placeholder="t('settings_view.unlimited_tip')" />
-          </div>
         </div>
       </div>
 
@@ -152,6 +112,7 @@
         <div class="form-group" style="max-width: 200px;">
           <label class="form-label">{{ t('settings_view.auto_rotate_days') }}</label>
           <input v-model.number="form.secret_auto_rotate_days" class="input" type="number" min="0" :placeholder="t('settings_view.disabled_placeholder')" />
+          <small class="text-muted">{{ t('settings_view.hint_auto_rotate_days') }}</small>
         </div>
       </div>
 
@@ -162,6 +123,7 @@
         <div class="form-group" style="max-width: 200px;">
           <label class="form-label">{{ t('settings_view.backup_retention') }}</label>
           <input v-model.number="form.backup_retention_days" class="input" type="number" min="1" />
+          <small class="text-muted">{{ t('settings_view.hint_backup_retention') }}</small>
         </div>
       </div>
 
@@ -196,11 +158,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { useI18n } from 'vue-i18n'
-import { useConfigStore } from '@/stores/config'
-import { Loader2, BookOpen } from '@lucide/vue'
-import type { Settings } from '@/types/models'
+import {onMounted, ref} from 'vue'
+import {useI18n} from 'vue-i18n'
+import {useConfigStore} from '@/stores/config'
+import {BookOpen, Loader2} from '@lucide/vue'
+import type {Settings} from '@/types/models'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 
 const { t } = useI18n()

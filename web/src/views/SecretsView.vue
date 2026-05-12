@@ -81,16 +81,7 @@
       </template>
       <template #cell-tags="{ item }">
         <div class="tags-cell">
-          <template v-if="editingTag === item.label">
-            <input v-model="editingTagValue" class="input input-xs tag-input"
-                   @blur="saveTag(item.label)" @keyup.enter="saveTag(item.label)" ref="tagInput" />
-          </template>
-          <template v-else>
-            <span v-for="tag in splitTags(item.tags)" :key="tag" class="badge badge-info tag-badge">{{ tag }}</span>
-            <button class="btn btn-ghost btn-xs" @click="startEditTag(item)" v-tooltip="t('secrets.edit_tags')">
-              <Pencil :size="12" />
-            </button>
-          </template>
+          <span v-for="tag in parseJSONTags(item.tags)" :key="tag" class="badge badge-info tag-badge">{{ tag }}</span>
         </div>
       </template>
       <template #cell-status="{ item }">
@@ -131,6 +122,9 @@
       </template>
       <template #actions="{ item }">
         <div class="actions-desktop">
+          <button class="btn btn-ghost btn-sm" v-tooltip="t('common.edit')" @click="editModal.open(item)">
+            <Pencil :size="16" />
+          </button>
           <button class="btn btn-ghost btn-sm" v-tooltip="t('secrets.rotate')"
                   :disabled="secretsStore.rotating === item.label" @click="handleRotate(item.label)">
             <Loader2 v-if="secretsStore.rotating === item.label" :size="16" class="animate-spin" />
@@ -142,20 +136,8 @@
           <button class="btn btn-ghost btn-sm" v-tooltip="t('secrets.qr')" @click="showQR(item.label)">
             <QrCode :size="16" />
           </button>
-          <button class="btn btn-ghost btn-sm" v-tooltip="t('secrets.extend')" @click="extendModal.open(item)">
-            <CalendarPlus :size="16" />
-          </button>
-          <button class="btn btn-ghost btn-sm" v-tooltip="t('secrets.reset_traffic')" @click="handleResetTraffic(item.label)">
-            <Eraser :size="16" />
-          </button>
-          <button class="btn btn-ghost btn-sm" v-tooltip="t('secrets.edit_notes')" @click="notesModal.open(item)">
-            <StickyNote :size="16" />
-          </button>
           <button class="btn btn-ghost btn-sm" v-tooltip="t('secrets.clone')" @click="cloneModal.open(item)">
             <Copy :size="16" />
-          </button>
-          <button class="btn btn-ghost btn-sm" v-tooltip="t('secrets.rename_title')" @click="renameModal.open(item)">
-            <PenLine :size="16" />
           </button>
           <button class="btn btn-ghost btn-sm"
                   v-tooltip="item.archived_at ? t('secrets.unarchive') : t('secrets.archive')"
@@ -221,30 +203,25 @@
       </div>
     </FormModal>
 
-    <!-- Rename Modal -->
-    <FormModal v-model="renameModal.isOpen.value" :title="t('secrets.rename_title')" :submitting="renameModal.submitting.value"
-               @submit="handleRename()">
+    <!-- Edit Secret Modal -->
+    <FormModal v-model="editModal.isOpen.value" :title="t('secrets.edit_title', { label: editTarget })" :submitting="editModal.submitting.value"
+               @submit="handleEdit()">
       <div class="form-group mb-md">
         <label class="form-label">{{ t('secrets.rename_new_label') }}</label>
-        <input v-model="renameModal.form.value.newLabel" class="input" required />
+        <input v-model="editModal.form.value.label" class="input" required />
       </div>
-    </FormModal>
-
-    <!-- Extend Modal -->
-    <FormModal v-model="extendModal.isOpen.value" :title="t('secrets.extend_title')" :submitting="extendModal.submitting.value"
-               @submit="handleExtend()">
       <div class="form-group mb-md">
-        <label class="form-label">{{ t('secrets.extend_days') }}</label>
-        <input v-model.number="extendModal.form.value.days" class="input" type="number" min="1" required />
+        <label class="form-label">{{ t('secrets.edit_tags') }}</label>
+        <TagInput v-model="editModal.form.value.tags" :available-tags="secretsStore.allTags" :placeholder="t('secrets.tags_placeholder')" />
       </div>
-    </FormModal>
-
-    <!-- Notes Modal -->
-    <FormModal v-model="notesModal.isOpen.value" :title="t('secrets.edit_notes')" :submitting="notesModal.submitting.value"
-               @submit="handleNotes()">
       <div class="form-group mb-md">
         <label class="form-label">{{ t('secrets.edit_notes') }}</label>
-        <input v-model="notesModal.form.value.notes" class="input" />
+        <textarea v-model="editModal.form.value.notes" class="input" rows="3"></textarea>
+      </div>
+      <div class="form-group mb-md">
+        <label class="form-label">{{ t('secrets.extend_days') }}</label>
+        <input v-model.number="editModal.form.value.extendDays" class="input" type="number" min="0" />
+        <small class="text-muted">{{ t('secrets.extend_edit_hint') }}</small>
       </div>
     </FormModal>
 
@@ -331,22 +308,44 @@
 
     <!-- QR Modal -->
     <Modal v-model="qrModal" :title="t('secrets.connect_title', { label: qrLabel })">
-      <div class="qr-container text-center">
-        <img v-if="qrImage" :src="qrImage" alt="QR Code" class="qr-image" />
-        <p class="text-muted mt-sm mb-md">{{ t('secrets.scan_tip') }}</p>
+      <div class="qr-container">
+        <div v-if="proxyLinks.length" class="flex-center gap-sm mb-md">
+          <button class="btn btn-secondary btn-sm" @click="copyAllLinks">{{ t('secrets.copy_all_links') }}</button>
+          <button class="btn btn-secondary btn-sm" @click="exportLinks">{{ t('secrets.export_links') }}</button>
+        </div>
         <div class="links-section text-left">
-          <div class="form-group mb-sm">
-            <label class="form-label text-xs">{{ t('secrets.tg_link') }}</label>
-            <div class="input-group">
-              <input :value="tgLink" class="input input-sm" readonly />
-              <button class="btn btn-secondary btn-sm" @click="copyToClipboard(tgLink)">{{ t('secrets.copy') }}</button>
+          <div v-for="(link, idx) in proxyLinks" :key="idx" class="link-group mb-md">
+            <div class="link-group-header">
+              <span class="badge badge-info">{{ link.instance_label || (':' + link.instance_port) }}</span>
+              <code class="text-sm">{{ link.domain }}</code>
             </div>
-          </div>
-          <div class="form-group">
-            <label class="form-label text-xs">{{ t('secrets.web_link') }}</label>
-            <div class="input-group">
-              <input :value="webLink" class="input input-sm" readonly />
-              <button class="btn btn-secondary btn-sm" @click="copyToClipboard(webLink)">{{ t('secrets.copy') }}</button>
+            <div class="form-group mb-xs">
+              <div class="input-group">
+                <input :value="link.tg_link" class="input input-sm" readonly />
+                <button class="btn btn-secondary btn-sm" v-tooltip="t('secrets.copy')" @click="copyToClipboard(link.tg_link)"><Copy :size="14" /></button>
+                <button class="btn btn-secondary btn-sm" :class="{ active: qrActiveLink === idx + '-tg' }" v-tooltip="t('secrets.show_qr')" @click="toggleLinkQR(idx + '-tg', link.tg_link)"><QrCode :size="14" /></button>
+              </div>
+              <Transition name="qr-slide">
+                <div v-if="qrActiveLink === idx + '-tg'" class="qr-inline mt-sm">
+                  <div class="qr-card">
+                    <img :src="qrDataUrl" alt="QR" class="qr-image-sm" />
+                  </div>
+                </div>
+              </Transition>
+            </div>
+            <div class="form-group">
+              <div class="input-group">
+                <input :value="link.web_link" class="input input-sm" readonly />
+                <button class="btn btn-secondary btn-sm" v-tooltip="t('secrets.copy')" @click="copyToClipboard(link.web_link)"><Copy :size="14" /></button>
+                <button class="btn btn-secondary btn-sm" :class="{ active: qrActiveLink === idx + '-web' }" v-tooltip="t('secrets.show_qr')" @click="toggleLinkQR(idx + '-web', link.web_link)"><QrCode :size="14" /></button>
+              </div>
+              <Transition name="qr-slide">
+                <div v-if="qrActiveLink === idx + '-web'" class="qr-inline mt-sm">
+                  <div class="qr-card">
+                    <img :src="qrDataUrl" alt="QR" class="qr-image-sm" />
+                  </div>
+                </div>
+              </Transition>
             </div>
           </div>
         </div>
@@ -354,6 +353,9 @@
     </Modal>
     <!-- Mobile Action Sheet -->
     <ActionSheet v-model="secretActions.isOpen.value" :title="secretActions.activeItem.value?.label">
+      <button class="action-sheet-item" @click="editModal.open(secretActions.activeItem.value!); secretActions.close()">
+        <Pencil :size="16" /> {{ t('common.edit') }}
+      </button>
       <button class="action-sheet-item" :disabled="secretsStore.rotating === secretActions.activeItem.value?.label"
               @click="handleRotate(secretActions.activeItem.value!.label); secretActions.close()">
         <RotateCw :size="16" /> {{ t('secrets.rotate') }}
@@ -364,20 +366,11 @@
       <button class="action-sheet-item" @click="showQR(secretActions.activeItem.value!.label); secretActions.close()">
         <QrCode :size="16" /> {{ t('secrets.qr') }}
       </button>
-      <button class="action-sheet-item" @click="extendModal.open(secretActions.activeItem.value!); secretActions.close()">
-        <CalendarPlus :size="16" /> {{ t('secrets.extend') }}
-      </button>
       <button class="action-sheet-item" @click="handleResetTraffic(secretActions.activeItem.value!.label); secretActions.close()">
         <Eraser :size="16" /> {{ t('secrets.reset_traffic') }}
       </button>
-      <button class="action-sheet-item" @click="notesModal.open(secretActions.activeItem.value!); secretActions.close()">
-        <StickyNote :size="16" /> {{ t('secrets.edit_notes') }}
-      </button>
       <button class="action-sheet-item" @click="cloneModal.open(secretActions.activeItem.value!); secretActions.close()">
         <Copy :size="16" /> {{ t('secrets.clone') }}
-      </button>
-      <button class="action-sheet-item" @click="renameModal.open(secretActions.activeItem.value!); secretActions.close()">
-        <PenLine :size="16" /> {{ t('secrets.rename_title') }}
       </button>
       <button class="action-sheet-item"
               @click="handleArchive(secretActions.activeItem.value!); secretActions.close()">
@@ -399,16 +392,16 @@
 </template>
 
 <script setup lang="ts">
-import {computed, nextTick, onMounted, onUnmounted, ref} from 'vue'
+import {computed, onMounted, onUnmounted, ref} from 'vue'
 import {useI18n} from 'vue-i18n'
 import {useSecretsStore} from '@/stores'
 import {useToastStore} from '@/stores/toast'
 import {secretsApi} from '@/api/endpoints'
-import {formatBytes, formatISODate} from '@/utils/format'
+import {formatBytes, formatISODate, parseJSONTags} from '@/utils/format'
 import {useConfirmDialog} from '@/composables/useConfirmDialog'
 import {useFormModal} from '@/composables/useFormModal'
 import {useActionMenu} from '@/composables/useActionMenu'
-import type {SecretImportItem} from '@/types/models'
+import type {ProxyLink, SecretImportItem} from '@/types/models'
 import Modal from '@/components/common/Modal.vue'
 import ActionSheet from '@/components/common/ActionSheet.vue'
 import FormModal from '@/components/common/FormModal.vue'
@@ -416,11 +409,11 @@ import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import DataTable from '@/components/common/DataTable.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import PageHeader from '@/components/common/PageHeader.vue'
+import TagInput from '@/components/common/TagInput.vue'
 import {
   Archive as ArchiveIcon,
   ArchiveRestore,
   Ban,
-  CalendarPlus,
   Clock,
   Copy,
   Download,
@@ -430,19 +423,19 @@ import {
   MoreVertical,
   Pause,
   Pencil,
-  PenLine,
   Play,
   QrCode,
   RotateCw,
   Search,
   Settings,
-  StickyNote,
   Tags,
   Trash2,
   TrendingUp,
   Upload,
   X as XIcon,
 } from '@lucide/vue'
+import QRCodeStyling from 'qr-code-styling'
+import popugateLogo from '@/assets/images/icons/icon-192x192.png'
 
 const { t } = useI18n()
 const secretsStore = useSecretsStore()
@@ -467,10 +460,7 @@ function onSelectionChange(keys: Set<string | number>) {
 
 function selectAllByTag(tag: string) {
   const matching = secretsStore.tagFilteredItems
-    .filter((s) => {
-      const tags = (s.tags || '').split(',').map((t: string) => t.trim()).filter(Boolean)
-      return tags.includes(tag)
-    })
+    .filter((s) => parseJSONTags(s.tags).includes(tag))
     .map((s) => s.label)
   selectedLabels.value = new Set(matching)
 }
@@ -485,34 +475,6 @@ function debouncedSearch() {
 function clearSearch() {
   searchInput.value = ''
   secretsStore.search('')
-}
-
-// Tag editing
-const editingTag = ref('')
-const editingTagValue = ref('')
-const tagInput = ref<HTMLInputElement | null>(null)
-
-function splitTags(tags?: string): string[] {
-  return (tags || '').split(',').map((t: string) => t.trim()).filter(Boolean)
-}
-
-function startEditTag(item: any) {
-  editingTag.value = item.label
-  editingTagValue.value = item.tags || ''
-  nextTick(() => {
-    const el = tagInput.value as any
-    if (Array.isArray(el)) el[0]?.focus()
-    else el?.focus?.()
-  })
-}
-
-async function saveTag(label: string) {
-  if (editingTag.value !== label) return
-  try {
-    await secretsStore.setTags(label, editingTagValue.value)
-    toast.success(t('secrets.tags_saved'))
-  } catch (e: any) { toast.error(e.response?.data?.error ?? e.message) }
-  editingTag.value = ''
 }
 
 // Confirm dialog
@@ -571,20 +533,40 @@ async function handleClone() {
   } catch (e: any) { toast.error(e.response?.data?.error ?? e.message) }
 }
 
-// Rename modal
-const renameSource = ref('')
-const renameModal = useFormModal({ newLabel: '' })
-renameModal.open = (item: any) => {
-  renameSource.value = item.label
-  renameModal.form.value.newLabel = item.label
-  renameModal.isOpen.value = true
+// Edit modal (label, tags, notes, extend)
+const editTarget = ref('')
+const editModal = useFormModal({ label: '', tags: '', notes: '', extendDays: 0 })
+editModal.open = (item: any) => {
+  editTarget.value = item.label
+  editModal.form.value.label = item.label
+  editModal.form.value.tags = item.tags || ''
+  editModal.form.value.notes = item.notes || ''
+  editModal.form.value.extendDays = 0
+  editModal.isOpen.value = true
 }
-async function handleRename() {
+async function handleEdit() {
+  const f = editModal.form.value
   try {
-    await renameModal.submit(async () => {
-      await secretsStore.rename(renameSource.value, renameModal.form.value.newLabel)
+    await editModal.submit(async () => {
+      const promises: Promise<void>[] = []
+      if (f.label !== editTarget.value) {
+        promises.push(secretsStore.rename(editTarget.value, f.label))
+      }
+      if (f.tags !== (secretsStore.secrets.find(s => s.label === editTarget.value || s.label === f.label)?.tags || '')) {
+        const target = f.label !== editTarget.value ? f.label : editTarget.value
+        promises.push(secretsStore.setTags(target, f.tags))
+      }
+      if (f.notes !== (secretsStore.secrets.find(s => s.label === editTarget.value || s.label === f.label)?.notes || '')) {
+        const target = f.label !== editTarget.value ? f.label : editTarget.value
+        promises.push(secretsStore.updateNotes(target, f.notes))
+      }
+      if (f.extendDays > 0) {
+        const target = f.label !== editTarget.value ? f.label : editTarget.value
+        promises.push(secretsStore.extend(target, f.extendDays))
+      }
+      await Promise.all(promises)
     })
-    toast.success(t('secrets.renamed_success', { label: renameModal.form.value.newLabel }))
+    toast.success(t('secrets.edit_saved', { label: f.label }))
   } catch (e: any) { toast.error(e.response?.data?.error ?? e.message) }
 }
 
@@ -604,40 +586,6 @@ async function toggleTop() {
   } else {
     topModal.value = false
   }
-}
-
-// Extend modal
-const extendTarget = ref('')
-const extendModal = useFormModal({ days: 30 })
-extendModal.open = (item: any) => {
-  extendTarget.value = item.label
-  extendModal.form.value.days = 30
-  extendModal.isOpen.value = true
-}
-async function handleExtend() {
-  try {
-    await extendModal.submit(async () => {
-      await secretsStore.extend(extendTarget.value, extendModal.form.value.days)
-    })
-    toast.success(t('secrets.extended_success', { label: extendTarget.value }))
-  } catch (e: any) { toast.error(e.response?.data?.error ?? e.message) }
-}
-
-// Notes modal
-const notesTarget = ref('')
-const notesModal = useFormModal({ notes: '' })
-notesModal.open = (item: any) => {
-  notesTarget.value = item.label
-  notesModal.form.value.notes = item.notes || ''
-  notesModal.isOpen.value = true
-}
-async function handleNotes() {
-  try {
-    await notesModal.submit(async () => {
-      await secretsStore.updateNotes(notesTarget.value, notesModal.form.value.notes)
-    })
-    toast.success(t('secrets.notes_saved'))
-  } catch (e: any) { toast.error(e.response?.data?.error ?? e.message) }
 }
 
 // Reset traffic
@@ -796,28 +744,83 @@ async function handleImport() {
 // QR
 const qrModal = ref(false)
 const qrLabel = ref('')
-const qrImage = ref('')
-const tgLink = ref('')
-const webLink = ref('')
+const qrActiveLink = ref('')
+const qrDataUrl = ref('')
+const proxyLinks = ref<ProxyLink[]>([])
 
 async function showQR(label: string) {
   qrLabel.value = label
-  if (qrImage.value) URL.revokeObjectURL(qrImage.value)
-  qrImage.value = ''
-  tgLink.value = ''
-  webLink.value = ''
+  qrActiveLink.value = ''
+  qrDataUrl.value = ''
+  proxyLinks.value = []
   try {
-    const [blob, linkData] = await Promise.all([secretsApi.getQR(label), secretsApi.getLink(label)])
-    qrImage.value = URL.createObjectURL(blob)
-    tgLink.value = linkData.tg_link || ''
-    webLink.value = linkData.web_link || ''
+    const linkData = await secretsApi.getLink(label)
+    proxyLinks.value = linkData.links || []
     qrModal.value = true
   } catch (e: any) { toast.error(t('secrets.load_failed', { label })) }
+}
+
+async function toggleLinkQR(key: string, text: string) {
+  if (qrActiveLink.value === key) {
+    if (qrDataUrl.value.startsWith('blob:')) URL.revokeObjectURL(qrDataUrl.value)
+    qrActiveLink.value = ''
+    qrDataUrl.value = ''
+    return
+  }
+  qrActiveLink.value = key
+  qrDataUrl.value = ''
+  try {
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark'
+    const dotColor = isDark ? '#a5b4fc' : '#1e1b4b'
+    const cornerColor = isDark ? '#818cf8' : '#312e81'
+    const dotCornerColor = isDark ? '#6366f1' : '#4338ca'
+    const bgColor = isDark ? '#1e1b4b' : '#ffffff'
+
+    const qr = new QRCodeStyling({
+      width: 280,
+      height: 280,
+      type: 'canvas',
+      data: text,
+      margin: 5,
+      image: popugateLogo,
+      dotsOptions: { color: dotColor, type: 'rounded' },
+      cornersSquareOptions: { color: cornerColor, type: 'extra-rounded' },
+      cornersDotOptions: { color: dotCornerColor, type: 'dot' },
+      backgroundOptions: { color: bgColor },
+      imageOptions: { margin: 4, imageSize: 0.3 },
+    })
+    const blob = await qr.getRawData('png')
+    if (!blob) throw new Error('empty')
+    if (qrDataUrl.value.startsWith('blob:')) URL.revokeObjectURL(qrDataUrl.value)
+    qrDataUrl.value = URL.createObjectURL(blob as Blob)
+  } catch {
+    toast.error(t('secrets.qr_failed'))
+    qrActiveLink.value = ''
+  }
 }
 
 async function copyToClipboard(text: string) {
   try { await navigator.clipboard.writeText(text); toast.success(t('secrets.copied')) }
   catch { toast.error(t('secrets.copy_failed')) }
+}
+
+async function copyAllLinks() {
+  const text = proxyLinks.value.map(l => l.tg_link).join('\n')
+  try { await navigator.clipboard.writeText(text); toast.success(t('secrets.links_copied')) }
+  catch { toast.error(t('secrets.copy_failed')) }
+}
+
+function exportLinks() {
+  const lines = proxyLinks.value.map(l =>
+    `[${l.instance_label || ':' + l.instance_port}] ${l.domain}\n  tg: ${l.tg_link}\n  web: ${l.web_link}`
+  )
+  const blob = new Blob([lines.join('\n\n')], { type: 'text/plain' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `${qrLabel.value}-links.txt`
+  a.click()
+  URL.revokeObjectURL(url)
 }
 
 function quotaPercent(sec: any): number {
@@ -831,7 +834,6 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
-  if (qrImage.value) URL.revokeObjectURL(qrImage.value)
   if (searchTimer) clearTimeout(searchTimer)
 })
 </script>
@@ -929,6 +931,8 @@ onUnmounted(() => {
   align-items: center;
   gap: 4px;
   flex-wrap: wrap;
+  max-width: 200px;
+  overflow: hidden;
 }
 
 .tag-badge {
@@ -972,7 +976,21 @@ onUnmounted(() => {
   td code { font-size: $font-size-sm; }
 }
 
-.qr-image { max-width: 256px; border-radius: $border-radius; }
+.qr-image-sm { width: 100%; border-radius: $border-radius; display: block; }
+
+.qr-card {
+  display: inline-block;
+  padding: 0.5rem;
+  border-radius: $border-radius-lg;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-sm);
+}
+
+.qr-inline { display: flex; justify-content: center; padding: 0.5rem 0; }
+
+.qr-slide-enter-active { transition: all 0.25s ease-out; }
+.qr-slide-enter-from { opacity: 0; transform: translateY(-8px) scale(0.97); }
 
 .links-section {
   margin-top: 1rem;
@@ -990,5 +1008,22 @@ onUnmounted(() => {
     font-family: monospace;
     min-width: 0;
   }
+}
+
+.link-group {
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border-color);
+
+  &:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+  }
+}
+
+.link-group-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
 }
 </style>

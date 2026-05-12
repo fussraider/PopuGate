@@ -139,7 +139,7 @@ func runServer(cmd *cobra.Command, args []string) {
 	}
 
 	// Initialize services
-	secretSvc := service.NewSecretService(secretStore)
+	secretSvc := service.NewSecretService(secretStore, instanceStore, settingsStore)
 	upstreamSvc := service.NewUpstreamService(upstreamStore)
 	trafficSvc := service.NewTrafficService(trafficStore, settingsStore, dockerClient, instanceStore)
 	trafficSvc.SetSecretStore(secretStore, quotaStore)
@@ -158,7 +158,7 @@ func runServer(cmd *cobra.Command, args []string) {
 		)
 		healthSvc = service.NewHealthService(dockerClient, settingsStore, instanceStore)
 		healthSvc.SetContainerSvc(containerSvc)
-		replSvc = service.NewReplicationService(settingsStore, slaveStore)
+		replSvc = service.NewReplicationService(settingsStore, slaveStore, instanceStore)
 		telemtUpdateSvc = service.NewTelemtUpdateService(settingsStore, dockerSvc, containerSvc, telemtCfg)
 		telemtUpdateSvc.ResetStaleUpdate(context.Background())
 	}
@@ -179,8 +179,8 @@ func runServer(cmd *cobra.Command, args []string) {
 	if containerSvc != nil {
 		botDeps.RestartProxy = func(ctx context.Context) error { return containerSvc.Restart(ctx) }
 		botDeps.IsProxyRunning = func(ctx context.Context) bool {
-			r, err := dockerClient.IsRunning(ctx)
-			return err == nil && r
+			status, err := containerSvc.Status(ctx)
+			return err == nil && status != nil && status.Running
 		}
 		botDeps.GetUptime = func(ctx context.Context) string {
 			status, err := containerSvc.Status(ctx)
@@ -188,6 +188,16 @@ func runServer(cmd *cobra.Command, args []string) {
 				return ""
 			}
 			return status.Uptime
+		}
+		botDeps.IsInstanceRunning = func(ctx context.Context, containerName string) bool {
+			r, err := dockerClient.IsInstanceRunning(ctx, containerName)
+			return err == nil && r
+		}
+		botDeps.StartInstance = func(ctx context.Context, id int64) error {
+			return containerSvc.StartInstance(ctx, id)
+		}
+		botDeps.StopInstance = func(ctx context.Context, id int64) error {
+			return containerSvc.StopInstance(ctx, id)
 		}
 	}
 	if dockerSvc != nil {
@@ -242,7 +252,7 @@ func runServer(cmd *cobra.Command, args []string) {
 
 	// Seed default instance if table is empty (migration from single-port to multi-port)
 	if settings != nil {
-		if err := instanceStore.EnsureDefaultInstance(ctx, settings.ProxyPort, settings.ProxyMetricsPort); err != nil {
+		if err := instanceStore.EnsureDefaultInstance(ctx, settings.ProxyPort, settings.ProxyMetricsPort, settings.ProxyDomain, settings.MaskingHost, settings.MaskingEnabled); err != nil {
 			srvLog.Warnf("Failed to seed default instance: %v", err)
 		}
 	}

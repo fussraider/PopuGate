@@ -176,6 +176,7 @@ code {
   color: $text-primary;
   border-color: $border-color;
   &:hover:not(:disabled) { background: var(--bg-table-hover); }
+  &.active { background: var(--color-primary-bg); color: var(--btn-primary-bg); border-color: var(--btn-primary-bg); }
 }
 
 .btn-success {
@@ -200,6 +201,7 @@ code {
   background: transparent;
   color: var(--btn-ghost-color);
   &:hover:not(:disabled) { background: var(--btn-ghost-hover-bg); }
+  &.active { background: var(--btn-ghost-hover-bg); color: var(--btn-primary-bg); }
 }
 
 .btn-outline {
@@ -254,7 +256,7 @@ code {
 .input-group {
   display: flex;
   gap: $spacing-sm;
-  align-items: center;
+  align-items: stretch;
   min-width: 0;
 
   .input { flex: 1; min-width: 0; }
@@ -554,11 +556,12 @@ code {
   align-items: center;
   gap: $spacing-sm;
   width: 100%;
-  padding: $spacing-sm $spacing-md;
+  padding: $spacing-md $spacing-lg;
+  min-height: 48px;
   border: none;
   background: none;
   cursor: pointer;
-  font-size: $font-size-sm;
+  font-size: $font-size-base;
   color: $text-primary;
   text-align: left;
 
@@ -659,6 +662,18 @@ code {
 
 .flex-between { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: $spacing-sm; }
 .flex-center { display: flex; align-items: center; flex-wrap: wrap; }
+
+.actions-grid {
+  display: flex;
+  gap: $spacing-sm;
+  flex-wrap: wrap;
+
+  @media (max-width: 480px) {
+    gap: 6px;
+  }
+}
+
+.mb-none { margin-bottom: 0; }
 
 // ─── Animations ─────────────────────────────────────────────────────
 

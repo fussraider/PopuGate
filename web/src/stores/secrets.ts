@@ -1,7 +1,8 @@
-import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
-import { secretsApi } from '@/api/endpoints'
-import type { Secret, SecretImportItem } from '@/types/models'
+import {defineStore} from 'pinia'
+import {computed, ref} from 'vue'
+import {secretsApi} from '@/api/endpoints'
+import {parseJSONTags} from '@/utils/format'
+import type {Secret, SecretImportItem} from '@/types/models'
 
 export const useSecretsStore = defineStore('secrets', () => {
   const secrets = ref<Secret[]>([])
@@ -216,8 +217,8 @@ export const useSecretsStore = defineStore('secrets', () => {
   const tagFilteredItems = computed(() => {
     if (!selectedTagFilter.value) return displayItems.value
     return displayItems.value.filter((s) => {
-      const tags = (s.tags || '').split(',').map((t: string) => t.trim()).filter(Boolean)
-      return tags.includes(selectedTagFilter.value)
+      const tags = parseJSONTags(s.tags)
+      return tags.includes(selectedTagFilter.value!)
     })
   })
 

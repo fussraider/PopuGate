@@ -6,10 +6,11 @@ import (
 	"strings"
 
 	"github.com/fussraider/PopuGate/internal/model"
+	"github.com/fussraider/PopuGate/internal/service"
 	"github.com/fussraider/PopuGate/pkg/telemt"
 )
 
-// cmdStatus shows proxy status, uptime, and quick traffic stats.
+// cmdStatus shows proxy status per instance.
 func (b *Bot) cmdStatus(ctx context.Context) string {
 	settings, _ := b.deps.Settings.Load(ctx)
 	label := b.label
@@ -17,21 +18,37 @@ func (b *Bot) cmdStatus(ctx context.Context) string {
 		label = settings.TelegramServerLabel
 	}
 
-	running := false
-	if b.deps.IsProxyRunning != nil {
-		running = b.deps.IsProxyRunning(ctx)
+	var lines []string
+	lines = append(lines, fmt.Sprintf("🔧 *%s Status*", label))
+	lines = append(lines, "")
+
+	// Per-instance status
+	instances, err := b.deps.Instances.List(ctx)
+	if err != nil || len(instances) == 0 {
+		lines = append(lines, "No instances configured.")
+		return strings.Join(lines, "\n")
 	}
 
-	status := "stopped"
-	if running {
-		status = "running"
-	}
-
-	uptime := "-"
-	if b.deps.GetUptime != nil {
-		if u := b.deps.GetUptime(ctx); u != "" {
-			uptime = u
+	anyRunning := false
+	for _, inst := range instances {
+		if !inst.Enabled {
+			continue
 		}
+		running := false
+		if b.deps.IsInstanceRunning != nil {
+			running = b.deps.IsInstanceRunning(ctx, inst.ContainerName())
+		}
+		status := "❌ stopped"
+		if running {
+			status = "✅ running"
+			anyRunning = true
+		}
+
+		domain := inst.TLSDomain
+		if domain == "" {
+			domain = "-"
+		}
+		lines = append(lines, fmt.Sprintf("Instance \"%s\" (:%d) %s — `%s`", inst.Label, inst.Port, status, domain))
 	}
 
 	// Global traffic
@@ -40,11 +57,8 @@ func (b *Bot) cmdStatus(ctx context.Context) string {
 	if err == nil {
 		totalIn = global.BytesIn
 		totalOut = global.BytesOut
-	} else {
-		log.Warnf("cmdStatus: get global traffic: %v", err)
 	}
 
-	// Secret count
 	secrets, _ := b.deps.Secrets.List(ctx)
 	enabled := 0
 	for _, s := range secrets {
@@ -53,15 +67,15 @@ func (b *Bot) cmdStatus(ctx context.Context) string {
 		}
 	}
 
-	return strings.Join([]string{
-		fmt.Sprintf("🔧 *%s Status*", label),
-		"",
-		fmt.Sprintf("Proxy: %s", status),
-		fmt.Sprintf("Uptime: %s", uptime),
-		fmt.Sprintf("Port: %d", settings.ProxyPort),
-		fmt.Sprintf("Secrets: %d/%d enabled", enabled, len(secrets)),
-		fmt.Sprintf("Traffic: ↓%s ↑%s", formatBytes(totalIn), formatBytes(totalOut)),
-	}, "\n")
+	lines = append(lines, "")
+	lines = append(lines, fmt.Sprintf("Secrets: %d/%d enabled", enabled, len(secrets)))
+	lines = append(lines, fmt.Sprintf("Traffic: ↓%s ↑%s", formatBytes(totalIn), formatBytes(totalOut)))
+
+	if !anyRunning {
+		lines = append(lines, "")
+		lines = append(lines, "⚠ No instances are running")
+	}
+	return strings.Join(lines, "\n")
 }
 
 // cmdSecrets lists all secrets with per-user stats.
@@ -88,7 +102,7 @@ func (b *Bot) cmdSecrets(ctx context.Context) string {
 }
 
 // cmdLink shows proxy links for a specific secret or all enabled secrets.
-// When GenerateQR callback is set, also sends QR code images via Telegram.
+// Generates links per instance × domain.
 func (b *Bot) cmdLink(ctx context.Context, text string) string {
 	settings, _ := b.deps.Settings.Load(ctx)
 	publicIP := ""
@@ -99,56 +113,65 @@ func (b *Bot) cmdLink(ctx context.Context, text string) string {
 		publicIP = settings.CustomIP
 	}
 
+	instances, _ := b.deps.Instances.List(ctx)
+
 	label := b.args(text)
 	if label != "" {
 		sec, err := b.deps.Secrets.GetByLabel(ctx, label)
 		if err != nil || sec == nil {
 			return fmt.Sprintf("Secret `%s` not found.", label)
 		}
-		secret := telemt.BuildFakeTLSSecret(sec.SecretKey, settings.ProxyDomain, settings.MaskingEnabled)
-		link := telemt.BuildProxyLink(publicIP, settings.ProxyPort, secret)
-		webLink := telemt.BuildWebLink(publicIP, settings.ProxyPort, secret)
-		response := fmt.Sprintf("🔗 *%s*\n`%s`\n%s", sec.Label, link, webLink)
 
-		// Send QR code photo if available
-		if b.deps.GenerateQR != nil {
-			if qrPNG, err := b.deps.GenerateQR(ctx, webLink); err == nil {
-				caption := fmt.Sprintf("🔗 %s — scan to connect", sec.Label)
-				if sendErr := b.SendPhoto(ctx, qrPNG, caption); sendErr != nil {
-					log.Errorf("QR photo send error: %v", sendErr)
+		var lines []string
+		lines = append(lines, fmt.Sprintf("🔗 *%s*:", sec.Label))
+
+		links := service.BuildLinksForSecret(sec, instances, publicIP)
+		for _, link := range links {
+			lines = append(lines, fmt.Sprintf("\n[%s :%d] %s", link.InstanceLabel, link.InstancePort, link.Domain))
+			lines = append(lines, fmt.Sprintf("`%s`", link.TGLink))
+			lines = append(lines, link.WebLink)
+
+			if b.deps.GenerateQR != nil {
+				if qrPNG, err := b.deps.GenerateQR(ctx, link.WebLink); err == nil {
+					caption := fmt.Sprintf("🔗 %s — %s :%d — %s", sec.Label, link.InstanceLabel, link.InstancePort, link.Domain)
+					if sendErr := b.SendPhoto(ctx, qrPNG, caption); sendErr != nil {
+						log.Errorf("QR photo send error: %v", sendErr)
+					}
 				}
 			}
 		}
 
-		return response
+		if len(lines) <= 1 {
+			return fmt.Sprintf("No accessible instances for secret `%s`.", label)
+		}
+		return strings.Join(lines, "\n")
 	}
 
 	// Show all enabled secrets
 	secrets, _ := b.deps.Secrets.List(ctx)
-	var lines []string
+	var allLines []string
 	for _, s := range secrets {
 		if !s.Enabled {
 			continue
 		}
-		secret := telemt.BuildFakeTLSSecret(s.SecretKey, settings.ProxyDomain, settings.MaskingEnabled)
-		link := telemt.BuildProxyLink(publicIP, settings.ProxyPort, secret)
-		webLink := telemt.BuildWebLink(publicIP, settings.ProxyPort, secret)
-		lines = append(lines, fmt.Sprintf("🔗 `%s`: `%s`", s.Label, link))
+		links := service.BuildLinksForSecret(&s, instances, publicIP)
+		for _, link := range links {
+			allLines = append(allLines, fmt.Sprintf("🔗 `%s` [%s :%d %s]: `%s`", s.Label, link.InstanceLabel, link.InstancePort, link.Domain, link.TGLink))
 
-		// Send QR code photo for each enabled secret
-		if b.deps.GenerateQR != nil {
-			if qrPNG, err := b.deps.GenerateQR(ctx, webLink); err == nil {
-				caption := fmt.Sprintf("🔗 %s — scan to connect", s.Label)
-				if sendErr := b.SendPhoto(ctx, qrPNG, caption); sendErr != nil {
-					log.Errorf("QR photo send error for %s: %v", s.Label, sendErr)
+			if b.deps.GenerateQR != nil {
+				if qrPNG, err := b.deps.GenerateQR(ctx, link.WebLink); err == nil {
+					caption := fmt.Sprintf("🔗 %s — %s :%d — %s", s.Label, link.InstanceLabel, link.InstancePort, link.Domain)
+					if sendErr := b.SendPhoto(ctx, qrPNG, caption); sendErr != nil {
+						log.Errorf("QR photo send error for %s: %v", s.Label, sendErr)
+					}
 				}
 			}
 		}
 	}
-	if len(lines) == 0 {
-		return "No enabled secrets."
+	if len(allLines) == 0 {
+		return "No enabled secrets or instances."
 	}
-	return strings.Join(lines, "\n")
+	return strings.Join(allLines, "\n")
 }
 
 // cmdAdd adds a new secret with the given label.
@@ -161,7 +184,6 @@ func (b *Bot) cmdAdd(ctx context.Context, text string) string {
 		return fmt.Sprintf("Invalid label: %s", err.Error())
 	}
 
-	// Check if already exists
 	existing, _ := b.deps.Secrets.GetByLabel(ctx, label)
 	if existing != nil {
 		return fmt.Sprintf("Secret `%s` already exists.", label)
@@ -239,6 +261,78 @@ func (b *Bot) cmdRestart(ctx context.Context) string {
 	return "🔄 Proxy restarted."
 }
 
+// cmdStartInstance starts a specific instance by label, or all if no label given.
+func (b *Bot) cmdStartInstance(ctx context.Context, text string) string {
+	label := b.args(text)
+
+	instances, err := b.deps.Instances.List(ctx)
+	if err != nil || len(instances) == 0 {
+		return "No instances found."
+	}
+
+	if label != "" {
+		for _, inst := range instances {
+			if inst.Label == label || inst.Label == strings.TrimSpace(label) {
+				if b.deps.StartInstance == nil {
+					return "⚠ Start not available."
+				}
+				if err := b.deps.StartInstance(ctx, inst.ID); err != nil {
+					return fmt.Sprintf("❌ Failed to start %q: %s", inst.Label, err.Error())
+				}
+				return fmt.Sprintf("▶ Instance %q (:%d) started.", inst.Label, inst.Port)
+			}
+		}
+		return fmt.Sprintf("Instance %q not found.", label)
+	}
+
+	// No label: start all enabled instances
+	if b.deps.StartInstance == nil {
+		return "⚠ Start not available."
+	}
+	var lines []string
+	for _, inst := range instances {
+		if !inst.Enabled {
+			continue
+		}
+		if err := b.deps.StartInstance(ctx, inst.ID); err != nil {
+			lines = append(lines, fmt.Sprintf("❌ %q: %s", inst.Label, err.Error()))
+		} else {
+			lines = append(lines, fmt.Sprintf("▶ %q (:%d)", inst.Label, inst.Port))
+		}
+	}
+	if len(lines) == 0 {
+		return "No enabled instances."
+	}
+	return strings.Join(lines, "\n")
+}
+
+// cmdStopInstance stops a specific instance by label.
+func (b *Bot) cmdStopInstance(ctx context.Context, text string) string {
+	label := b.args(text)
+	if label == "" {
+		return "Usage: /stop <label>"
+	}
+
+	instances, err := b.deps.Instances.List(ctx)
+	if err != nil || len(instances) == 0 {
+		return "No instances found."
+	}
+
+	for _, inst := range instances {
+		if inst.Label == label || inst.Label == strings.TrimSpace(label) {
+			if b.deps.StopInstance == nil {
+				return "⚠ Stop not available."
+			}
+			if err := b.deps.StopInstance(ctx, inst.ID); err != nil {
+				return fmt.Sprintf("❌ Failed to stop %q: %s", inst.Label, err.Error())
+			}
+			return fmt.Sprintf("⏹ Instance %q (:%d) stopped.", inst.Label, inst.Port)
+		}
+	}
+
+	return fmt.Sprintf("Instance %q not found.", label)
+}
+
 // cmdEnable enables a secret.
 func (b *Bot) cmdEnable(ctx context.Context, text string) string {
 	label := b.args(text)
@@ -279,7 +373,6 @@ func (b *Bot) cmdDisable(ctx context.Context, text string) string {
 		return fmt.Sprintf("Secret `%s` is already disabled.", label)
 	}
 
-	// Prevent disabling last active secret
 	enabled, _ := b.deps.Secrets.CountEnabled(ctx)
 	if enabled <= 1 {
 		return "⚠ Cannot disable the last active secret."
@@ -293,25 +386,27 @@ func (b *Bot) cmdDisable(ctx context.Context, text string) string {
 	return fmt.Sprintf("❌ Secret `%s` disabled. Use /restart to apply.", label)
 }
 
-// cmdHealth runs a quick health check.
+// cmdHealth runs a health check per instance.
 func (b *Bot) cmdHealth(ctx context.Context) string {
-	settings, _ := b.deps.Settings.Load(ctx)
-
-	running := false
-	if b.deps.IsProxyRunning != nil {
-		running = b.deps.IsProxyRunning(ctx)
-	}
-
 	var lines []string
 	lines = append(lines, fmt.Sprintf("🏥 *%s Health*", b.label))
 
-	if running {
-		lines = append(lines, "Container: ✅ running")
-	} else {
-		lines = append(lines, "Container: ❌ stopped")
+	instances, _ := b.deps.Instances.List(ctx)
+	for _, inst := range instances {
+		if !inst.Enabled {
+			continue
+		}
+		running := false
+		if b.deps.IsInstanceRunning != nil {
+			running = b.deps.IsInstanceRunning(ctx, inst.ContainerName())
+		}
+		if running {
+			lines = append(lines, fmt.Sprintf("Instance \"%s\" (:%d): ✅ running", inst.Label, inst.Port))
+		} else {
+			lines = append(lines, fmt.Sprintf("Instance \"%s\" (:%d): ❌ stopped", inst.Label, inst.Port))
+		}
 	}
 
-	// Engine version
 	if b.deps.GetEngineVersion != nil {
 		if v := b.deps.GetEngineVersion(); v != "" {
 			lines = append(lines, fmt.Sprintf("Engine: v%s", v))
@@ -331,8 +426,6 @@ func (b *Bot) cmdHealth(ctx context.Context) string {
 		}
 	}
 	lines = append(lines, fmt.Sprintf("Secrets: %d/%d enabled", enabled, total))
-
-	lines = append(lines, fmt.Sprintf("Port: %d", settings.ProxyPort))
 
 	return strings.Join(lines, "\n")
 }
@@ -420,19 +513,16 @@ func (b *Bot) cmdSetLimit(ctx context.Context, text string) string {
 		return fmt.Sprintf("Secret `%s` not found.", label)
 	}
 
-	// Parse conns
 	var conns int
 	if n, _ := fmt.Sscanf(parts[2], "%d", &conns); n != 1 {
 		return "Invalid max_conns value. Must be a number."
 	}
 
-	// Parse IPs
 	var ips int
 	if n, _ := fmt.Sscanf(parts[3], "%d", &ips); n != 1 {
 		return "Invalid max_ips value. Must be a number."
 	}
 
-	// Parse quota (in MB)
 	var quotaMB int64
 	if n, _ := fmt.Sscanf(parts[4], "%d", &quotaMB); n != 1 {
 		return "Invalid quota_mb value. Must be a number."
@@ -505,6 +595,8 @@ func (b *Bot) cmdHelp() string {
 		"/remove <label> — Remove secret",
 		"/rotate <label> — Rotate secret",
 		"/restart — Restart proxy",
+		"/start [label] — Start instance (all if no label)",
+		"/stop <label> — Stop instance",
 		"/enable <label> — Enable secret",
 		"/disable <label> — Disable secret",
 		"/health — Health check",

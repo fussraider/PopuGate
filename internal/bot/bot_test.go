@@ -242,7 +242,6 @@ func TestIsKnownCommand(t *testing.T) {
 
 		// Unknown commands
 		{"/unknown", false},
-		{"/start", false},
 		{"", false},
 		{"status", false},
 		{"/Status", false},

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"os"
 	"sync"
 	"time"
 
@@ -33,23 +32,18 @@ type TrafficService struct {
 	lastLive   *model.LiveMetrics
 	lastTime   time.Time
 	client     *http.Client
-	dockerAddr string // cached dockerenv detection result
+	dockerAddr string
 }
 
 // NewTrafficService creates a new TrafficService.
 func NewTrafficService(traffic *store.TrafficStore, settings *store.SettingsStore, docker *dockerutil.DockerClient, instances *store.InstanceStore) *TrafficService {
 	return &TrafficService{
-		traffic:   traffic,
-		settings:  settings,
-		docker:    docker,
-		instances: instances,
-		client:    &http.Client{Timeout: 2 * time.Second},
-		dockerAddr: func() string {
-			if _, err := os.Stat("/.dockerenv"); err == nil {
-				return "host.docker.internal"
-			}
-			return "127.0.0.1"
-		}(),
+		traffic:    traffic,
+		settings:   settings,
+		docker:     docker,
+		instances:  instances,
+		client:     &http.Client{Timeout: 2 * time.Second},
+		dockerAddr: dockerutil.DockerHostAddr(),
 	}
 }
 
@@ -85,7 +79,6 @@ func (s *TrafficService) GetUserTraffic(ctx context.Context, label string) (*mod
 // GetLiveMetrics fetches and caches live Prometheus metrics from all instances.
 func (s *TrafficService) GetLiveMetrics(ctx context.Context) (*model.LiveMetrics, error) {
 	s.mu.Lock()
-	// Return cached if fresh (< 2 seconds)
 	if s.lastLive != nil && time.Since(s.lastTime) < 2*time.Second {
 		cached := s.lastLive
 		s.mu.Unlock()
@@ -151,7 +144,6 @@ func (s *TrafficService) GetLiveMetrics(ctx context.Context) (*model.LiveMetrics
 		return nil, fmt.Errorf("no metrics collected from any active instance")
 	}
 
-	// If the engine doesn't expose telemt_connections_current, compute from per-user metrics
 	if combined.ConnsCurrent == 0 && len(combined.UserMetrics) > 0 {
 		for _, um := range combined.UserMetrics {
 			combined.ConnsCurrent += um.Connections
@@ -168,86 +160,105 @@ func (s *TrafficService) GetLiveMetrics(ctx context.Context) (*model.LiveMetrics
 
 // Flush computes deltas from the latest Prometheus snapshot and persists them.
 func (s *TrafficService) Flush(ctx context.Context) error {
-	live, err := s.GetLiveMetrics(ctx)
+	instances, err := s.instances.List(ctx)
 	if err != nil {
-		return fmt.Errorf("fetch metrics for flush: %w", err)
+		return err
 	}
 
-	// Get previous global snapshot
-	globalSnap, err := s.traffic.GetGlobal(ctx)
-	if err != nil || globalSnap == nil {
-		// First flush or DB error — start from zero
-		globalSnap = &model.TrafficSnapshot{}
-	}
+	// Read global snapshot once before iterating instances
+	globalSnap, _ := s.traffic.GetGlobal(ctx)
 
-	// Aggregate global totals from per-user metrics
-	var totalFromClient, totalToClient float64
-	for _, um := range live.UserMetrics {
-		totalFromClient += um.OctetsFromClient
-		totalToClient += um.OctetsToClient
-	}
+	var totalGlobalIn, totalGlobalOut int64
+	var totalHistUsers = make(map[string][2]int64)
+	var accSnapIn, accSnapOut int64
 
-	// Compute global deltas from Prometheus counters
-	globalDeltaIn := int64(totalFromClient) - globalSnap.SnapIn
-	globalDeltaOut := int64(totalToClient) - globalSnap.SnapOut
-
-	// Handle counter reset: if counter reset, treat current reading as delta
-	if globalDeltaIn < 0 {
-		globalDeltaIn = int64(totalFromClient)
-	}
-	if globalDeltaOut < 0 {
-		globalDeltaOut = int64(totalToClient)
-	}
-
-	globalFlush := model.TrafficSnapshot{
-		BytesIn:  globalDeltaIn,
-		BytesOut: globalDeltaOut,
-		SnapIn:   int64(totalFromClient),
-		SnapOut:  int64(totalToClient),
-	}
-
-	// Per-user deltas — batch fetch all snapshots (M-20)
-	userSnapshots, _ := s.traffic.GetAllUserSnapshots(ctx)
-	userDeltas := make(map[string]model.TrafficSnapshot)
-	for user, um := range live.UserMetrics {
-		prev := userSnapshots[user]
-		prevSnapIn, prevSnapOut := prev[0], prev[1]
-
-		deltaIn := int64(um.OctetsFromClient) - prevSnapIn
-		deltaOut := int64(um.OctetsToClient) - prevSnapOut
-
-		// Handle counter reset
-		if deltaIn < 0 {
-			deltaIn = int64(um.OctetsFromClient)
-		}
-		if deltaOut < 0 {
-			deltaOut = int64(um.OctetsToClient)
+	for _, inst := range instances {
+		if !inst.Enabled {
+			continue
 		}
 
-		if deltaIn > 0 || deltaOut > 0 {
-			userDeltas[user] = model.TrafficSnapshot{
-				BytesIn:  deltaIn,
-				BytesOut: deltaOut,
-				SnapIn:   int64(um.OctetsFromClient),
-				SnapOut:  int64(um.OctetsToClient),
+		url := fmt.Sprintf("http://%s:%d/metrics", s.dockerAddr, inst.MetricsPort)
+		resp, err := s.client.Get(url)
+		if err != nil {
+			continue
+		}
+		live, err := promutil.FetchAndParse(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			continue
+		}
+
+		userSnapshots, _ := s.traffic.GetAllUserSnapshots(ctx, inst.ID)
+
+		var instTotalFrom, instTotalTo float64
+		userDeltas := make(map[string]model.TrafficSnapshot)
+		for user, um := range live.UserMetrics {
+			instTotalFrom += um.OctetsFromClient
+			instTotalTo += um.OctetsToClient
+
+			prev := userSnapshots[user]
+			deltaIn := int64(um.OctetsFromClient) - prev[0]
+			deltaOut := int64(um.OctetsToClient) - prev[1]
+
+			if deltaIn < 0 {
+				deltaIn = int64(um.OctetsFromClient)
+			}
+			if deltaOut < 0 {
+				deltaOut = int64(um.OctetsToClient)
+			}
+
+			if deltaIn > 0 || deltaOut > 0 {
+				userDeltas[user] = model.TrafficSnapshot{
+					BytesIn:  deltaIn,
+					BytesOut: deltaOut,
+					SnapIn:   int64(um.OctetsFromClient),
+					SnapOut:  int64(um.OctetsToClient),
+				}
+			}
+		}
+
+		// Accumulate instance totals for global snapshot comparison regardless of deltas.
+		accSnapIn += int64(instTotalFrom)
+		accSnapOut += int64(instTotalTo)
+
+		if len(userDeltas) > 0 {
+			if err := s.traffic.FlushInstanceTraffic(ctx, userDeltas, inst.ID); err != nil {
+				trafficLog.Warnf("flush instance %d: %v", inst.ID, err)
+				continue
+			}
+
+			for label, snap := range userDeltas {
+				totalGlobalIn += snap.BytesIn
+				totalGlobalOut += snap.BytesOut
+				existing := totalHistUsers[label]
+				totalHistUsers[label] = [2]int64{existing[0] + snap.BytesIn, existing[1] + snap.BytesOut}
 			}
 		}
 	}
 
-	if err := s.traffic.FlushTraffic(ctx, globalFlush, userDeltas); err != nil {
-		return fmt.Errorf("flush traffic: %w", err)
+	// Update global once with accumulated totals
+	if totalGlobalIn > 0 || totalGlobalOut > 0 || accSnapIn > 0 || accSnapOut > 0 {
+		globalDeltaIn := accSnapIn - globalSnap.SnapIn
+		globalDeltaOut := accSnapOut - globalSnap.SnapOut
+		if globalDeltaIn < 0 {
+			globalDeltaIn = accSnapIn
+		}
+		if globalDeltaOut < 0 {
+			globalDeltaOut = accSnapOut
+		}
+
+		if err := s.traffic.UpdateGlobal(ctx, globalDeltaIn, globalDeltaOut, accSnapIn, accSnapOut); err != nil {
+			trafficLog.Warnf("flush global: %v", err)
+		}
 	}
 
-	// Record history (non-critical)
-	historyUsers := make(map[string][2]int64, len(userDeltas))
-	for label, snap := range userDeltas {
-		historyUsers[label] = [2]int64{snap.BytesIn, snap.BytesOut}
-	}
-	if err := s.traffic.InsertHistoryBatch(ctx, time.Now().Unix(), globalDeltaIn, globalDeltaOut, historyUsers); err != nil {
-		trafficLog.Warnf("failed to record traffic history: %v", err)
+	if totalGlobalIn > 0 || totalGlobalOut > 0 {
+		if err := s.traffic.InsertHistoryBatch(ctx, time.Now().Unix(), totalGlobalIn, totalGlobalOut, totalHistUsers); err != nil {
+			trafficLog.Warnf("failed to record traffic history: %v", err)
+		}
 	}
 
-	trafficLog.Debugf("flush ok: global ↓%d ↑%d, users=%d", globalDeltaIn, globalDeltaOut, len(userDeltas))
+	trafficLog.Debugf("flush ok: global ↓%d ↑%d", totalGlobalIn, totalGlobalOut)
 	return nil
 }
 

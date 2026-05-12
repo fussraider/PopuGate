@@ -1,5 +1,7 @@
 package model
 
+import "encoding/json"
+
 // SecretTemplate represents a reusable preset for secret limits.
 type SecretTemplate struct {
 	ID          int64  `json:"id" db:"id"`
@@ -9,4 +11,15 @@ type SecretTemplate struct {
 	QuotaBytes  int64  `json:"quota_bytes" db:"quota_bytes"`
 	ExpiresDays int    `json:"expires_days" db:"expires_days"`
 	Notes       string `json:"notes" db:"notes"`
+	Tags        string `json:"tags" db:"tags"`
+}
+
+// GetTags parses the JSON tags array.
+func (t *SecretTemplate) GetTags() []string {
+	if t.Tags == "" || t.Tags == "[]" {
+		return nil
+	}
+	var tags []string
+	json.Unmarshal([]byte(t.Tags), &tags)
+	return tags
 }

@@ -13,6 +13,7 @@ import (
 
 	"github.com/fussraider/PopuGate/internal/bot"
 	"github.com/fussraider/PopuGate/internal/store"
+	"github.com/fussraider/PopuGate/pkg/logger"
 )
 
 // BotHandler handles Telegram bot endpoints.
@@ -75,6 +76,11 @@ func (h *BotHandler) Setup(c *gin.Context) {
 
 	// Start the bot with new config
 	h.startBot(c.Request.Context(), req.BotToken, req.ChatID)
+
+	// Register commands in Telegram so they appear as autocomplete
+	if err := bot.SetCommandsForToken(c.Request.Context(), req.BotToken); err != nil {
+		logger.WithScope("bot").Warnf("setMyCommands failed during setup: %v", err)
+	}
 
 	auditLog(c, "bot.setup", "bot configured")
 	c.JSON(http.StatusOK, gin.H{"ok": true})
@@ -273,4 +279,30 @@ func detectChatID(ctx context.Context, botToken string) (string, error) {
 	}
 
 	return "", fmt.Errorf("no messages with chat_id found")
+}
+
+// SetCommands handles POST /api/v1/bot/commands
+// @Summary      Update bot commands
+// @Description  Registers the current command list with Telegram via setMyCommands
+// @Tags         bot
+// @Produce      json
+// @Success      200  {object}  map[string]string
+// @Failure      400  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /bot/commands [post]
+func (h *BotHandler) SetCommands(c *gin.Context) {
+	settings, _ := h.settings.Load(c.Request.Context())
+	if settings.TelegramBotToken == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "bot token not configured"})
+		return
+	}
+
+	if err := bot.SetCommandsForToken(c.Request.Context(), settings.TelegramBotToken); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		return
+	}
+
+	auditLog(c, "bot.commands", "bot commands updated")
+	c.JSON(http.StatusOK, gin.H{"ok": true})
 }

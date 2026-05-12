@@ -19,8 +19,9 @@ func setupSecretTestRouter(t *testing.T) (*gin.Engine, *SecretHandler) {
 	gin.SetMode(gin.TestMode)
 	db := testutil.OpenTestDB(t)
 	secretStore := store.NewSecretStore(db)
+	instanceStore := store.NewInstanceStore(db)
 	settingsStore := store.NewSettingsStore(db)
-	secretSvc := service.NewSecretService(secretStore)
+	secretSvc := service.NewSecretService(secretStore, instanceStore, settingsStore)
 	handler := NewSecretHandler(secretSvc, settingsStore)
 
 	r := gin.New()

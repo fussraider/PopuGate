@@ -1,5 +1,5 @@
-import { createRouter, createWebHistory } from 'vue-router'
-import { useAuthStore } from '@/stores/auth'
+import {createRouter, createWebHistory} from 'vue-router'
+import {useAuthStore} from '@/stores/auth'
 
 const routes = [
   {
@@ -45,8 +45,7 @@ const routes = [
       },
       {
         path: 'proxy',
-        name: 'Proxy',
-        component: () => import('@/views/ProxyView.vue'),
+        redirect: '/instances',
       },
       {
         path: 'docker',

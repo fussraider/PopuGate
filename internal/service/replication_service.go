@@ -18,13 +18,14 @@ import (
 
 // ReplicationService handles master/slave sync.
 type ReplicationService struct {
-	settings *store.SettingsStore
-	slaves   *store.SlaveStore
+	settings  *store.SettingsStore
+	slaves    *store.SlaveStore
+	instances *store.InstanceStore
 }
 
 // NewReplicationService creates a new ReplicationService.
-func NewReplicationService(settings *store.SettingsStore, slaves *store.SlaveStore) *ReplicationService {
-	return &ReplicationService{settings: settings, slaves: slaves}
+func NewReplicationService(settings *store.SettingsStore, slaves *store.SlaveStore, instances *store.InstanceStore) *ReplicationService {
+	return &ReplicationService{settings: settings, slaves: slaves, instances: instances}
 }
 
 // SyncAll syncs to all enabled slaves (with lock file to prevent concurrent runs).
@@ -61,10 +62,10 @@ func (s *ReplicationService) SyncAll(ctx context.Context) []sshutil.SyncResult {
 			logger.WithScope("replication").Warnf("update status for %s: %v", sl.Host, err)
 		}
 
-		// Restart remote container if files changed
+		// Restart remote containers if files changed
 		if result.FilesSent > 0 && settings.ReplicationRestartOnChange {
 			cfg := s.buildSyncConfig(settings, sl)
-			if err := sshutil.RestartRemote(ctx, cfg, model.ContainerName); err != nil {
+			if err := s.restartRemoteInstances(ctx, cfg, sl.Host); err != nil {
 				logger.WithScope("replication").Warnf("restart remote %s: %v", sl.Host, err)
 			}
 		}
@@ -124,7 +125,12 @@ func (s *ReplicationService) TestSSH(ctx context.Context, host string) (*model.S
 		if err == nil {
 			var buf bytes.Buffer
 			session.Stdout = &buf
-			if err := session.Run(fmt.Sprintf("docker ps --filter name=%s --format '{{.Status}}'", shellescape(model.ContainerName))); err == nil {
+			instances, _ := s.instances.ListEnabled(ctx)
+			containerFilter := model.ContainerName
+			if len(instances) > 0 {
+				containerFilter = instances[0].ContainerName()
+			}
+			if err := session.Run(fmt.Sprintf("docker ps --filter name=%s --format '{{.Status}}'", shellescape(containerFilter))); err == nil {
 				result.DockerStatus = strings.TrimSpace(buf.String())
 			}
 			session.Close()
@@ -167,6 +173,27 @@ func (s *ReplicationService) buildSyncConfig(settings *model.Settings, sl model.
 		DeleteExtra:    settings.ReplicationDeleteExtra,
 		KnownHostsPath: filepath.Join(model.InstallDir, ".ssh", "known_hosts"),
 	}
+}
+
+func (s *ReplicationService) restartRemoteInstances(ctx context.Context, cfg sshutil.SyncConfig, host string) error {
+	instances, err := s.instances.ListEnabled(ctx)
+	if err != nil {
+		return fmt.Errorf("list enabled instances: %w", err)
+	}
+	if len(instances) == 0 {
+		return fmt.Errorf("no enabled instances to restart on %s", host)
+	}
+	var firstErr error
+	for _, inst := range instances {
+		containerName := inst.ContainerName()
+		if err := sshutil.RestartRemote(ctx, cfg, containerName); err != nil {
+			logger.WithScope("replication").Warnf("restart %s on %s: %v", containerName, host, err)
+			if firstErr == nil {
+				firstErr = err
+			}
+		}
+	}
+	return firstErr
 }
 
 // shellescape wraps a string in single quotes for safe shell interpolation.

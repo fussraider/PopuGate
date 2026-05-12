@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/fussraider/PopuGate/internal/store"
@@ -52,7 +53,6 @@ type HealthStatus struct {
 func (h *HealthService) Check(ctx context.Context) *HealthStatus {
 	status := &HealthStatus{}
 
-	// Docker check
 	if h.docker.IsInstalled(ctx) {
 		status.Docker = "installed"
 	} else {
@@ -104,7 +104,29 @@ func (h *HealthService) Check(ctx context.Context) *HealthStatus {
 	return status
 }
 
-// AutoRecover attempts to start the proxy if it's unexpectedly stopped.
+// InstanceHealth checks health for a specific instance.
+func (h *HealthService) InstanceHealth(ctx context.Context, id int64) (string, error) {
+	inst, err := h.instances.GetByID(ctx, id)
+	if err != nil {
+		return "error", err
+	}
+	if inst == nil {
+		return "not_found", fmt.Errorf("instance %d not found", id)
+	}
+
+	running, err := h.docker.IsInstanceRunning(ctx, inst.ContainerName())
+	if err != nil || !running {
+		return "stopped", nil
+	}
+
+	if !h.isMetricsResponding(inst.MetricsPort) {
+		return "unhealthy", nil
+	}
+
+	return "healthy", nil
+}
+
+// AutoRecover attempts to start instances that are enabled but not running.
 func (h *HealthService) AutoRecover(ctx context.Context) error {
 	if h.docker == nil {
 		return nil
@@ -115,46 +137,58 @@ func (h *HealthService) AutoRecover(ctx context.Context) error {
 		return err
 	}
 
-	allRunning := true
+	// Check if intentionally stopped
+	if _, err := os.Stat("/tmp/.popugate_stopped"); err == nil {
+		return nil
+	}
+
+	if h.containerSvc == nil {
+		return fmt.Errorf("auto-recovery: container service not available")
+	}
+
+	var toRecover []int64
 	for _, inst := range insts {
 		if !inst.Enabled {
 			continue
 		}
 		running, err := h.docker.IsInstanceRunning(ctx, inst.ContainerName())
 		if err != nil || !running {
-			allRunning = false
-			break
+			toRecover = append(toRecover, inst.ID)
 		}
 	}
 
-	if allRunning {
-		return nil // already running
+	if len(toRecover) == 0 {
+		return nil
 	}
 
-	// Check if intentionally stopped (flag set by ContainerService.Stop)
-	if _, err := os.Stat("/tmp/.popugate_stopped"); err == nil {
-		return nil // intentionally stopped
+	recovered := 0
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	for _, id := range toRecover {
+		wg.Add(1)
+		go func(instID int64) {
+			defer wg.Done()
+			healthLog.Infof("attempting recovery for instance %d...", instID)
+			if err := h.containerSvc.StartInstance(ctx, instID); err != nil {
+				healthLog.Warnf("recovery failed for instance %d: %v", instID, err)
+			} else {
+				mu.Lock()
+				recovered++
+				mu.Unlock()
+			}
+		}(id)
+	}
+	wg.Wait()
+
+	if recovered > 0 {
+		healthLog.Infof("auto-recovery: %d instance(s) recovered", recovered)
 	}
 
-	// Attempt recovery
-	if h.containerSvc == nil {
-		return fmt.Errorf("auto-recovery: container service not available")
-	}
-
-	healthLog.Infof("some instances not running, attempting auto-recovery...")
-	if err := h.containerSvc.Start(ctx); err != nil {
-		return fmt.Errorf("auto-recovery failed: %w", err)
-	}
-	healthLog.Infof("auto-recovery successful")
 	return nil
 }
 
 func (h *HealthService) isPortListening(port int) bool {
-	// Try host.docker.internal first if in Docker, fallback to 127.0.0.1
-	addr := "127.0.0.1"
-	if _, err := os.Stat("/.dockerenv"); err == nil {
-		addr = "host.docker.internal"
-	}
+	addr := dockerutil.DockerHostAddr()
 	conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", addr, port), 2*time.Second)
 	if err != nil {
 		return false
@@ -164,15 +198,16 @@ func (h *HealthService) isPortListening(port int) bool {
 }
 
 func (h *HealthService) isMetricsResponding(port int) bool {
-	// Try host.docker.internal first if in Docker, fallback to 127.0.0.1
-	addr := "127.0.0.1"
-	if _, err := os.Stat("/.dockerenv"); err == nil {
-		addr = "host.docker.internal"
-	}
-	resp, err := h.client.Get(fmt.Sprintf("http://%s:%d/metrics", addr, port))
+	addr := dockerutil.DockerHostAddr()
+	url := fmt.Sprintf("http://%s:%d/metrics", addr, port)
+	resp, err := h.client.Get(url)
 	if err != nil {
+		healthLog.Debugf("metrics check %s: %v", url, err)
 		return false
 	}
 	resp.Body.Close()
+	if resp.StatusCode != 200 {
+		healthLog.Debugf("metrics check %s: status %d", url, resp.StatusCode)
+	}
 	return resp.StatusCode == 200
 }

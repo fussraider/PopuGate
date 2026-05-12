@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -28,7 +29,7 @@ func (s *SecretStore) List(ctx context.Context) ([]model.Secret, error) {
 		       s.tags, s.archived_at,
 		       COALESCE(t.bytes_in, 0), COALESCE(t.bytes_out, 0)
 		FROM secrets s
-		LEFT JOIN traffic_user t ON s.label = t.label
+		LEFT JOIN (SELECT label, SUM(bytes_in) AS bytes_in, SUM(bytes_out) AS bytes_out FROM traffic_user GROUP BY label) t ON s.label = t.label
 		ORDER BY s.id
 	`)
 	if err != nil {
@@ -65,7 +66,7 @@ func (s *SecretStore) GetByLabel(ctx context.Context, label string) (*model.Secr
 		       s.tags, s.archived_at,
 		       COALESCE(t.bytes_in, 0), COALESCE(t.bytes_out, 0)
 		FROM secrets s
-		LEFT JOIN traffic_user t ON s.label = t.label
+		LEFT JOIN (SELECT label, SUM(bytes_in) AS bytes_in, SUM(bytes_out) AS bytes_out FROM traffic_user GROUP BY label) t ON s.label = t.label
 		WHERE s.label = ?
 	`, label).Scan(&sec.ID, &sec.Label, &sec.SecretKey, &sec.CreatedAt,
 		&enabled, &sec.MaxConns, &sec.MaxIPs, &sec.QuotaBytes,
@@ -172,17 +173,6 @@ func (s *SecretStore) ListEnabledLabels(ctx context.Context) ([]string, error) {
 		return nil, fmt.Errorf("iterate labels: %w", err)
 	}
 	return labels, nil
-}
-
-// UpdateTraffic increments the traffic counter for a user.
-func (s *SecretStore) UpdateTraffic(ctx context.Context, label string, deltaIn, deltaOut int64) error {
-	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO traffic_user (label, bytes_in, bytes_out) VALUES (?, ?, ?)
-		ON CONFLICT(label) DO UPDATE SET
-			bytes_in = bytes_in + excluded.bytes_in,
-			bytes_out = bytes_out + excluded.bytes_out
-	`, label, deltaIn, deltaOut)
-	return err
 }
 
 // ResetTraffic clears traffic for a specific user.
@@ -336,8 +326,8 @@ func (s *SecretStore) ListByTag(ctx context.Context, tag string) ([]model.Secret
 		       s.tags, s.archived_at,
 		       COALESCE(t.bytes_in, 0), COALESCE(t.bytes_out, 0)
 		FROM secrets s
-		LEFT JOIN traffic_user t ON s.label = t.label
-		WHERE ',' || s.tags || ',' LIKE '%,' || ? || ',%'
+		LEFT JOIN (SELECT label, SUM(bytes_in) AS bytes_in, SUM(bytes_out) AS bytes_out FROM traffic_user GROUP BY label) t ON s.label = t.label
+		WHERE EXISTS (SELECT 1 FROM json_each(s.tags) WHERE json_each.value = ?)
 		ORDER BY s.id
 	`, tag)
 	if err != nil {
@@ -456,7 +446,7 @@ func (s *SecretStore) Search(ctx context.Context, query string) ([]model.Secret,
 		       s.tags, s.archived_at,
 		       COALESCE(t.bytes_in, 0), COALESCE(t.bytes_out, 0)
 		FROM secrets s
-		LEFT JOIN traffic_user t ON s.label = t.label
+		LEFT JOIN (SELECT label, SUM(bytes_in) AS bytes_in, SUM(bytes_out) AS bytes_out FROM traffic_user GROUP BY label) t ON s.label = t.label
 		WHERE s.label LIKE '%' || ? || '%' OR s.notes LIKE '%' || ? || '%'
 		ORDER BY s.id
 	`, query, query)
@@ -478,7 +468,7 @@ func (s *SecretStore) Top(ctx context.Context, limit int) ([]model.Secret, error
 		       s.tags, s.archived_at,
 		       COALESCE(t.bytes_in, 0), COALESCE(t.bytes_out, 0)
 		FROM secrets s
-		LEFT JOIN traffic_user t ON s.label = t.label
+		LEFT JOIN (SELECT label, SUM(bytes_in) AS bytes_in, SUM(bytes_out) AS bytes_out FROM traffic_user GROUP BY label) t ON s.label = t.label
 		ORDER BY (COALESCE(t.bytes_in, 0) + COALESCE(t.bytes_out, 0)) DESC
 		LIMIT ?
 	`, limit)
@@ -491,7 +481,7 @@ func (s *SecretStore) Top(ctx context.Context, limit int) ([]model.Secret, error
 
 // ListAllTags returns all unique tags across all secrets.
 func (s *SecretStore) ListAllTags(ctx context.Context) ([]string, error) {
-	rows, err := s.db.QueryContext(ctx, "SELECT tags FROM secrets WHERE tags IS NOT NULL AND tags != ''")
+	rows, err := s.db.QueryContext(ctx, "SELECT tags FROM secrets WHERE tags IS NOT NULL AND tags != '' AND tags != '[]'")
 	if err != nil {
 		return nil, fmt.Errorf("list tags: %w", err)
 	}
@@ -504,7 +494,11 @@ func (s *SecretStore) ListAllTags(ctx context.Context) ([]string, error) {
 		if err := rows.Scan(&tagStr); err != nil {
 			continue
 		}
-		for _, t := range strings.Split(tagStr, ",") {
+		var parsed []string
+		if err := json.Unmarshal([]byte(tagStr), &parsed); err != nil {
+			continue
+		}
+		for _, t := range parsed {
 			t = strings.TrimSpace(t)
 			if t != "" && !seen[t] {
 				seen[t] = true
@@ -519,7 +513,7 @@ func (s *SecretStore) ListAllTags(ctx context.Context) ([]string, error) {
 func (s *SecretStore) LabelsByTag(ctx context.Context, tag string) ([]string, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT label FROM secrets
-		WHERE ',' || tags || ',' LIKE '%,' || ? || ',%'
+		WHERE EXISTS (SELECT 1 FROM json_each(tags) WHERE json_each.value = ?)
 		ORDER BY id
 	`, tag)
 	if err != nil {

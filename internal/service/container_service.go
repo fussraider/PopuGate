@@ -2,9 +2,12 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
+	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -19,6 +22,9 @@ const stopFlagPath = "/tmp/.popugate_stopped"
 
 var statusLog = logger.WithScope("status")
 
+// ErrNoMatchingSecrets is returned when an instance has no matching secrets.
+var ErrNoMatchingSecrets = errors.New("no matching secrets: add a secret with a matching tag or remove instance tags")
+
 // ContainerService manages proxy container lifecycle.
 type ContainerService struct {
 	docker     *dockerutil.DockerClient
@@ -29,6 +35,7 @@ type ContainerService struct {
 	settings   *store.SettingsStore
 	trafficSvc *TrafficService
 	notify     NotifyFunc
+	client     *http.Client
 }
 
 // NewContainerService creates a new ContainerService.
@@ -49,6 +56,7 @@ func NewContainerService(
 		traffic:    traffic,
 		settings:   settings,
 		trafficSvc: trafficSvc,
+		client:     &http.Client{Timeout: 2 * time.Second},
 	}
 }
 
@@ -57,7 +65,6 @@ func (s *ContainerService) SetNotify(fn NotifyFunc) { s.notify = fn }
 
 // Start starts all enabled proxy instances.
 func (s *ContainerService) Start(ctx context.Context) error {
-	// Remove stop flag — allow auto-recovery again
 	os.Remove(stopFlagPath)
 
 	settings, err := s.settings.Load(ctx)
@@ -65,7 +72,6 @@ func (s *ContainerService) Start(ctx context.Context) error {
 		return fmt.Errorf("load settings: %w", err)
 	}
 
-	// Ensure at least one enabled secret exists
 	enabledCount, err := s.secrets.CountEnabled(ctx)
 	if err != nil {
 		return err
@@ -74,7 +80,6 @@ func (s *ContainerService) Start(ctx context.Context) error {
 		return fmt.Errorf("no enabled secrets; add at least one secret first")
 	}
 
-	// Start instances
 	if err := s.startInstances(ctx, settings); err != nil {
 		return fmt.Errorf("start instances: %w", err)
 	}
@@ -85,17 +90,14 @@ func (s *ContainerService) Start(ctx context.Context) error {
 
 // Stop stops all proxy instances.
 func (s *ContainerService) Stop(ctx context.Context) error {
-	// Flush traffic before stopping
 	if err := s.flushTraffic(ctx); err != nil {
 		statusLog.Warnf("traffic flush before stop: %v", err)
 	}
 
-	// Write stop flag to prevent auto-recovery from restarting
 	if err := os.WriteFile(stopFlagPath, fmt.Appendf(nil, "%d", time.Now().Unix()), 0644); err != nil {
 		statusLog.Warnf("write stop flag: %v", err)
 	}
 
-	// Stop instances in parallel, but wait for all to complete
 	insts, err := s.instances.List(ctx)
 	if err != nil {
 		statusLog.Warnf("list instances for stop: %v", err)
@@ -120,6 +122,60 @@ func (s *ContainerService) Stop(ctx context.Context) error {
 	return nil
 }
 
+// StopInstance stops a specific instance by ID.
+func (s *ContainerService) StopInstance(ctx context.Context, id int64) error {
+	inst, err := s.instances.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if inst == nil {
+		return fmt.Errorf("instance %d not found", id)
+	}
+	stopCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	return s.docker.StopInstance(stopCtx, inst.ContainerName(), 10)
+}
+
+// StartInstance starts a specific instance by ID.
+func (s *ContainerService) StartInstance(ctx context.Context, id int64) error {
+	settings, err := s.settings.Load(ctx)
+	if err != nil {
+		return fmt.Errorf("load settings: %w", err)
+	}
+
+	inst, err := s.instances.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if inst == nil {
+		return fmt.Errorf("instance %d not found", id)
+	}
+
+	count, err := s.matchingSecretCount(ctx, inst.GetTags())
+	if err != nil {
+		return err
+	}
+	if count == 0 {
+		return ErrNoMatchingSecrets
+	}
+
+	if err := s.generateInstanceConfig(ctx, settings, inst); err != nil {
+		return fmt.Errorf("generate config: %w", err)
+	}
+
+	_, err = s.docker.RunInstance(ctx, dockerutil.InstanceRunOptions{
+		RunOptions: dockerutil.RunOptions{
+			Image:      model.DockerImageBase + ":latest",
+			ConfigPath: inst.ConfigPath(),
+			CPUs:       settings.ProxyCPUs,
+			Memory:     settings.ProxyMemory,
+		},
+		Name: inst.ContainerName(),
+		Port: inst.Port,
+	})
+	return err
+}
+
 // Restart stops and starts the proxy.
 func (s *ContainerService) Restart(ctx context.Context) error {
 	if err := s.Stop(ctx); err != nil {
@@ -129,6 +185,28 @@ func (s *ContainerService) Restart(ctx context.Context) error {
 	return s.Start(ctx)
 }
 
+// ReloadInstance regenerates config and sends SIGHUP for a specific instance.
+func (s *ContainerService) ReloadInstance(ctx context.Context, id int64) error {
+	settings, err := s.settings.Load(ctx)
+	if err != nil {
+		return err
+	}
+
+	inst, err := s.instances.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if inst == nil {
+		return fmt.Errorf("instance %d not found", id)
+	}
+
+	if err := s.generateInstanceConfig(ctx, settings, inst); err != nil {
+		return err
+	}
+
+	return s.docker.KillSignalInstance(ctx, inst.ContainerName(), "SIGHUP")
+}
+
 // Reload regenerates config and sends SIGHUP for hot-reload.
 func (s *ContainerService) Reload(ctx context.Context) error {
 	settings, err := s.settings.Load(ctx)
@@ -136,33 +214,20 @@ func (s *ContainerService) Reload(ctx context.Context) error {
 		return err
 	}
 
-	// Regenerate primary config
-	if err := s.generateConfig(ctx, settings, model.ConfigDir()+"/config.toml"); err != nil {
-		return err
-	}
-
-	// SIGHUP the primary container
-	if err := s.docker.KillSignal(ctx, "SIGHUP"); err != nil {
-		return err
-	}
-
-	// Regenerate and SIGHUP all running instances
 	insts, err := s.instances.List(ctx)
 	if err != nil {
-		return nil // best effort for instances
+		return err
 	}
 	for _, inst := range insts {
 		if !inst.Enabled {
 			continue
 		}
-		running, _ := s.docker.IsInstanceRunning(ctx, inst.ContainerName())
-		if !running {
+		if err := s.generateInstanceConfig(ctx, settings, &inst); err != nil {
+			statusLog.Warnf("generate config for instance %d: %v", inst.ID, err)
 			continue
 		}
-		instanceSettings := *settings
-		instanceSettings.ProxyPort = inst.Port
-		instanceSettings.ProxyMetricsPort = inst.MetricsPort
-		if err := s.generateConfig(ctx, &instanceSettings, inst.ConfigPath()); err != nil {
+		running, _ := s.docker.IsInstanceRunning(ctx, inst.ContainerName())
+		if !running {
 			continue
 		}
 		if err := s.docker.KillSignalInstance(ctx, inst.ContainerName(), "SIGHUP"); err != nil {
@@ -184,15 +249,39 @@ func (s *ContainerService) Status(ctx context.Context) (*model.ProxyStatus, erro
 		return status, nil
 	}
 
-	// Check if any instance is running to set global Running status
+	// Pre-load matching secret counts for all instances
+	secretCounts := make(map[int64]int, len(insts))
+	dbSecrets, _ := s.secrets.List(ctx)
+	for _, inst := range insts {
+		instanceTags := inst.GetTags()
+		count := 0
+		for _, sec := range dbSecrets {
+			if sec.Enabled && model.TagsMatch(instanceTags, sec.GetTags()) {
+				count++
+			}
+		}
+		secretCounts[inst.ID] = count
+	}
+
 	var firstRunningInst *model.Instance
 	for i, inst := range insts {
 		running, _ := s.docker.IsInstanceRunning(ctx, inst.ContainerName())
-		status.Instances = append(status.Instances, model.InstanceStatus{
-			Port:    inst.Port,
-			Running: running,
-			Label:   inst.Label,
-		})
+		is := model.InstanceStatus{
+			ID:                  inst.ID,
+			Port:                inst.Port,
+			Running:             running,
+			Label:               inst.Label,
+			TLSDomain:           inst.TLSDomain,
+			FakeTLS:             inst.FakeTLS,
+			ContainerName:       inst.ContainerName(),
+			MatchingSecretCount: secretCounts[inst.ID],
+		}
+		if running {
+			is.Status = "healthy"
+		} else if inst.Enabled {
+			is.Status = "stopped"
+		}
+		status.Instances = append(status.Instances, is)
 		if running {
 			status.Running = true
 			if firstRunningInst == nil {
@@ -201,7 +290,6 @@ func (s *ContainerService) Status(ctx context.Context) (*model.ProxyStatus, erro
 		}
 	}
 
-	// If at least one instance is running, get more details from the first one
 	if firstRunningInst != nil {
 		info, err := s.docker.ContainerInspect(ctx, firstRunningInst.ContainerName())
 		if err == nil {
@@ -213,7 +301,6 @@ func (s *ContainerService) Status(ctx context.Context) (*model.ProxyStatus, erro
 			}
 		}
 
-		// Add metrics if available
 		metrics, err := s.trafficSvc.GetLiveMetrics(ctx)
 		if err != nil {
 			statusLog.Warnf("live metrics unavailable: %v", err)
@@ -223,7 +310,6 @@ func (s *ContainerService) Status(ctx context.Context) (*model.ProxyStatus, erro
 		}
 	}
 
-	// Global traffic (all-time)
 	if global, err := s.traffic.GetGlobal(ctx); err == nil && global != nil {
 		status.TrafficIn = global.BytesIn
 		status.TrafficOut = global.BytesOut
@@ -232,18 +318,138 @@ func (s *ContainerService) Status(ctx context.Context) (*model.ProxyStatus, erro
 	return status, nil
 }
 
-func (s *ContainerService) generateConfig(ctx context.Context, settings *model.Settings, configPath string) error {
-	// Gather secrets
+// InstanceStatus returns detailed status for a specific instance.
+func (s *ContainerService) InstanceStatus(ctx context.Context, id int64) (string, error) {
+	inst, err := s.instances.GetByID(ctx, id)
+	if err != nil {
+		return "", err
+	}
+	if inst == nil {
+		return "", fmt.Errorf("instance %d not found", id)
+	}
+
+	running, err := s.docker.IsInstanceRunning(ctx, inst.ContainerName())
+	if err != nil {
+		return "error", nil
+	}
+	if !running {
+		return "stopped", nil
+	}
+
+	// Check metrics endpoint
+	addr := dockerutil.DockerHostAddr()
+	resp, err := s.client.Get(fmt.Sprintf("http://%s:%d/metrics", addr, inst.MetricsPort))
+	if err != nil || resp.StatusCode != 200 {
+		if resp != nil {
+			resp.Body.Close()
+		}
+		return "unhealthy", nil
+	}
+	resp.Body.Close()
+
+	return "healthy", nil
+}
+
+// matchingSecretCount returns the number of enabled secrets that match the given instance tags.
+func (s *ContainerService) matchingSecretCount(ctx context.Context, instanceTags []string) (int, error) {
+	dbSecrets, err := s.secrets.List(ctx)
+	if err != nil {
+		return 0, err
+	}
+	count := 0
+	for _, sec := range dbSecrets {
+		if !sec.Enabled {
+			continue
+		}
+		if model.TagsMatch(instanceTags, sec.GetTags()) {
+			count++
+		}
+	}
+	return count, nil
+}
+
+// RevalidateAllInstances checks all running instances and stops those without matching secrets.
+func (s *ContainerService) RevalidateAllInstances(ctx context.Context) {
+	insts, err := s.instances.List(ctx)
+	if err != nil {
+		statusLog.Warnf("revalidate: list instances: %v", err)
+		return
+	}
+	for _, inst := range insts {
+		if !inst.Enabled {
+			continue
+		}
+		running, _ := s.docker.IsInstanceRunning(ctx, inst.ContainerName())
+		if !running {
+			continue
+		}
+		count, err := s.matchingSecretCount(ctx, inst.GetTags())
+		if err != nil {
+			statusLog.Warnf("revalidate: check instance %d: %v", inst.ID, err)
+			continue
+		}
+		if count == 0 {
+			statusLog.Infof("stopping instance %d (%s): no matching secrets after secret change", inst.Port, inst.Label)
+			stopCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			if err := s.docker.StopInstance(stopCtx, inst.ContainerName(), 10); err != nil {
+				statusLog.Warnf("revalidate: stop instance %s: %v", inst.ContainerName(), err)
+			}
+			cancel()
+			if s.notify != nil {
+				s.notify(ctx, "⚠️ *%s* Instance \"%s\" (port %d) stopped: no matching secrets")
+			}
+		}
+	}
+}
+
+// RevalidateInstance checks a specific running instance and stops it if no matching secrets.
+func (s *ContainerService) RevalidateInstance(ctx context.Context, id int64) {
+	inst, err := s.instances.GetByID(ctx, id)
+	if err != nil || inst == nil {
+		return
+	}
+	running, _ := s.docker.IsInstanceRunning(ctx, inst.ContainerName())
+	if !running {
+		return
+	}
+	count, err := s.matchingSecretCount(ctx, inst.GetTags())
+	if err != nil {
+		statusLog.Warnf("revalidate instance %d: %v", id, err)
+		return
+	}
+	if count == 0 {
+		statusLog.Infof("stopping instance %d (%s): no matching secrets after instance change", inst.Port, inst.Label)
+		stopCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		if err := s.docker.StopInstance(stopCtx, inst.ContainerName(), 10); err != nil {
+			statusLog.Warnf("revalidate: stop instance %s: %v", inst.ContainerName(), err)
+		}
+		cancel()
+		if s.notify != nil {
+			s.notify(ctx, "⚠️ *%s* Instance stopped: no matching secrets")
+		}
+	}
+}
+
+func (s *ContainerService) generateInstanceConfig(ctx context.Context, settings *model.Settings, inst *model.Instance) error {
+	// Gather secrets, filtering by tag match
 	dbSecrets, err := s.secrets.List(ctx)
 	if err != nil {
 		return err
 	}
+	instanceTags := inst.GetTags()
 	var secretEntries []telemt.SecretEntry
 	for _, sec := range dbSecrets {
+		if !sec.Enabled {
+			continue
+		}
+		secretTags := sec.GetTags()
+		if !model.TagsMatch(instanceTags, secretTags) {
+			continue
+		}
 		secretEntries = append(secretEntries, telemt.SecretEntry{
 			Label:      sec.Label,
 			SecretKey:  sec.SecretKey,
-			Enabled:    sec.Enabled,
+			Enabled:    true,
 			MaxConns:   sec.MaxConns,
 			MaxIPs:     sec.MaxIPs,
 			QuotaBytes: sec.QuotaBytes,
@@ -251,7 +457,7 @@ func (s *ContainerService) generateConfig(ctx context.Context, settings *model.S
 		})
 	}
 
-	// Gather upstreams
+	// Gather upstreams (global)
 	dbUpstreams, err := s.upstreams.List(ctx)
 	if err != nil {
 		return err
@@ -269,15 +475,30 @@ func (s *ContainerService) generateConfig(ctx context.Context, settings *model.S
 		})
 	}
 
-	// Build and write config
-	cfg := telemt.BuildConfig(&telemt.ConfigParams{
-		Settings:              settings,
+	// Telegram config
+	var telegramCfg telemt.TelegramConfig
+	if settings.ProxySecretURL != "" || settings.ProxyConfigV4URL != "" || settings.ProxyConfigV6URL != "" {
+		telegramCfg = telemt.TelegramConfig{
+			ProxySecretURL:   settings.ProxySecretURL,
+			ProxyConfigV4URL: settings.ProxyConfigV4URL,
+			ProxyConfigV6URL: settings.ProxyConfigV6URL,
+		}
+	}
+
+	// Build per-instance config
+	cfg := telemt.BuildInstanceConfig(&telemt.InstanceConfigParams{
+		Instance:              inst,
+		FakeCertLen:           settings.FakeCertLen,
+		AdTag:                 settings.AdTag,
+		ProxyProtocol:         settings.ProxyProtocol,
+		ProxyProtocolCIDRs:    parseCIDRListSafe(settings.ProxyProtocolTrustedCIDRs),
+		Telegram:              telegramCfg,
 		Secrets:               secretEntries,
 		Upstreams:             upstreamEntries,
 		ExtraMetricsWhitelist: dockerExtraMetricsIPs(),
 	})
 
-	return telemt.WriteConfigTOML(cfg, configPath)
+	return telemt.WriteConfigTOML(cfg, inst.ConfigPath())
 }
 
 func (s *ContainerService) startInstances(ctx context.Context, settings *model.Settings) error {
@@ -286,29 +507,38 @@ func (s *ContainerService) startInstances(ctx context.Context, settings *model.S
 		return err
 	}
 
-	// Generate configs sequentially first (safe: writes to different files)
-	for _, inst := range insts {
+	// Generate configs sequentially, skipping instances without matching secrets
+	for i := range insts {
+		inst := &insts[i]
 		if !inst.Enabled {
 			continue
 		}
-		instanceSettings := *settings
-		instanceSettings.ProxyPort = inst.Port
-		instanceSettings.ProxyMetricsPort = inst.MetricsPort
-
-		if err := s.generateConfig(ctx, &instanceSettings, inst.ConfigPath()); err != nil {
+		count, err := s.matchingSecretCount(ctx, inst.GetTags())
+		if err != nil {
+			return fmt.Errorf("check secrets for instance %d: %w", inst.Port, err)
+		}
+		if count == 0 {
+			statusLog.Warnf("skipping instance %d (%s): no matching secrets", inst.Port, inst.Label)
+			continue
+		}
+		if err := s.generateInstanceConfig(ctx, settings, inst); err != nil {
 			return fmt.Errorf("generate config for instance %d: %w", inst.Port, err)
 		}
 	}
 
 	// Start containers in parallel
 	var (
-		wg    sync.WaitGroup
-		mu    sync.Mutex
-		first error
+		wg   sync.WaitGroup
+		mu   sync.Mutex
+		errs []error
 	)
 
 	for _, inst := range insts {
 		if !inst.Enabled {
+			continue
+		}
+		count, _ := s.matchingSecretCount(ctx, inst.GetTags())
+		if count == 0 {
 			continue
 		}
 
@@ -328,16 +558,21 @@ func (s *ContainerService) startInstances(ctx context.Context, settings *model.S
 			})
 			if err != nil {
 				mu.Lock()
-				if first == nil {
-					first = fmt.Errorf("start instance %d: %w", inst.Port, err)
-				}
+				errs = append(errs, fmt.Errorf("start instance %d: %w", inst.Port, err))
 				mu.Unlock()
 			}
 		}(inst)
 	}
 	wg.Wait()
 
-	return first
+	if len(errs) > 0 {
+		msgs := make([]string, len(errs))
+		for i, e := range errs {
+			msgs[i] = e.Error()
+		}
+		return fmt.Errorf("%d instance(s) failed: %s", len(errs), strings.Join(msgs, "; "))
+	}
+	return nil
 }
 
 func (s *ContainerService) flushTraffic(ctx context.Context) error {
@@ -367,19 +602,30 @@ func formatDuration(d time.Duration) string {
 	return fmt.Sprintf("%dm", minutes)
 }
 
+func parseCIDRListSafe(s string) []string {
+	if s == "" {
+		return nil
+	}
+	parts := make([]string, 0)
+	for _, p := range strings.Split(s, ",") {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			parts = append(parts, p)
+		}
+	}
+	return parts
+}
+
 // dockerExtraMetricsIPs returns additional source IPs to whitelist for the
 // telemt metrics endpoint when the backend is running inside a Docker container.
-// Telemt runs with --network host, so it sees the container's bridge IP as the
-// connection source — which must be explicitly allowed in metrics_whitelist.
 func dockerExtraMetricsIPs() []string {
-	if _, err := os.Stat("/.dockerenv"); err != nil {
+	if !dockerutil.IsDockerEnv() {
 		return nil
 	}
 
 	seen := make(map[string]bool)
 	var ips []string
 
-	// Resolve host.docker.internal (the host gateway IP the backend connects to)
 	if addrs, err := net.LookupHost("host.docker.internal"); err == nil {
 		for _, addr := range addrs {
 			if !seen[addr] {
@@ -389,7 +635,6 @@ func dockerExtraMetricsIPs() []string {
 		}
 	}
 
-	// Get container's own non-loopback IPs (the source IPs telemt will see)
 	if addrs, err := net.InterfaceAddrs(); err == nil {
 		for _, addr := range addrs {
 			if ipNet, ok := addr.(*net.IPNet); ok && !ipNet.IP.IsLoopback() {

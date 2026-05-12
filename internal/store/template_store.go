@@ -21,7 +21,7 @@ func NewTemplateStore(db *sql.DB) *TemplateStore {
 // List returns all templates.
 func (s *TemplateStore) List(ctx context.Context) ([]model.SecretTemplate, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, name, max_conns, max_ips, quota_bytes, expires_days, notes
+		SELECT id, name, max_conns, max_ips, quota_bytes, expires_days, notes, tags
 		FROM secret_templates ORDER BY id
 	`)
 	if err != nil {
@@ -32,7 +32,7 @@ func (s *TemplateStore) List(ctx context.Context) ([]model.SecretTemplate, error
 	var templates []model.SecretTemplate
 	for rows.Next() {
 		var t model.SecretTemplate
-		if err := rows.Scan(&t.ID, &t.Name, &t.MaxConns, &t.MaxIPs, &t.QuotaBytes, &t.ExpiresDays, &t.Notes); err != nil {
+		if err := rows.Scan(&t.ID, &t.Name, &t.MaxConns, &t.MaxIPs, &t.QuotaBytes, &t.ExpiresDays, &t.Notes, &t.Tags); err != nil {
 			return nil, fmt.Errorf("scan template: %w", err)
 		}
 		templates = append(templates, t)
@@ -44,9 +44,9 @@ func (s *TemplateStore) List(ctx context.Context) ([]model.SecretTemplate, error
 func (s *TemplateStore) GetByName(ctx context.Context, name string) (*model.SecretTemplate, error) {
 	var t model.SecretTemplate
 	err := s.db.QueryRowContext(ctx, `
-		SELECT id, name, max_conns, max_ips, quota_bytes, expires_days, notes
+		SELECT id, name, max_conns, max_ips, quota_bytes, expires_days, notes, tags
 		FROM secret_templates WHERE name = ?
-	`, name).Scan(&t.ID, &t.Name, &t.MaxConns, &t.MaxIPs, &t.QuotaBytes, &t.ExpiresDays, &t.Notes)
+	`, name).Scan(&t.ID, &t.Name, &t.MaxConns, &t.MaxIPs, &t.QuotaBytes, &t.ExpiresDays, &t.Notes, &t.Tags)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -59,9 +59,9 @@ func (s *TemplateStore) GetByName(ctx context.Context, name string) (*model.Secr
 // Create inserts a new template.
 func (s *TemplateStore) Create(ctx context.Context, t *model.SecretTemplate) error {
 	result, err := s.db.ExecContext(ctx, `
-		INSERT INTO secret_templates (name, max_conns, max_ips, quota_bytes, expires_days, notes)
-		VALUES (?, ?, ?, ?, ?, ?)
-	`, t.Name, t.MaxConns, t.MaxIPs, t.QuotaBytes, t.ExpiresDays, t.Notes)
+		INSERT INTO secret_templates (name, max_conns, max_ips, quota_bytes, expires_days, notes, tags)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+	`, t.Name, t.MaxConns, t.MaxIPs, t.QuotaBytes, t.ExpiresDays, t.Notes, t.Tags)
 	if err != nil {
 		return fmt.Errorf("create template: %w", err)
 	}

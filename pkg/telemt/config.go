@@ -60,13 +60,16 @@ type TimeoutsConfig struct {
 }
 
 type CensorshipConfig struct {
-	TLSDomain         string `toml:"tls_domain"`
-	UnknownSNIAction  string `toml:"unknown_sni_action"`
-	Mask              bool   `toml:"mask"`
-	MaskPort          int    `toml:"mask_port"`
-	MaskHost          string `toml:"mask_host,omitempty"`
-	MaskRelayMaxBytes int64  `toml:"mask_relay_max_bytes,omitempty"`
-	FakeCertLen       int    `toml:"fake_cert_len"`
+	TLSDomain         string   `toml:"tls_domain"`
+	TLSDomains        []string `toml:"tls_domains,omitempty"`
+	UnknownSNIAction  string   `toml:"unknown_sni_action"`
+	Mask              bool     `toml:"mask"`
+	MaskPort          int      `toml:"mask_port"`
+	MaskHost          string   `toml:"mask_host,omitempty"`
+	MaskRelayMaxBytes int64    `toml:"mask_relay_max_bytes,omitempty"`
+	FakeCertLen       int      `toml:"fake_cert_len"`
+	TLSEmulation      bool     `toml:"tls_emulation"`
+	TLSFrontDir       string   `toml:"tls_front_dir,omitempty"`
 }
 
 type TelegramConfig struct {
@@ -101,7 +104,21 @@ type ConfigParams struct {
 	Settings              *model.Settings
 	Secrets               []SecretEntry
 	Upstreams             []UpstreamEntry
-	ExtraMetricsWhitelist []string // Additional IPs to allow in metrics_whitelist (e.g. Docker bridge IPs)
+	ExtraMetricsWhitelist []string
+}
+
+// InstanceConfigParams holds per-instance parameters for config generation.
+type InstanceConfigParams struct {
+	Instance              *model.Instance
+	DockerImage           string
+	FakeCertLen           int
+	AdTag                 string
+	ProxyProtocol         bool
+	ProxyProtocolCIDRs    []string
+	Telegram              TelegramConfig
+	Secrets               []SecretEntry
+	Upstreams             []UpstreamEntry
+	ExtraMetricsWhitelist []string
 }
 
 // SecretEntry represents a secret for TOML generation.
@@ -126,7 +143,7 @@ type UpstreamEntry struct {
 	Enabled  bool
 }
 
-// BuildConfig constructs the telemt TOML configuration.
+// BuildConfig constructs the telemt TOML configuration (legacy: from global settings).
 func BuildConfig(params *ConfigParams) *TelemtConfig {
 	s := params.Settings
 
@@ -256,6 +273,139 @@ func BuildConfig(params *ConfigParams) *TelemtConfig {
 	return cfg
 }
 
+// BuildInstanceConfig constructs a telemt TOML config for a specific instance.
+func BuildInstanceConfig(params *InstanceConfigParams) *TelemtConfig {
+	inst := params.Instance
+
+	metricsWhitelist := []string{"127.0.0.1", "::1"}
+	metricsWhitelist = append(metricsWhitelist, params.ExtraMetricsWhitelist...)
+
+	// Modes: FakeTLS → tls=true, classic=false; no FakeTLS → classic=true, secure=false.
+	// Secure mode (dd-secrets) is intentionally false when FakeTLS is disabled,
+	// matching the legacy behavior where Secure = !MaskingEnabled and no FakeTLS
+	// means no masking.
+	modes := ModesConfig{TLS: inst.FakeTLS, Secure: false}
+	if !inst.FakeTLS {
+		modes.Classic = true
+	}
+
+	cfg := &TelemtConfig{
+		General: GeneralConfig{
+			PreferIPv6:     false,
+			FastMode:       true,
+			UseMiddleProxy: true,
+			LogLevel:       "normal",
+			Modes:          modes,
+			Links: LinksConfig{
+				Show: getEnabledLabels(params.Secrets),
+			},
+		},
+		Server: ServerConfig{
+			Port:             inst.Port,
+			ListenAddrIPv4:   "0.0.0.0",
+			ListenAddrIPv6:   "::",
+			ProxyProtocol:    params.ProxyProtocol,
+			MetricsListen:    metricsListenAddr(inst.MetricsPort, params.ExtraMetricsWhitelist),
+			MetricsWhitelist: metricsWhitelist,
+		},
+		Timeouts: TimeoutsConfig{
+			ClientHandshake: 30,
+			TGConnect:       10,
+			ClientKeepalive: 15,
+			ClientAck:       90,
+		},
+		Access: AccessConfig{
+			ReplayCheckLen:   65536,
+			ReplayWindowSecs: 1800,
+			IgnoreTimeSkew:   false,
+			Users:            make(map[string]string),
+		},
+	}
+
+	// Ad tag
+	if params.AdTag != "" {
+		cfg.General.AdTag = params.AdTag
+	}
+
+	// Censorship section — only for FakeTLS instances
+	if inst.FakeTLS {
+		tlsDomains := inst.GetTLSDomains()
+		cfg.Censorship = CensorshipConfig{
+			TLSDomain:        inst.TLSDomain,
+			TLSDomains:       tlsDomains,
+			UnknownSNIAction: "mask",
+			Mask:             true,
+			MaskHost:         inst.GetMaskHost(),
+			MaskPort:         inst.MaskPort,
+			FakeCertLen:      params.FakeCertLen,
+			TLSEmulation:     true,
+			TLSFrontDir:      "tlsfront",
+		}
+	}
+
+	// Proxy protocol trusted CIDRs
+	if params.ProxyProtocol && len(params.ProxyProtocolCIDRs) > 0 {
+		cfg.Server.ProxyProtocolTrustedCIDRs = params.ProxyProtocolCIDRs
+	}
+
+	// Telegram
+	if params.Telegram.ProxySecretURL != "" || params.Telegram.ProxyConfigV4URL != "" || params.Telegram.ProxyConfigV6URL != "" {
+		cfg.Telegram = params.Telegram
+	}
+
+	// Secrets
+	cfg.Access.UserMaxTCPConns = make(map[string]int)
+	cfg.Access.UserMaxUniqueIPs = make(map[string]int)
+	cfg.Access.UserDataQuota = make(map[string]int64)
+	cfg.Access.UserExpirations = make(map[string]string)
+
+	for _, sec := range params.Secrets {
+		if !sec.Enabled {
+			continue
+		}
+		cfg.Access.Users[sec.Label] = sec.SecretKey
+
+		if sec.MaxConns > 0 {
+			cfg.Access.UserMaxTCPConns[sec.Label] = sec.MaxConns
+		}
+		if sec.MaxIPs > 0 {
+			cfg.Access.UserMaxUniqueIPs[sec.Label] = sec.MaxIPs
+		}
+		if sec.QuotaBytes > 0 {
+			cfg.Access.UserDataQuota[sec.Label] = sec.QuotaBytes
+		}
+		if sec.ExpiresAt != "" && sec.ExpiresAt != "0" {
+			cfg.Access.UserExpirations[sec.Label] = sec.ExpiresAt
+		}
+	}
+
+	// Upstreams (global)
+	for _, up := range params.Upstreams {
+		if !up.Enabled {
+			continue
+		}
+		uc := UpstreamConfig{
+			Type:   string(up.Type),
+			Weight: up.Weight,
+		}
+		if up.Type != model.UpstreamDirect {
+			uc.Address = up.Address
+			if up.Type == model.UpstreamSOCKS5 {
+				uc.Username = up.Username
+				uc.Password = up.Password
+			} else if up.Type == model.UpstreamSOCKS4 {
+				uc.UserID = up.Username
+			}
+		}
+		if up.Iface != "" {
+			uc.Interface = up.Iface
+		}
+		cfg.Upstreams = append(cfg.Upstreams, uc)
+	}
+
+	return cfg
+}
+
 // metricsListenAddr returns "0.0.0.0:port" when running inside Docker
 // (so the host can reach metrics via host.docker.internal), otherwise
 // "127.0.0.1:port".
@@ -343,21 +493,32 @@ func renderTOML(cfg *TelemtConfig) string {
 	b.WriteString(fmt.Sprintf("client_ack = %d\n", cfg.Timeouts.ClientAck))
 	b.WriteString("\n")
 
-	// [censorship]
-	b.WriteString("[censorship]\n")
-	b.WriteString(fmt.Sprintf("tls_domain = %q\n", cfg.Censorship.TLSDomain))
-	b.WriteString(fmt.Sprintf("unknown_sni_action = %q\n", cfg.Censorship.UnknownSNIAction))
-	b.WriteString(fmt.Sprintf("mask = %v\n", cfg.Censorship.Mask))
-	b.WriteString(fmt.Sprintf("mask_port = %d\n", cfg.Censorship.MaskPort))
-	if cfg.Censorship.Mask && cfg.Censorship.MaskHost != "" {
-		b.WriteString(fmt.Sprintf("mask_host = %q\n", cfg.Censorship.MaskHost))
+	// [censorship] — only if FakeTLS is enabled (TLSDomain is non-empty)
+	if cfg.Censorship.TLSDomain != "" {
+		b.WriteString("[censorship]\n")
+		b.WriteString(fmt.Sprintf("tls_domain = %q\n", cfg.Censorship.TLSDomain))
+		if len(cfg.Censorship.TLSDomains) > 0 {
+			b.WriteString(fmt.Sprintf("tls_domains = %s\n", formatStringArray(cfg.Censorship.TLSDomains)))
+		}
+		b.WriteString(fmt.Sprintf("unknown_sni_action = %q\n", cfg.Censorship.UnknownSNIAction))
+		b.WriteString(fmt.Sprintf("mask = %v\n", cfg.Censorship.Mask))
+		b.WriteString(fmt.Sprintf("mask_port = %d\n", cfg.Censorship.MaskPort))
+		if cfg.Censorship.Mask && cfg.Censorship.MaskHost != "" {
+			b.WriteString(fmt.Sprintf("mask_host = %q\n", cfg.Censorship.MaskHost))
+		}
+		b.WriteString(fmt.Sprintf("fake_cert_len = %d\n", cfg.Censorship.FakeCertLen))
+		if cfg.Censorship.MaskRelayMaxBytes > 0 {
+			b.WriteString(fmt.Sprintf("mask_relay_max_bytes = %d\n", cfg.Censorship.MaskRelayMaxBytes))
+		}
+		if cfg.Censorship.TLSEmulation {
+			b.WriteString("tls_emulation = true\n")
+		}
+		if cfg.Censorship.TLSFrontDir != "" {
+			b.WriteString(fmt.Sprintf("tls_front_dir = %q\n", cfg.Censorship.TLSFrontDir))
+		}
+		b.WriteString("# Note: geo-blocking is enforced at the host firewall level (iptables/nftables),\n")
+		b.WriteString("# not via telemt config.\n\n")
 	}
-	b.WriteString(fmt.Sprintf("fake_cert_len = %d\n", cfg.Censorship.FakeCertLen))
-	if cfg.Censorship.MaskRelayMaxBytes > 0 {
-		b.WriteString(fmt.Sprintf("mask_relay_max_bytes = %d\n", cfg.Censorship.MaskRelayMaxBytes))
-	}
-	b.WriteString("# Note: geo-blocking is enforced at the host firewall level (iptables/nftables),\n")
-	b.WriteString("# not via telemt config.\n\n")
 
 	// [access]
 	b.WriteString("[access]\n")

@@ -20,6 +20,7 @@ func TestTemplateStore_CRUD(t *testing.T) {
 		QuotaBytes:  1024 * 1024 * 1024,
 		ExpiresDays: 30,
 		Notes:       "basic plan",
+		Tags:        `["premium","vip"]`,
 	}
 
 	if err := s.Create(ctx, tmpl); err != nil {
@@ -39,6 +40,9 @@ func TestTemplateStore_CRUD(t *testing.T) {
 	if got.MaxConns != 5 {
 		t.Fatalf("expected max_conns=5, got %d", got.MaxConns)
 	}
+	if got.Tags != `["premium","vip"]` {
+		t.Fatalf("expected tags=[\"premium\",\"vip\"], got %q", got.Tags)
+	}
 
 	templates, err := s.List(ctx)
 	if err != nil {
@@ -46,6 +50,9 @@ func TestTemplateStore_CRUD(t *testing.T) {
 	}
 	if len(templates) != 1 {
 		t.Fatalf("expected 1 template, got %d", len(templates))
+	}
+	if templates[0].Tags != `["premium","vip"]` {
+		t.Fatalf("List: expected tags=[\"premium\",\"vip\"], got %q", templates[0].Tags)
 	}
 
 	if err := s.Delete(ctx, "basic"); err != nil {

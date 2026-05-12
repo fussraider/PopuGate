@@ -1,6 +1,7 @@
 package testutil
 
 import (
+	"context"
 	"database/sql"
 	"embed"
 	"fmt"
@@ -104,4 +105,21 @@ func applyMigrations(db *sql.DB) error {
 	}
 
 	return nil
+}
+
+// SeedTraffic inserts traffic data for testing via raw SQL.
+func SeedTraffic(t *testing.T, db *sql.DB, label string, bytesIn, bytesOut int64) {
+	t.Helper()
+	_, err := db.ExecContext(context.Background(), `
+		INSERT INTO traffic_user (label, instance_id, bytes_in, bytes_out, snap_in, snap_out)
+		VALUES (?, 1, ?, ?, ?, ?)
+		ON CONFLICT(label, instance_id) DO UPDATE SET
+			bytes_in = bytes_in + excluded.bytes_in,
+			bytes_out = bytes_out + excluded.bytes_out,
+			snap_in = excluded.snap_in,
+			snap_out = excluded.snap_out
+	`, label, bytesIn, bytesOut, bytesIn, bytesOut)
+	if err != nil {
+		t.Fatalf("SeedTraffic: %v", err)
+	}
 }

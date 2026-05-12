@@ -1,0 +1,3 @@
+-- 011_secret_tags_json.sql
+-- Convert secrets.tags from comma-separated to JSON array format
+-- Data conversion is handled by Go code in db.go (migrateSecretTagsToJSON)

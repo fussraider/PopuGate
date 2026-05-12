@@ -1,6 +1,6 @@
-import { defineStore } from 'pinia'
-import { ref } from 'vue'
-import { botApi } from '@/api/endpoints'
+import {defineStore} from 'pinia'
+import {ref} from 'vue'
+import {botApi} from '@/api/endpoints'
 
 export const useBotStore = defineStore('bot', () => {
   const enabled = ref(false)
@@ -60,5 +60,17 @@ export const useBotStore = defineStore('bot', () => {
     }
   }
 
-  return { enabled, running, loading, message, setup, test, loadStatus, toggle, detectChatId }
+  async function setCommands() {
+    loading.value = true
+    try {
+      await botApi.setCommands()
+      message.value = 'Bot commands updated'
+    } catch (e: any) {
+      message.value = e.message
+    } finally {
+      loading.value = false
+    }
+  }
+
+  return { enabled, running, loading, message, setup, test, loadStatus, toggle, detectChatId, setCommands }
 })

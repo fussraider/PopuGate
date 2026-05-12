@@ -85,6 +85,64 @@ func TestTemplateHandler_CreateAndGet(t *testing.T) {
 	}
 }
 
+func TestTemplateHandler_CreateWithTags(t *testing.T) {
+	r, _ := setupTemplateTestRouter(t)
+
+	body := `{"name":"vip","max_conns":10,"tags":"[\"premium\",\"vip\"]"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/templates", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var tmpl model.SecretTemplate
+	if err := json.Unmarshal(w.Body.Bytes(), &tmpl); err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if tmpl.Tags != `["premium","vip"]` {
+		t.Errorf("Tags = %q, want [\"premium\",\"vip\"]", tmpl.Tags)
+	}
+}
+
+func TestTemplateHandler_Create_InvalidTags(t *testing.T) {
+	r, _ := setupTemplateTestRouter(t)
+
+	body := `{"name":"bad","max_conns":1,"tags":"not-an-array"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/templates", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestTemplateHandler_Create_NoTagsDefaultsEmpty(t *testing.T) {
+	r, _ := setupTemplateTestRouter(t)
+
+	body := `{"name":"plain","max_conns":1}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/templates", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var tmpl model.SecretTemplate
+	if err := json.Unmarshal(w.Body.Bytes(), &tmpl); err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if tmpl.Tags != "[]" {
+		t.Errorf("Tags = %q, want []", tmpl.Tags)
+	}
+}
+
 func TestTemplateHandler_Get_NotFound(t *testing.T) {
 	r, _ := setupTemplateTestRouter(t)
 
@@ -190,6 +248,44 @@ func TestTemplateHandler_Apply(t *testing.T) {
 	sec, _ := secStore.GetByLabel(ctx, "user1")
 	if sec.MaxConns != 50 {
 		t.Errorf("MaxConns = %d, want 50", sec.MaxConns)
+	}
+}
+
+func TestTemplateHandler_Apply_WithTags(t *testing.T) {
+	r, secStore := setupTemplateTestRouter(t)
+	ctx := context.Background()
+
+	secStore.Create(ctx, &model.Secret{
+		Label: "user1", SecretKey: "aa000000000000000000000000000000",
+		Enabled: true, Tags: `["old"]`,
+	})
+
+	// Create template with tags
+	body := `{"name":"tagged","max_conns":10,"tags":"[\"premium\",\"vip\"]"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/templates", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create template: expected 201, got %d: %s", w.Code, w.Body.String())
+	}
+
+	applyBody := `{"secret_label":"user1"}`
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/templates/tagged/apply", strings.NewReader(applyBody))
+	req.Header.Set("Content-Type", "application/json")
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("apply: expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	sec, _ := secStore.GetByLabel(ctx, "user1")
+	if sec.MaxConns != 10 {
+		t.Errorf("MaxConns = %d, want 10", sec.MaxConns)
+	}
+	if sec.Tags != `["premium","vip"]` {
+		t.Errorf("Tags = %q, want [\"premium\",\"vip\"]", sec.Tags)
 	}
 }
 

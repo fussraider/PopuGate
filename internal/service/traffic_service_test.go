@@ -28,12 +28,12 @@ func seedTrafficData(t *testing.T, ts *store.TrafficStore) {
 	}
 
 	// Seed user traffic
-	err = ts.UpdateUserTraffic(ctx, "user1", 300, 400, 150, 200)
+	err = ts.UpdateUserTraffic(ctx, "user1", 1, 300, 400, 150, 200)
 	if err != nil {
 		t.Fatalf("UpdateUserTraffic user1: %v", err)
 	}
 
-	err = ts.UpdateUserTraffic(ctx, "user2", 500, 600, 250, 300)
+	err = ts.UpdateUserTraffic(ctx, "user2", 1, 500, 600, 250, 300)
 	if err != nil {
 		t.Fatalf("UpdateUserTraffic user2: %v", err)
 	}

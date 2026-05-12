@@ -94,6 +94,7 @@
       <div class="form-group mb-md">
         <label class="form-label">{{ isEdit ? t('upstreams.name_label') : t('upstreams.table.name') }}</label>
         <input v-model="form.name" class="input" :disabled="isEdit" required placeholder="upstream1" />
+        <small class="text-muted">{{ t('upstreams.hint_name') }}</small>
       </div>
       <div class="form-group mb-md">
         <label class="form-label">{{ t('upstreams.table.type') }}</label>
@@ -102,10 +103,12 @@
           <option value="socks5">SOCKS5</option>
           <option value="socks4">SOCKS4</option>
         </select>
+        <small class="text-muted">{{ t('upstreams.hint_type') }}</small>
       </div>
       <div v-if="form.type !== 'direct'" class="form-group mb-md">
         <label class="form-label">{{ t('upstreams.address_label') }}</label>
         <input v-model="form.address" class="input" required placeholder="127.0.0.1:1080" />
+        <small class="text-muted">{{ t('upstreams.hint_address') }}</small>
       </div>
       <template v-if="form.type === 'socks5'">
         <div class="form-row mb-sm">
@@ -118,11 +121,13 @@
             <input v-model="form.password" class="input" type="password" />
           </div>
         </div>
+        <small class="text-muted">{{ t('upstreams.hint_credentials') }}</small>
       </template>
       <div class="form-row mb-sm">
         <div class="form-group">
           <label class="form-label">{{ t('upstreams.table.weight') }}</label>
           <input v-model.number="form.weight" class="input" type="number" min="1" value="1" />
+          <small class="text-muted">{{ t('upstreams.hint_weight') }}</small>
         </div>
         <div class="form-group">
           <label class="form-label">{{ t('upstreams.table.interface') }}</label>
@@ -132,6 +137,7 @@
               {{ nic.name }} <template v-if="nic.addresses.length">( {{ nic.addresses[0] }} )</template>
             </option>
           </select>
+          <small class="text-muted">{{ t('upstreams.hint_interface') }}</small>
         </div>
       </div>
       <template #footer>

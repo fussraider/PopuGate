@@ -61,18 +61,33 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import { useI18n } from 'vue-i18n'
-import { useAuthStore } from '@/stores/auth'
+import {computed, ref} from 'vue'
+import {useRoute, useRouter} from 'vue-router'
+import {useI18n} from 'vue-i18n'
+import {useAuthStore} from '@/stores/auth'
 import Toast from '@/components/common/Toast.vue'
 import ThemeToggle from '@/components/common/ThemeToggle.vue'
 import LanguageSwitcher from '@/components/common/LanguageSwitcher.vue'
 import {
-  LayoutDashboard, KeyRound, GitBranch, Server, Play,
-  Container, Globe, TrendingUp, Bot, RefreshCw, Package,
-  Save, Settings, Monitor, Menu, LogOut, X, CalendarClock,
-  FileText, LayoutTemplate,
+  Bot,
+  CalendarClock,
+  Container,
+  FileText,
+  GitBranch,
+  Globe,
+  KeyRound,
+  LayoutDashboard,
+  LayoutTemplate,
+  LogOut,
+  Menu,
+  Monitor,
+  Package,
+  RefreshCw,
+  Save,
+  Server,
+  Settings,
+  TrendingUp,
+  X,
 } from '@lucide/vue'
 
 const { t } = useI18n()
@@ -91,7 +106,6 @@ const sidebarOpen = ref(false)
 
 const navItems = computed(() => [
   { path: '/',            icon: LayoutDashboard, label: t('common.dashboard'),   group: 'overview' },
-  { path: '/proxy',       icon: Play,            label: t('common.proxy'),       group: 'proxy' },
   { path: '/instances',   icon: Server,          label: t('common.instances'),   group: 'proxy' },
   { path: '/upstreams',   icon: GitBranch,       label: t('common.upstreams'),   group: 'proxy' },
   { path: '/docker',      icon: Container,       label: t('common.docker'),      group: 'proxy' },

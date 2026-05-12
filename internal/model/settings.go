@@ -182,7 +182,7 @@ func (s *Settings) Validate() {
 
 // Constants for the application.
 const (
-	ContainerName    = "popugate"
+	ContainerName    = "popugate-telemt"
 	DockerImageBase  = "popugate-telemt"
 	DefaultTelemtVer = "3.3.39"
 	DefaultTelemtRef = "bc69153"
@@ -259,7 +259,28 @@ type ProxyStatus struct {
 
 // InstanceStatus for multi-port instances.
 type InstanceStatus struct {
-	Port    int    `json:"port"`
-	Running bool   `json:"running"`
-	Label   string `json:"label"`
+	ID                  int64  `json:"id"`
+	Port                int    `json:"port"`
+	Running             bool   `json:"running"`
+	Label               string `json:"label"`
+	TLSDomain           string `json:"tls_domain"`
+	FakeTLS             bool   `json:"fake_tls"`
+	Status              string `json:"status"` // "healthy", "unhealthy", "stopped"
+	ContainerName       string `json:"container_name,omitempty"`
+	MatchingSecretCount int    `json:"matching_secret_count"`
+}
+
+// ProxyLink represents a single proxy link for a specific instance+domain combination.
+type ProxyLink struct {
+	InstanceLabel string `json:"instance_label"`
+	InstancePort  int    `json:"instance_port"`
+	Domain        string `json:"domain"`
+	TGLink        string `json:"tg_link"`
+	WebLink       string `json:"web_link"`
+}
+
+// SecretWithLinks extends Secret with multiple proxy links (one per instance×domain).
+type SecretWithLinks struct {
+	Secret
+	Links []ProxyLink `json:"links"`
 }

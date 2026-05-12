@@ -1,37 +1,49 @@
 <template>
-  <div class="tooltip-wrapper">
+  <div class="tooltip-wrapper" ref="triggerRef" @mouseenter="show" @mouseleave="hide">
     <slot />
-    <div class="tooltip-box">
-      {{ text }}
-    </div>
+    <Teleport to="body">
+      <div v-if="visible" class="tooltip-box" :style="positionStyle">
+        {{ text }}
+      </div>
+    </Teleport>
   </div>
 </template>
 
 <script setup lang="ts">
+import {computed, ref} from 'vue'
+
 defineProps<{ text: string }>()
-</script>
 
-<style scoped lang="scss">
-@use '@/assets/scss/variables' as *;
+const triggerRef = ref<HTMLElement | null>(null)
+const visible = ref(false)
+const coords = ref({ top: 0, left: 0 })
 
-.tooltip-wrapper {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
+const positionStyle = computed(() => ({
+  top: `${coords.value.top}px`,
+  left: `${coords.value.left}px`,
+}))
 
-  &:hover .tooltip-box {
-    visibility: visible;
-    opacity: 1;
-    transform: translateX(-50%) translateY(-8px);
+function show() {
+  if (!triggerRef.value) return
+  const rect = triggerRef.value.getBoundingClientRect()
+  coords.value = {
+    top: rect.top - 8,
+    left: rect.left + rect.width / 2,
   }
+  visible.value = true
 }
 
+function hide() {
+  visible.value = false
+}
+</script>
+
+<style lang="scss">
+@use '@/assets/scss/variables' as *;
+
 .tooltip-box {
-  visibility: hidden;
-  position: absolute;
-  bottom: 100%;
-  left: 50%;
-  transform: translateX(-50%) translateY(0);
+  position: fixed;
+  transform: translateX(-50%) translateY(-100%);
   background-color: $color-gray-900;
   color: #fff;
   text-align: center;
@@ -43,9 +55,7 @@ defineProps<{ text: string }>()
   width: max-content;
   max-width: 280px;
   white-space: pre-line;
-  z-index: 100;
-  opacity: 0;
-  transition: opacity 0.2s, transform 0.2s;
+  z-index: 99999;
   pointer-events: none;
   box-shadow: $shadow-lg;
 

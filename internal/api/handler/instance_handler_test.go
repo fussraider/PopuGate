@@ -3,6 +3,7 @@ package handler
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -23,7 +24,14 @@ func setupInstanceTestRouter(t *testing.T) (*gin.Engine, *InstanceHandler) {
 	r := gin.New()
 	r.GET("/api/v1/instances", handler.List)
 	r.POST("/api/v1/instances", handler.Add)
-	r.DELETE("/api/v1/instances/:port", handler.Remove)
+	r.PUT("/api/v1/instances/:id", handler.Update)
+	r.DELETE("/api/v1/instances/:id", handler.Remove)
+	r.GET("/api/v1/instances/check-port", handler.CheckPort)
+	r.POST("/api/v1/instances/:id/start", handler.StartInstance)
+	r.POST("/api/v1/instances/:id/stop", handler.StopInstance)
+	r.POST("/api/v1/instances/:id/reload", handler.ReloadInstance)
+	r.GET("/api/v1/instances/:id/status", handler.InstanceStatus)
+	r.GET("/api/v1/instances/:id/logs", handler.InstanceLogs)
 
 	return r, handler
 }
@@ -31,15 +39,26 @@ func setupInstanceTestRouter(t *testing.T) (*gin.Engine, *InstanceHandler) {
 // addInstance is a test helper that adds an instance and returns the response code.
 func addInstance(t *testing.T, r *gin.Engine, port, metricsPort int, label string) int {
 	t.Helper()
+	return addInstanceFull(t, r, port, metricsPort, label, nil)
+}
+
+// addInstanceFull adds an instance and returns the response code.
+// If respOut is provided, the response JSON is decoded into it.
+func addInstanceFull(t *testing.T, r *gin.Engine, port, metricsPort int, label string, respOut *map[string]interface{}) int {
+	t.Helper()
 	body, _ := json.Marshal(map[string]interface{}{
 		"port":         port,
 		"metrics_port": metricsPort,
 		"label":        label,
+		"tls_domain":   "example.com",
 	})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/instances", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
+	if respOut != nil {
+		json.Unmarshal(w.Body.Bytes(), respOut)
+	}
 	return w.Code
 }
 
@@ -83,8 +102,9 @@ func TestInstanceHandler_Add_WithAutoMetricsPort(t *testing.T) {
 
 	// Add second instance without metrics_port (auto-assign)
 	body, _ := json.Marshal(map[string]interface{}{
-		"port":  8443,
-		"label": "Second",
+		"port":       8443,
+		"label":      "Second",
+		"tls_domain": "example.com",
 	})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/instances", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -97,9 +117,71 @@ func TestInstanceHandler_Add_WithAutoMetricsPort(t *testing.T) {
 
 	var resp map[string]interface{}
 	json.Unmarshal(w.Body.Bytes(), &resp)
-	// metrics_port should be auto-assigned (9091 + 1 = 9092)
 	if resp["metrics_port"] == nil {
 		t.Error("expected auto-assigned metrics_port")
+	}
+}
+
+func TestInstanceHandler_Add_PortEqualsMetricsPort(t *testing.T) {
+	r, _ := setupInstanceTestRouter(t)
+
+	body, _ := json.Marshal(map[string]interface{}{
+		"port":         443,
+		"metrics_port": 443,
+		"label":        "Bad",
+		"tls_domain":   "example.com",
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/instances", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp["error"] != "metrics_port must differ from port" {
+		t.Errorf("unexpected error: %v", resp["error"])
+	}
+}
+
+func TestInstanceHandler_Add_InvalidTLSDomains(t *testing.T) {
+	r, _ := setupInstanceTestRouter(t)
+
+	body, _ := json.Marshal(map[string]interface{}{
+		"port":        443,
+		"label":       "Bad",
+		"tls_domain":  "example.com",
+		"tls_domains": "not-json",
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/instances", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestInstanceHandler_Add_InvalidTags(t *testing.T) {
+	r, _ := setupInstanceTestRouter(t)
+
+	body, _ := json.Marshal(map[string]interface{}{
+		"port":       443,
+		"label":      "Bad",
+		"tls_domain": "example.com",
+		"tags":       "not-json",
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/instances", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
 	}
 }
 
@@ -147,11 +229,108 @@ func TestInstanceHandler_Add_MissingPort(t *testing.T) {
 	}
 }
 
+func TestInstanceHandler_Update(t *testing.T) {
+	r, _ := setupInstanceTestRouter(t)
+
+	var inst map[string]interface{}
+	code := addInstanceFull(t, r, 443, 9091, "Original", &inst)
+	if code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", code)
+	}
+	id := int(inst["id"].(float64))
+
+	body, _ := json.Marshal(map[string]interface{}{
+		"label": "Updated",
+	})
+	req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/api/v1/instances/%d", id), bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp["label"] != "Updated" {
+		t.Errorf("expected label=Updated, got %v", resp["label"])
+	}
+}
+
+func TestInstanceHandler_Update_NotFound(t *testing.T) {
+	r, _ := setupInstanceTestRouter(t)
+
+	body, _ := json.Marshal(map[string]interface{}{"label": "X"})
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/instances/999", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", w.Code)
+	}
+}
+
+func TestInstanceHandler_Update_PortEqualsMetricsPort(t *testing.T) {
+	r, _ := setupInstanceTestRouter(t)
+
+	var inst map[string]interface{}
+	code := addInstanceFull(t, r, 443, 9091, "Test", &inst)
+	if code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", code)
+	}
+	id := int(inst["id"].(float64))
+
+	body, _ := json.Marshal(map[string]interface{}{
+		"metrics_port": 443,
+	})
+	req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/api/v1/instances/%d", id), bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestInstanceHandler_Update_AutoAssignMetricsPort(t *testing.T) {
+	r, _ := setupInstanceTestRouter(t)
+
+	var inst map[string]interface{}
+	code := addInstanceFull(t, r, 443, 9091, "Test", &inst)
+	if code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", code)
+	}
+	id := int(inst["id"].(float64))
+
+	// Set metrics_port to 0 — should auto-assign
+	body, _ := json.Marshal(map[string]interface{}{
+		"metrics_port": 0,
+	})
+	req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/api/v1/instances/%d", id), bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	mp := int(resp["metrics_port"].(float64))
+	if mp == 0 {
+		t.Error("expected auto-assigned metrics_port, got 0")
+	}
+}
+
 func TestInstanceHandler_Remove(t *testing.T) {
 	r, _ := setupInstanceTestRouter(t)
 
-	// Add two instances so we can remove one
-	code := addInstance(t, r, 443, 9091, "First")
+	var first map[string]interface{}
+	code := addInstanceFull(t, r, 443, 9091, "First", &first)
 	if code != http.StatusCreated {
 		t.Fatalf("first: expected 201, got %d", code)
 	}
@@ -160,8 +339,8 @@ func TestInstanceHandler_Remove(t *testing.T) {
 		t.Fatalf("second: expected 201, got %d", code)
 	}
 
-	// Remove first
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/instances/443", nil)
+	id := int(first["id"].(float64))
+	req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/api/v1/instances/%d", id), nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -179,14 +358,14 @@ func TestInstanceHandler_Remove(t *testing.T) {
 func TestInstanceHandler_RemoveLastInstance(t *testing.T) {
 	r, _ := setupInstanceTestRouter(t)
 
-	// Add a single instance
-	code := addInstance(t, r, 443, 9091, "Only")
+	var inst map[string]interface{}
+	code := addInstanceFull(t, r, 443, 9091, "Only", &inst)
 	if code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d", code)
 	}
 
-	// Try to remove the last instance
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/instances/443", nil)
+	id := int(inst["id"].(float64))
+	req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/api/v1/instances/%d", id), nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -201,7 +380,7 @@ func TestInstanceHandler_RemoveLastInstance(t *testing.T) {
 	}
 }
 
-func TestInstanceHandler_Remove_InvalidPort(t *testing.T) {
+func TestInstanceHandler_Remove_InvalidID(t *testing.T) {
 	r, _ := setupInstanceTestRouter(t)
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/instances/abc", nil)
@@ -210,6 +389,159 @@ func TestInstanceHandler_Remove_InvalidPort(t *testing.T) {
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestInstanceHandler_CheckPort_Available(t *testing.T) {
+	r, _ := setupInstanceTestRouter(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/instances/check-port?port=9999", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp["available"] != true {
+		t.Errorf("expected available=true, got %v", resp["available"])
+	}
+}
+
+func TestInstanceHandler_CheckPort_ConflictWithInstance(t *testing.T) {
+	r, _ := setupInstanceTestRouter(t)
+
+	code := addInstance(t, r, 443, 9091, "Test")
+	if code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", code)
+	}
+
+	// Check the proxy port — should conflict
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/instances/check-port?port=443", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	var resp map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp["available"] != false {
+		t.Error("expected available=false for conflicting port")
+	}
+	if resp["reason"] == nil || resp["reason"] == "" {
+		t.Error("expected reason for conflict")
+	}
+}
+
+func TestInstanceHandler_CheckPort_ExcludeSelf(t *testing.T) {
+	r, _ := setupInstanceTestRouter(t)
+
+	var inst map[string]interface{}
+	code := addInstanceFull(t, r, 443, 9091, "Test", &inst)
+	if code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", code)
+	}
+	id := int(inst["id"].(float64))
+
+	// Check metrics port excluding own ID — should still conflict (port != metrics_port check)
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/instances/check-port?port=9091&exclude=%d", id), nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	var resp map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	// Port 9091 is metrics port of this instance, excluded — should be available
+	if resp["available"] != true {
+		t.Errorf("expected available=true when excluding self, got %v: %v", resp["available"], resp["reason"])
+	}
+}
+
+func TestInstanceHandler_CheckPort_InvalidPort(t *testing.T) {
+	r, _ := setupInstanceTestRouter(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/instances/check-port?port=abc", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", w.Code)
+	}
+}
+
+func TestInstanceHandler_Start_NoContainerSvc(t *testing.T) {
+	r, _ := setupInstanceTestRouter(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/instances/1/start", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d", w.Code)
+	}
+}
+
+func TestInstanceHandler_Stop_NoContainerSvc(t *testing.T) {
+	r, _ := setupInstanceTestRouter(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/instances/1/stop", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d", w.Code)
+	}
+}
+
+func TestInstanceHandler_Reload_NoContainerSvc(t *testing.T) {
+	r, _ := setupInstanceTestRouter(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/instances/1/reload", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d", w.Code)
+	}
+}
+
+func TestInstanceHandler_Status_NoContainerSvc(t *testing.T) {
+	r, _ := setupInstanceTestRouter(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/instances/1/status", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d", w.Code)
+	}
+}
+
+func TestInstanceHandler_Logs_NoDocker(t *testing.T) {
+	r, _ := setupInstanceTestRouter(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/instances/1/logs", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d", w.Code)
+	}
+}
+
+func TestInstanceHandler_Start_InvalidID(t *testing.T) {
+	r, handler := setupInstanceTestRouter(t)
+	handler.SetContainerSvc(nil) // ensure nil but route registered
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/instances/abc/start", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d", w.Code)
 	}
 }
 
@@ -235,7 +567,6 @@ func TestInstanceHandler_NextMetricsPort_Empty(t *testing.T) {
 
 	var resp map[string]interface{}
 	json.Unmarshal(w.Body.Bytes(), &resp)
-	// Default minimum is 9091
 	if int(resp["port"].(float64)) != 9091 {
 		t.Errorf("expected 9091, got %v", resp["port"])
 	}
@@ -246,7 +577,6 @@ func TestInstanceHandler_NextMetricsPort_WithExisting(t *testing.T) {
 	db := testutil.OpenTestDB(t)
 	instanceStore := store.NewInstanceStore(db)
 
-	// Add an instance with metrics_port 9091
 	code := addInstance(t, func() *gin.Engine {
 		r := gin.New()
 		r.POST("/api/v1/instances", NewInstanceHandler(instanceStore).Add)
@@ -269,8 +599,95 @@ func TestInstanceHandler_NextMetricsPort_WithExisting(t *testing.T) {
 
 	var resp map[string]interface{}
 	json.Unmarshal(w.Body.Bytes(), &resp)
-	// Should be 9091 + 1 = 9092
 	if int(resp["port"].(float64)) != 9092 {
 		t.Errorf("expected 9092, got %v", resp["port"])
+	}
+}
+
+func TestInstanceHandler_Update_InvalidTLSDomains(t *testing.T) {
+	r, _ := setupInstanceTestRouter(t)
+	addInstance(t, r, 443, 9091, "Test")
+
+	body, _ := json.Marshal(map[string]interface{}{
+		"tls_domains": "not-json",
+	})
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/instances/1", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestInstanceHandler_Update_InvalidTags(t *testing.T) {
+	r, _ := setupInstanceTestRouter(t)
+	addInstance(t, r, 443, 9091, "Test")
+
+	body, _ := json.Marshal(map[string]interface{}{
+		"tags": "not-json",
+	})
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/instances/1", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestInstanceHandler_Update_TagsInvalidFormat(t *testing.T) {
+	r, _ := setupInstanceTestRouter(t)
+	addInstance(t, r, 443, 9091, "Test")
+
+	body, _ := json.Marshal(map[string]interface{}{
+		"tags": `["tag with spaces"]`,
+	})
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/instances/1", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestInstanceHandler_Update_ValidTags(t *testing.T) {
+	r, _ := setupInstanceTestRouter(t)
+	addInstance(t, r, 443, 9091, "Test")
+
+	body, _ := json.Marshal(map[string]interface{}{
+		"tags": `["valid-tag", "another_tag"]`,
+	})
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/instances/1", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestInstanceHandler_Add_InvalidTagFormat(t *testing.T) {
+	r, _ := setupInstanceTestRouter(t)
+
+	body, _ := json.Marshal(map[string]interface{}{
+		"port":         8443,
+		"metrics_port": 9092,
+		"label":        "BadTags",
+		"tls_domain":   "example.com",
+		"tags":         `["tag with spaces"]`,
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/instances", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
 	}
 }

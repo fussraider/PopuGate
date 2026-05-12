@@ -46,3 +46,8 @@ export function formatNumber(n: number): string {
 export function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms))
 }
+
+export function parseJSONTags(tags?: string): string[] {
+  if (!tags || tags === '[]') return []
+  try { return JSON.parse(tags) } catch { return [] }
+}

@@ -78,6 +78,9 @@ func (s *TemplateService) ApplyToSecret(ctx context.Context, templateName, secre
 	sec.MaxConns = tmpl.MaxConns
 	sec.MaxIPs = tmpl.MaxIPs
 	sec.QuotaBytes = tmpl.QuotaBytes
+	if tmpl.Tags != "" && tmpl.Tags != "[]" {
+		sec.Tags = tmpl.Tags
+	}
 	if tmpl.ExpiresDays > 0 {
 		sec.ExpiresAt = time.Now().AddDate(0, 0, tmpl.ExpiresDays).Format("2006-01-02")
 	}

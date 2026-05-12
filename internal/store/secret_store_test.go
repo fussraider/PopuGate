@@ -249,12 +249,8 @@ func TestSecretStore_UpdateTrafficCumulative(t *testing.T) {
 		t.Fatalf("Create: %v", err)
 	}
 
-	if err := s.UpdateTraffic(ctx, "user1", 100, 200); err != nil {
-		t.Fatalf("UpdateTraffic first: %v", err)
-	}
-	if err := s.UpdateTraffic(ctx, "user1", 50, 75); err != nil {
-		t.Fatalf("UpdateTraffic second: %v", err)
-	}
+	testutil.SeedTraffic(t, db, "user1", 100, 200)
+	testutil.SeedTraffic(t, db, "user1", 50, 75)
 
 	got, err := s.GetByLabel(ctx, "user1")
 	if err != nil {
@@ -279,9 +275,7 @@ func TestSecretStore_ResetTraffic(t *testing.T) {
 		t.Fatalf("Create: %v", err)
 	}
 
-	if err := s.UpdateTraffic(ctx, "user1", 500, 600); err != nil {
-		t.Fatalf("UpdateTraffic: %v", err)
-	}
+	testutil.SeedTraffic(t, db, "user1", 500, 600)
 
 	if err := s.ResetTraffic(ctx, "user1"); err != nil {
 		t.Fatalf("ResetTraffic: %v", err)
@@ -309,8 +303,8 @@ func TestSecretStore_ResetAllTraffic(t *testing.T) {
 		}
 	}
 
-	s.UpdateTraffic(ctx, "user1", 100, 200)
-	s.UpdateTraffic(ctx, "user2", 300, 400)
+	testutil.SeedTraffic(t, db, "user1", 100, 200)
+	testutil.SeedTraffic(t, db, "user2", 300, 400)
 
 	if err := s.ResetAllTraffic(ctx); err != nil {
 		t.Fatalf("ResetAllTraffic: %v", err)
@@ -492,8 +486,8 @@ func TestSecretStore_Top(t *testing.T) {
 
 	s.Create(ctx, &model.Secret{Label: "low", SecretKey: "aa000000000000000000000000000000", Enabled: true})
 	s.Create(ctx, &model.Secret{Label: "high", SecretKey: "bb000000000000000000000000000000", Enabled: true})
-	s.UpdateTraffic(ctx, "high", 10000, 5000)
-	s.UpdateTraffic(ctx, "low", 100, 50)
+	testutil.SeedTraffic(t, db, "high", 10000, 5000)
+	testutil.SeedTraffic(t, db, "low", 100, 50)
 
 	results, err := s.Top(ctx, 10)
 	if err != nil {
@@ -529,7 +523,7 @@ func TestSecretStore_CloneSecret(t *testing.T) {
 
 	s.Create(ctx, &model.Secret{
 		Label: "src", SecretKey: "aa000000000000000000000000000000",
-		Enabled: true, MaxConns: 10, Tags: "vip",
+		Enabled: true, MaxConns: 10, Tags: `["vip"]`,
 	})
 
 	clone, err := s.CloneSecret(ctx, "src", "dst", "bb000000000000000000000000000000")
@@ -545,8 +539,8 @@ func TestSecretStore_CloneSecret(t *testing.T) {
 	if clone.MaxConns != 10 {
 		t.Errorf("MaxConns = %d, want 10", clone.MaxConns)
 	}
-	if clone.Tags != "vip" {
-		t.Errorf("Tags = %q, want vip", clone.Tags)
+	if clone.Tags != `["vip"]` {
+		t.Errorf("Tags = %q, want [\"vip\"]", clone.Tags)
 	}
 }
 
@@ -567,13 +561,13 @@ func TestSecretStore_UpdateTags(t *testing.T) {
 
 	s.Create(ctx, &model.Secret{Label: "user1", SecretKey: "aa000000000000000000000000000000", Enabled: true})
 
-	if err := s.UpdateTags(ctx, "user1", "vip,paid"); err != nil {
+	if err := s.UpdateTags(ctx, "user1", `["vip","paid"]`); err != nil {
 		t.Fatalf("UpdateTags: %v", err)
 	}
 
 	got, _ := s.GetByLabel(ctx, "user1")
-	if got.Tags != "vip,paid" {
-		t.Errorf("Tags = %q, want %q", got.Tags, "vip,paid")
+	if got.Tags != `["vip","paid"]` {
+		t.Errorf("Tags = %q, want %q", got.Tags, `["vip","paid"]`)
 	}
 }
 
@@ -582,9 +576,9 @@ func TestSecretStore_ListByTag(t *testing.T) {
 	s := NewSecretStore(db)
 	ctx := context.Background()
 
-	s.Create(ctx, &model.Secret{Label: "vip1", SecretKey: "aa000000000000000000000000000000", Enabled: true, Tags: "vip,paid"})
-	s.Create(ctx, &model.Secret{Label: "vip2", SecretKey: "bb000000000000000000000000000000", Enabled: true, Tags: "vip"})
-	s.Create(ctx, &model.Secret{Label: "free1", SecretKey: "cc000000000000000000000000000000", Enabled: true, Tags: "free"})
+	s.Create(ctx, &model.Secret{Label: "vip1", SecretKey: "aa000000000000000000000000000000", Enabled: true, Tags: `["vip","paid"]`})
+	s.Create(ctx, &model.Secret{Label: "vip2", SecretKey: "bb000000000000000000000000000000", Enabled: true, Tags: `["vip"]`})
+	s.Create(ctx, &model.Secret{Label: "free1", SecretKey: "cc000000000000000000000000000000", Enabled: true, Tags: `["free"]`})
 
 	results, err := s.ListByTag(ctx, "vip")
 	if err != nil {
@@ -666,7 +660,7 @@ func TestSecretStore_RenameLabel_WithTraffic(t *testing.T) {
 	ctx := context.Background()
 
 	s.Create(ctx, &model.Secret{Label: "old", SecretKey: "aa000000000000000000000000000000", Enabled: true})
-	s.UpdateTraffic(ctx, "old", 1000, 500)
+	testutil.SeedTraffic(t, db, "old", 1000, 500)
 
 	if err := s.RenameLabel(ctx, "old", "new"); err != nil {
 		t.Fatalf("RenameLabel: %v", err)
@@ -688,15 +682,15 @@ func TestSecretStore_CreateWithTags(t *testing.T) {
 
 	sec := &model.Secret{
 		Label: "tagged", SecretKey: "aa000000000000000000000000000000",
-		Enabled: true, Tags: "vip,paid",
+		Enabled: true, Tags: `["vip","paid"]`,
 	}
 	if err := s.Create(ctx, sec); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
 
 	got, _ := s.GetByLabel(ctx, "tagged")
-	if got.Tags != "vip,paid" {
-		t.Errorf("Tags = %q, want %q", got.Tags, "vip,paid")
+	if got.Tags != `["vip","paid"]` {
+		t.Errorf("Tags = %q, want %q", got.Tags, `["vip","paid"]`)
 	}
 }
 
@@ -707,7 +701,7 @@ func TestSecretStore_UpdatePreservesTags(t *testing.T) {
 
 	s.Create(ctx, &model.Secret{
 		Label: "user1", SecretKey: "aa000000000000000000000000000000",
-		Enabled: true, Tags: "test",
+		Enabled: true, Tags: `["test"]`,
 	})
 
 	got, _ := s.GetByLabel(ctx, "user1")
@@ -715,7 +709,7 @@ func TestSecretStore_UpdatePreservesTags(t *testing.T) {
 	s.Update(ctx, got)
 
 	got2, _ := s.GetByLabel(ctx, "user1")
-	if got2.Tags != "test" {
-		t.Errorf("Tags = %q, want 'test' (preserved after Update)", got2.Tags)
+	if got2.Tags != `["test"]` {
+		t.Errorf("Tags = %q, want '[\"test\"]' (preserved after Update)", got2.Tags)
 	}
 }

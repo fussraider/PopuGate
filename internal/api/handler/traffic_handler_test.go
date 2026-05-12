@@ -82,7 +82,7 @@ func TestTrafficHandler_Get_WithTraffic(t *testing.T) {
 
 	// Insert some user traffic
 	ctx := context.Background()
-	if err := trafficStore.UpdateUserTraffic(ctx, "user1", 1000, 2000, 500, 1000); err != nil {
+	if err := trafficStore.UpdateUserTraffic(ctx, "user1", 1, 1000, 2000, 500, 1000); err != nil {
 		t.Fatalf("setup traffic: %v", err)
 	}
 
@@ -155,7 +155,7 @@ func TestTrafficHandler_GetUser_WithTraffic(t *testing.T) {
 	settingsStore := store.NewSettingsStore(db)
 
 	ctx := context.Background()
-	if err := trafficStore.UpdateUserTraffic(ctx, "alice", 500, 800, 250, 400); err != nil {
+	if err := trafficStore.UpdateUserTraffic(ctx, "alice", 1, 500, 800, 250, 400); err != nil {
 		t.Fatalf("setup: %v", err)
 	}
 

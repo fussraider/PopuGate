@@ -10,6 +10,22 @@ import (
 	"github.com/fussraider/PopuGate/pkg/telemt"
 )
 
+// mdSafe strips Telegram Markdown v1 special characters from user-provided text.
+// Telegram Markdown v1 treats _, *, `, [ as formatting and fails on unbalanced pairs.
+func mdSafe(s string) string {
+	s = strings.ReplaceAll(s, "_", "-")
+	s = strings.ReplaceAll(s, "*", "")
+	s = strings.ReplaceAll(s, "`", "'")
+	s = strings.ReplaceAll(s, "[", "(")
+	s = strings.ReplaceAll(s, "]", ")")
+	return s
+}
+
+// cmdWelcome handles /start without arguments — the initial Telegram greeting.
+func (b *Bot) cmdWelcome() string {
+	return b.cmdHelp()
+}
+
 // cmdStatus shows proxy status per instance.
 func (b *Bot) cmdStatus(ctx context.Context) string {
 	settings, _ := b.deps.Settings.Load(ctx)
@@ -19,10 +35,9 @@ func (b *Bot) cmdStatus(ctx context.Context) string {
 	}
 
 	var lines []string
-	lines = append(lines, fmt.Sprintf("🔧 *%s Status*", label))
+	lines = append(lines, fmt.Sprintf("🔧 *Status* — `%s`", mdSafe(label)))
 	lines = append(lines, "")
 
-	// Per-instance status
 	instances, err := b.deps.Instances.List(ctx)
 	if err != nil || len(instances) == 0 {
 		lines = append(lines, "No instances configured.")
@@ -48,10 +63,9 @@ func (b *Bot) cmdStatus(ctx context.Context) string {
 		if domain == "" {
 			domain = "-"
 		}
-		lines = append(lines, fmt.Sprintf("Instance \"%s\" (:%d) %s — `%s`", inst.Label, inst.Port, status, domain))
+		lines = append(lines, fmt.Sprintf("`%s` :%d %s — `%s`", inst.Label, inst.Port, status, domain))
 	}
 
-	// Global traffic
 	var totalIn, totalOut int64
 	global, err := b.deps.Traffic.GetGlobal(ctx)
 	if err == nil {
@@ -102,7 +116,6 @@ func (b *Bot) cmdSecrets(ctx context.Context) string {
 }
 
 // cmdLink shows proxy links for a specific secret or all enabled secrets.
-// Generates links per instance × domain.
 func (b *Bot) cmdLink(ctx context.Context, text string) string {
 	settings, _ := b.deps.Settings.Load(ctx)
 	publicIP := ""
@@ -123,11 +136,11 @@ func (b *Bot) cmdLink(ctx context.Context, text string) string {
 		}
 
 		var lines []string
-		lines = append(lines, fmt.Sprintf("🔗 *%s*:", sec.Label))
+		lines = append(lines, fmt.Sprintf("🔗 *Links* — `%s`:", sec.Label))
 
 		links := service.BuildLinksForSecret(sec, instances, publicIP)
 		for _, link := range links {
-			lines = append(lines, fmt.Sprintf("\n[%s :%d] %s", link.InstanceLabel, link.InstancePort, link.Domain))
+			lines = append(lines, fmt.Sprintf("`%s` :%d — `%s`", link.InstanceLabel, link.InstancePort, link.Domain))
 			lines = append(lines, fmt.Sprintf("`%s`", link.TGLink))
 			lines = append(lines, link.WebLink)
 
@@ -156,7 +169,7 @@ func (b *Bot) cmdLink(ctx context.Context, text string) string {
 		}
 		links := service.BuildLinksForSecret(&s, instances, publicIP)
 		for _, link := range links {
-			allLines = append(allLines, fmt.Sprintf("🔗 `%s` [%s :%d %s]: `%s`", s.Label, link.InstanceLabel, link.InstancePort, link.Domain, link.TGLink))
+			allLines = append(allLines, fmt.Sprintf("🔗 `%s` `%s` :%d `%s`: `%s`", s.Label, link.InstanceLabel, link.InstancePort, link.Domain, link.TGLink))
 
 			if b.deps.GenerateQR != nil {
 				if qrPNG, err := b.deps.GenerateQR(ctx, link.WebLink); err == nil {
@@ -261,49 +274,30 @@ func (b *Bot) cmdRestart(ctx context.Context) string {
 	return "🔄 Proxy restarted."
 }
 
-// cmdStartInstance starts a specific instance by label, or all if no label given.
+// cmdStartInstance starts a specific instance by label.
 func (b *Bot) cmdStartInstance(ctx context.Context, text string) string {
 	label := b.args(text)
+	if label == "" {
+		return "Usage: /start <label>"
+	}
 
 	instances, err := b.deps.Instances.List(ctx)
 	if err != nil || len(instances) == 0 {
 		return "No instances found."
 	}
 
-	if label != "" {
-		for _, inst := range instances {
-			if inst.Label == label || inst.Label == strings.TrimSpace(label) {
-				if b.deps.StartInstance == nil {
-					return "⚠ Start not available."
-				}
-				if err := b.deps.StartInstance(ctx, inst.ID); err != nil {
-					return fmt.Sprintf("❌ Failed to start %q: %s", inst.Label, err.Error())
-				}
-				return fmt.Sprintf("▶ Instance %q (:%d) started.", inst.Label, inst.Port)
-			}
-		}
-		return fmt.Sprintf("Instance %q not found.", label)
-	}
-
-	// No label: start all enabled instances
-	if b.deps.StartInstance == nil {
-		return "⚠ Start not available."
-	}
-	var lines []string
 	for _, inst := range instances {
-		if !inst.Enabled {
-			continue
-		}
-		if err := b.deps.StartInstance(ctx, inst.ID); err != nil {
-			lines = append(lines, fmt.Sprintf("❌ %q: %s", inst.Label, err.Error()))
-		} else {
-			lines = append(lines, fmt.Sprintf("▶ %q (:%d)", inst.Label, inst.Port))
+		if inst.Label == label || inst.Label == strings.TrimSpace(label) {
+			if b.deps.StartInstance == nil {
+				return "⚠ Start not available."
+			}
+			if err := b.deps.StartInstance(ctx, inst.ID); err != nil {
+				return fmt.Sprintf("❌ Failed to start `%s`: %s", inst.Label, err.Error())
+			}
+			return fmt.Sprintf("▶ Instance `%s` (:%d) started.", inst.Label, inst.Port)
 		}
 	}
-	if len(lines) == 0 {
-		return "No enabled instances."
-	}
-	return strings.Join(lines, "\n")
+	return fmt.Sprintf("Instance `%s` not found.", label)
 }
 
 // cmdStopInstance stops a specific instance by label.
@@ -324,13 +318,13 @@ func (b *Bot) cmdStopInstance(ctx context.Context, text string) string {
 				return "⚠ Stop not available."
 			}
 			if err := b.deps.StopInstance(ctx, inst.ID); err != nil {
-				return fmt.Sprintf("❌ Failed to stop %q: %s", inst.Label, err.Error())
+				return fmt.Sprintf("❌ Failed to stop `%s`: %s", inst.Label, err.Error())
 			}
-			return fmt.Sprintf("⏹ Instance %q (:%d) stopped.", inst.Label, inst.Port)
+			return fmt.Sprintf("⏹ Instance `%s` (:%d) stopped.", inst.Label, inst.Port)
 		}
 	}
 
-	return fmt.Sprintf("Instance %q not found.", label)
+	return fmt.Sprintf("Instance `%s` not found.", label)
 }
 
 // cmdEnable enables a secret.
@@ -388,8 +382,10 @@ func (b *Bot) cmdDisable(ctx context.Context, text string) string {
 
 // cmdHealth runs a health check per instance.
 func (b *Bot) cmdHealth(ctx context.Context) string {
+	label := b.label
+
 	var lines []string
-	lines = append(lines, fmt.Sprintf("🏥 *%s Health*", b.label))
+	lines = append(lines, fmt.Sprintf("🏥 *Health* — `%s`", mdSafe(label)))
 
 	instances, _ := b.deps.Instances.List(ctx)
 	for _, inst := range instances {
@@ -401,15 +397,15 @@ func (b *Bot) cmdHealth(ctx context.Context) string {
 			running = b.deps.IsInstanceRunning(ctx, inst.ContainerName())
 		}
 		if running {
-			lines = append(lines, fmt.Sprintf("Instance \"%s\" (:%d): ✅ running", inst.Label, inst.Port))
+			lines = append(lines, fmt.Sprintf("`%s` (:%d): ✅ running", inst.Label, inst.Port))
 		} else {
-			lines = append(lines, fmt.Sprintf("Instance \"%s\" (:%d): ❌ stopped", inst.Label, inst.Port))
+			lines = append(lines, fmt.Sprintf("`%s` (:%d): ❌ stopped", inst.Label, inst.Port))
 		}
 	}
 
 	if b.deps.GetEngineVersion != nil {
 		if v := b.deps.GetEngineVersion(); v != "" {
-			lines = append(lines, fmt.Sprintf("Engine: v%s", v))
+			lines = append(lines, fmt.Sprintf("Engine: `v%s`", v))
 		} else {
 			lines = append(lines, "Engine: not installed")
 		}
@@ -458,9 +454,21 @@ func (b *Bot) cmdTraffic(ctx context.Context) string {
 	return strings.Join(lines, "\n")
 }
 
-// cmdUpdate checks for updates.
+// cmdUpdate shows version info.
 func (b *Bot) cmdUpdate(ctx context.Context) string {
-	return fmt.Sprintf("📦 *PopuGate v%s*\nUse the web UI to check and apply updates.", model.Version)
+	var lines []string
+	lines = append(lines, fmt.Sprintf("📦 *PopuGate* `v%s`", model.Version))
+	if model.Commit != "" && model.Commit != "unknown" {
+		lines = append(lines, fmt.Sprintf("Commit: `%s`", model.Commit))
+	}
+	if b.deps.GetEngineVersion != nil {
+		if v := b.deps.GetEngineVersion(); v != "" {
+			lines = append(lines, fmt.Sprintf("Engine: `v%s`", v))
+		}
+	}
+	lines = append(lines, "")
+	lines = append(lines, "Use the web UI to check and apply updates.")
+	return strings.Join(lines, "\n")
 }
 
 // cmdLimits shows per-user limits.
@@ -473,15 +481,15 @@ func (b *Bot) cmdLimits(ctx context.Context) string {
 	var lines []string
 	lines = append(lines, "📏 *User Limits*")
 	for _, s := range secrets {
-		conns := "unlimited"
+		conns := "∞"
 		if s.MaxConns > 0 {
 			conns = fmt.Sprintf("%d", s.MaxConns)
 		}
-		ips := "unlimited"
+		ips := "∞"
 		if s.MaxIPs > 0 {
 			ips = fmt.Sprintf("%d", s.MaxIPs)
 		}
-		quota := "unlimited"
+		quota := "∞"
 		if s.QuotaBytes > 0 {
 			quota = formatBytes(s.QuotaBytes)
 			if s.TrafficIn+s.TrafficOut > 0 {
@@ -563,7 +571,7 @@ func (b *Bot) cmdUpstreams(ctx context.Context) string {
 		if addr == "" {
 			addr = "direct"
 		}
-		lines = append(lines, fmt.Sprintf("%s `%s` (%s) weight=%d %s",
+		lines = append(lines, fmt.Sprintf("%s `%s` (%s) weight=%d `%s`",
 			status, u.Name, u.Type, u.Weight, addr))
 	}
 	return strings.Join(lines, "\n")
@@ -583,29 +591,42 @@ func (b *Bot) cmdTasks(ctx context.Context) string {
 	return strings.Join(lines, "\n")
 }
 
-// cmdHelp shows all available commands.
+// cmdHelp shows a bot description and all available commands.
 func (b *Bot) cmdHelp() string {
+	label := b.label
+	if label == "" {
+		label = "PopuGate"
+	}
 	return strings.Join([]string{
-		"📖 *PopuGate Bot Commands*",
+		fmt.Sprintf("📖 *Bot* — `%s`", mdSafe(label)),
 		"",
-		"/status — Proxy status",
+		"Telegram MTProto proxy manager. Use the commands below to control your proxy, manage secrets, and monitor traffic.",
+		"",
+		"*Management:*",
+		"/status — Proxy status & connections",
+		"/health — Health check (Docker, ports, metrics)",
+		"/restart — Restart proxy",
+		"/start <label> — Start instance",
+		"/stop <label> — Stop instance",
+		"",
+		"*Secrets:*",
 		"/secrets — List secrets",
-		"/link [label] — Proxy links",
+		"/link [label] — Proxy links + QR",
 		"/add <label> — Add secret",
 		"/remove <label> — Remove secret",
-		"/rotate <label> — Rotate secret",
-		"/restart — Restart proxy",
-		"/start [label] — Start instance (all if no label)",
-		"/stop <label> — Stop instance",
+		"/rotate <label> — Rotate secret key",
 		"/enable <label> — Enable secret",
 		"/disable <label> — Disable secret",
-		"/health — Health check",
-		"/traffic — Traffic report",
-		"/update — Version info",
-		"/limits — Show user limits",
+		"",
+		"*Limits & Traffic:*",
+		"/limits — Show all user limits",
 		"/setlimit <label> <conns> <ips> <quota_mb> [date] — Set limits",
+		"/traffic — Traffic report",
+		"",
+		"*System:*",
 		"/upstreams — List upstreams",
-		"/tasks — Scheduled tasks",
+		"/tasks — Scheduled tasks status",
+		"/update — Version info",
 		"/help — This message",
 	}, "\n")
 }

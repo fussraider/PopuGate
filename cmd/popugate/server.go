@@ -310,6 +310,7 @@ func runServer(cmd *cobra.Command, args []string) {
 					if len(errMsg) > 40 {
 						errMsg = errMsg[:40] + "..."
 					}
+					errMsg = strings.NewReplacer("_", "-", "*", "", "`", "'", "[", "(", "]", ")").Replace(errMsg)
 					lastRun = fmt.Sprintf(" ❌ %s", errMsg)
 				}
 			}
@@ -401,6 +402,9 @@ func startBotIfNeeded(ctx context.Context, settingsStore *store.SettingsStore, d
 	mu.Lock()
 	*activeBot = b
 	mu.Unlock()
+	if err := b.SetCommands(ctx); err != nil {
+		logger.WithScope("bot").Warnf("setMyCommands failed: %v", err)
+	}
 	go b.Start(ctx)
 	logger.WithScope("bot").Infof("started")
 }

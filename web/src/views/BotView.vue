@@ -57,10 +57,13 @@
 
     <div class="card">
       <h3 class="mb-md">{{ t('bot.commands') }}</h3>
-      <div class="commands-list">
-        <div v-for="cmd in localizedCommands" :key="cmd.cmd" class="command-item">
-          <code>{{ cmd.cmd }}</code>
-          <span class="text-muted">{{ cmd.desc }}</span>
+      <div v-for="group in commandGroups" :key="group.title" class="commands-group">
+        <div class="commands-group-title">{{ group.title }}</div>
+        <div class="commands-list">
+          <div v-for="cmd in group.items" :key="cmd.cmd" class="command-item">
+            <code>{{ cmd.cmd }}</code>
+            <span class="text-muted">{{ cmd.desc }}</span>
+          </div>
         </div>
       </div>
     </div>
@@ -83,22 +86,46 @@ const form = ref({ token: '', chatId: '', interval: 6, label: 'PopuGate' })
 const canSetup = computed(() => !!form.value.token && !!form.value.chatId)
 const isConfigured = computed(() => !!form.value.token)
 
-const localizedCommands = computed(() => [
-  { cmd: '/status', desc: t('bot.proxy_status') },
-  { cmd: '/secrets', desc: t('bot.list_secrets') },
-  { cmd: '/link [label]', desc: t('bot.proxy_links') },
-  { cmd: '/add <label>', desc: t('bot.add_secret') },
-  { cmd: '/remove <label>', desc: t('bot.remove_secret') },
-  { cmd: '/rotate <label>', desc: t('bot.rotate_secret') },
-  { cmd: '/restart', desc: t('bot.restart_proxy') },
-  { cmd: '/enable <label>', desc: t('bot.enable_secret') },
-  { cmd: '/disable <label>', desc: t('bot.disable_secret') },
-  { cmd: '/health', desc: t('bot.health_check') },
-  { cmd: '/traffic', desc: t('bot.traffic_report') },
-  { cmd: '/update', desc: t('bot.version_info') },
-  { cmd: '/limits', desc: t('bot.user_limits') },
-  { cmd: '/setlimit', desc: t('bot.set_limits') },
-  { cmd: '/upstreams', desc: t('bot.list_upstreams') },
+const commandGroups = computed(() => [
+  {
+    title: t('bot.group_management'),
+    items: [
+      { cmd: '/status', desc: t('bot.proxy_status') },
+      { cmd: '/health', desc: t('bot.health_check') },
+      { cmd: '/restart', desc: t('bot.restart_proxy') },
+      { cmd: '/start [label]', desc: t('bot.start_instance') },
+      { cmd: '/stop <label>', desc: t('bot.stop_instance') },
+    ],
+  },
+  {
+    title: t('bot.group_secrets'),
+    items: [
+      { cmd: '/secrets', desc: t('bot.list_secrets') },
+      { cmd: '/link [label]', desc: t('bot.proxy_links') },
+      { cmd: '/add <label>', desc: t('bot.add_secret') },
+      { cmd: '/remove <label>', desc: t('bot.remove_secret') },
+      { cmd: '/rotate <label>', desc: t('bot.rotate_secret') },
+      { cmd: '/enable <label>', desc: t('bot.enable_secret') },
+      { cmd: '/disable <label>', desc: t('bot.disable_secret') },
+    ],
+  },
+  {
+    title: t('bot.group_limits'),
+    items: [
+      { cmd: '/limits', desc: t('bot.user_limits') },
+      { cmd: '/setlimit <label> <conns> <ips> <quota_mb> [date]', desc: t('bot.set_limits') },
+      { cmd: '/traffic', desc: t('bot.traffic_report') },
+    ],
+  },
+  {
+    title: t('bot.group_system'),
+    items: [
+      { cmd: '/upstreams', desc: t('bot.list_upstreams') },
+      { cmd: '/tasks', desc: t('bot.scheduled_tasks') },
+      { cmd: '/update', desc: t('bot.version_info') },
+      { cmd: '/help', desc: t('bot.show_help') },
+    ],
+  },
 ])
 
 async function handleSetup() {
@@ -125,7 +152,10 @@ onMounted(async () => {
 <style scoped lang="scss">
 @use '@/assets/scss/variables' as *;
 
-.commands-list { display: flex; flex-direction: column; gap: $spacing-sm; }
+.commands-group { margin-bottom: $spacing-md; }
+.commands-group:last-child { margin-bottom: 0; }
+.commands-group-title { font-size: $font-size-xs; color: $color-primary; text-transform: uppercase; letter-spacing: 0.05em; font-weight: $font-weight-semibold; margin-bottom: $spacing-xs; }
+.commands-list { display: flex; flex-direction: column; gap: $spacing-xs; }
 .command-item { display: flex; gap: $spacing-md; align-items: baseline; flex-wrap: wrap; }
 .command-item code { white-space: nowrap; }
 

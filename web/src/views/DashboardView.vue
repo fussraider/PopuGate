@@ -182,7 +182,13 @@
           </div>
           <div class="engine-info-item">
             <span class="engine-info-label">{{ t('dashboard.update') }}</span>
-            <StatusBadge v-if="dockerStore.telemtUpdateStatus?.update_available" variant="warning">
+            <StatusBadge v-if="dockerStore.telemtUpdateStatus?.updating" variant="warning">
+              {{ t('dashboard.updating') }} v{{ dockerStore.telemtUpdateStatus.updating_to }}
+            </StatusBadge>
+            <StatusBadge v-else-if="dockerStore.applyingUpdate" variant="warning">
+              {{ t('dashboard.updating') }}…
+            </StatusBadge>
+            <StatusBadge v-else-if="dockerStore.telemtUpdateStatus?.update_available" variant="warning">
               {{ t('dashboard.update_available') }} v{{ dockerStore.telemtUpdateStatus.latest?.version }}
             </StatusBadge>
             <StatusBadge v-else variant="success">{{ t('dashboard.up_to_date') }}</StatusBadge>
@@ -360,9 +366,10 @@ const lastActivity = computed(() => {
 
 const expiredSecrets = computed(() => {
   const now = Date.now()
-  return secretsStore.secrets.filter(s =>
-    s.expires_at && !s.archived_at && new Date(s.expires_at).getTime() < now
-  ).length
+  return secretsStore.secrets.filter(s => {
+    if (!s.expires_at || s.expires_at === '0' || s.archived_at) return false
+    return new Date(s.expires_at).getTime() < now
+  }).length
 })
 
 const quotaWarnSecrets = computed(() => {

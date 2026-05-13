@@ -73,25 +73,29 @@ type telegramCommand struct {
 // defaultCommands returns the full list of bot commands for setMyCommands.
 func defaultCommands() []telegramCommand {
 	return []telegramCommand{
-		{Command: "status", Description: "Proxy status"},
+		// Management
+		{Command: "status", Description: "Proxy status & connections"},
+		{Command: "health", Description: "Health check (Docker, ports, metrics)"},
+		{Command: "restart", Description: "Restart proxy"},
+		{Command: "start", Description: "Start instance by label"},
+		{Command: "stop", Description: "Stop instance"},
+		// Secrets
 		{Command: "secrets", Description: "List secrets"},
 		{Command: "link", Description: "Proxy links + QR"},
 		{Command: "add", Description: "Add secret"},
 		{Command: "remove", Description: "Remove secret"},
-		{Command: "rotate", Description: "Rotate secret"},
-		{Command: "restart", Description: "Restart proxy"},
-		{Command: "start", Description: "Start instance"},
-		{Command: "stop", Description: "Stop instance"},
+		{Command: "rotate", Description: "Rotate secret key"},
 		{Command: "enable", Description: "Enable secret"},
 		{Command: "disable", Description: "Disable secret"},
-		{Command: "health", Description: "Health check"},
+		// Limits & Traffic
+		{Command: "limits", Description: "Show all user limits"},
+		{Command: "setlimit", Description: "Set limits (conns, IPs, quota, expiry)"},
 		{Command: "traffic", Description: "Traffic report"},
-		{Command: "update", Description: "Version info"},
-		{Command: "limits", Description: "User limits"},
-		{Command: "setlimit", Description: "Set limits"},
+		// System
 		{Command: "upstreams", Description: "List upstreams"},
-		{Command: "tasks", Description: "Scheduled tasks"},
-		{Command: "help", Description: "Show help"},
+		{Command: "tasks", Description: "Scheduled tasks status"},
+		{Command: "update", Description: "Version info"},
+		{Command: "help", Description: "Bot description & command list"},
 	}
 }
 
@@ -367,7 +371,9 @@ func (b *Bot) handleUpdate(ctx context.Context, update TelegramUpdate) {
 		response = b.cmdEnable(ctx, text)
 	case strings.HasPrefix(text, "/disable"):
 		response = b.cmdDisable(ctx, text)
-	case strings.HasPrefix(text, "/start"):
+	case text == "/start":
+		response = b.cmdWelcome()
+	case strings.HasPrefix(text, "/start "):
 		response = b.cmdStartInstance(ctx, text)
 	case strings.HasPrefix(text, "/stop"):
 		response = b.cmdStopInstance(ctx, text)

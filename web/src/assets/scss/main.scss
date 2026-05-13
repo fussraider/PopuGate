@@ -401,6 +401,7 @@ code {
 
 .progress-inner {
   height: 100%;
+  background: $color-primary;
   transition: width 0.3s ease;
 
   &.success { background: $color-success; }

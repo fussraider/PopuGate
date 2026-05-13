@@ -1,4 +1,11 @@
+**[English version](README.md)** | **[Русская версия](README_RU.md)**
+
+<div align="center">
+  <img src="web/public/icon-512x512.png" alt="PopuGate" width="192" height="192">
+
 # PopuGate
+
+**A modern MTProto proxy manager for Telegram with a web interface, Telegram bot, and monitoring system.**
 
 [![Build](https://github.com/fussraider/PopuGate/actions/workflows/build.yml/badge.svg)](https://github.com/fussraider/PopuGate/actions/workflows/build.yml)
 [![Release](https://github.com/fussraider/PopuGate/actions/workflows/release.yml/badge.svg)](https://github.com/fussraider/PopuGate/actions/workflows/release.yml)
@@ -6,59 +13,20 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/fussraider/PopuGate)](https://goreportcard.com/report/github.com/fussraider/PopuGate)
 [![Go Version](https://img.shields.io/badge/Go-1.26-blue)](https://go.dev/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Swagger](https://img.shields.io/badge/API-Swagger-green)](/swagger/index.html)
-[![GHCR](https://img.shields.io/badge/ghcr.io-fussraider%2Fpopugate-blue)](https://github.com/fussraider/PopuGate/pkgs/container/popugate)
+[![Swagger](https://img.shields.io/badge/API-Swagger-green)](https://petstore.swagger.io/?url=https://raw.githubusercontent.com/fussraider/PopuGate/master/docs/swagger.json)
+[![GHCR Backend](https://img.shields.io/badge/ghcr.io-fussraider%2Fpopugate-blue)](https://github.com/fussraider/PopuGate/pkgs/container/popugate)
+[![GHCR Web](https://img.shields.io/badge/ghcr.io-fussraider%2Fpopugate--web-blue)](https://github.com/fussraider/PopuGate/pkgs/container/popugate-web)
+</div>
 
-## Описание проекта
-
-PopuGate — это современный менеджер прокси-серверов Telegram MTProto. В его основе лежит высокопроизводительный движок **telemt 3.x** (написанный на Rust и работающий в Docker), которым управляет мощный бэкенд на языке Go (с REST API). Также для него предусмотрен удобный фронтенд на Vue 3, TypeScript и SCSS (исходный код находится в директории `web/` данного репозитория).
-
-PopuGate предоставляет огромный функционал для управления, мониторинга и масштабирования MTProto прокси с удобным пользовательским интерфейсом.
-
-> **Дисклеймер:** PopuGate вдохновлен проектом [MTProxyMax](https://github.com/SamNet-dev/MTProxyMax) — спасибо автору за идею. Проект разрабатывается с активным использованием нейросетей (AI-assisted development) и может содержать недоработки — он находится в стадии активной разработки. Буду признателен за bug-репорты и pull requests.
-
-### Основные возможности
-- **Индивидуальный контроль доступа**: Гибкое управление пользователями, генерация секретов (ключей доступа) и добавление заметок.
-- **Мониторинг трафика**: Подробный сбор и анализ статистики по потреблению трафика.
-- **Master-Slave репликация**: Возможность масштабирования прокси-сети с помощью подчиненных (slave) узлов.
-- **Цепочки прокси (Proxy chaining)**: Подключение к Telegram через промежуточные серверы (Upstreams).
-- **Гео-блокировка (Geo-blocking)**: Ограничение доступа к прокси по географическому признаку с использованием актуальных CIDR баз списка адресов.
-- **Интеграция с Telegram Bot**: Удобное управление прокси, получение статистики, создание секретов и генерация QR-кодов для подключения напрямую из Telegram.
-- **Автоматические обновления**: Система следит за актуальностью всех компонентов. Поддерживается обновление как бинарного файла (через скачивание с GitHub и перезапуск systemd-службы), так и Docker-контейнера (pull нового образа и пересоздание контейнера через sidecar). Веб-интерфейс автоматически определяет режим и отображает соответствующие элементы управления.
-- **Управление планировщиком**: Включение/отключение фоновых задач, изменение расписаний, просмотр истории выполнения с ошибками — через веб-интерфейс, API и Telegram-бота.
-- **Резервное копирование**: Автоматическое ежедневное создание бекапов с настраиваемой ротацией по количеству дней хранения.
-- **Шифрование бекапов**: Опциональное AES-256-GCM шифрование бекапов для защиты данных в покое.
-- **Шаблоны секретов**: Создание предустановок лимитов для быстрого применения к секретам.
-- **Аудит**: Журнал действий пользователей с историей всех ключевых операций.
-- **Мониторинг ресурсов**: Отслеживание CPU, памяти и диска в реальном времени через WebSocket.
-- **Проверка здоровья upstream**: Автоматический мониторинг доступности upstream-серверов.
-
-**Поддерживаемые платформы**: Linux (Ubuntu, Debian, CentOS, RHEL, Fedora, Rocky, AlmaLinux, Alpine).
-
-## Архитектура
-
-Бэкенд приложения написан на Go и использует следующие технологии:
-- **Веб-фреймворк**: [Gin](https://github.com/gin-gonic/gin)
-- **База данных**: Встроенная SQLite (`modernc.org/sqlite`, собирается без CGo для удобной кросс-компиляции)
-- **Авторизация**: JWT-токены (`github.com/golang-jwt/jwt/v5`) и шифрование паролей через `bcrypt`
-- **Docker**: Управление контейнером движка через Docker Engine SDK
-- **SSH/Криптография**: Синхронизация и генерация ключей через `golang.org/x/crypto/ssh`
-- **Планировщик задач**: Cron-система через `robfig/cron/v3`
-- **Движок**: Мультиархитектурный Docker-образ `telemt` (`ghcr.io/fussraider/popugate-telemt`)
-
-В процессе работы приложения вся конфигурация (база данных, сгенерированные конфиги движка, базы гео-зон) по умолчанию хранится в рабочей директории приложения (автоопределение или `/opt/popugate/` на Linux).
+> **Disclaimer:** PopuGate is inspired by [MTProxyMax](https://github.com/SamNet-dev/MTProxyMax) — thanks to the author for the idea. This project is developed with active use of AI-assisted tools and may contain rough edges — it is a work in progress. Bug reports and pull requests are welcome.
 
 ---
 
-## 🐳 Запуск в Docker (рекомендуется)
+## 🐳 Running in Docker (recommended)
 
-Вы можете запустить PopuGate в Docker-контейнере. Это удобно, так как все зависимости уже упакованы в образ, и вам нужно только смонтировать `docker.sock` для управления движком прокси.
+The recommended way to run PopuGate with the built-in web interface and Nginx reverse proxy:
 
-### Использование Docker Compose (Полный стек)
-
-Рекомендуемый способ запуска со встроенным веб-интерфейсом и проксированием через Nginx:
-
-1. Создайте файл `docker-compose.yml`:
+1. Create a `docker-compose.yml` file:
 ```yaml
 services:
   popugate-backend:
@@ -76,15 +44,15 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
-      - "9090:9090" # Метрики по умолчанию (дополнительные порты добавьте по необходимости)
+      - "9090:9090"
 
   popugate-web:
     image: ghcr.io/fussraider/popugate-web:latest
     container_name: popugate-web
     restart: unless-stopped
     ports:
-      - "80:80"     # Веб-интерфейс (HTTP)
-      - "8443:8443" # Веб-интерфейс (HTTPS)
+      - "80:80"
+      - "8443:8443"
     environment:
       - DOMAIN_NAME=your-domain.com
     volumes:
@@ -102,357 +70,160 @@ services:
     entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
 ```
 
-2. Запустите стек:
+2. Start the stack:
 ```bash
 docker compose up -d
 ```
 
-### Сборка образов вручную
-Если вы хотите собрать образы самостоятельно:
+<details>
+<summary>Building images manually</summary>
+
 ```bash
-# Бэкенд
+# Backend
 DOCKER_BUILDKIT=1 docker buildx build -t popugate . --load
 
-# Фронтенд
+# Frontend
 cd web && DOCKER_BUILDKIT=1 docker buildx build -t popugate-web . --load
 ```
+</details>
+
+> **Note:** The proxy engine (`telemt`) runs in `network: host` mode and binds ports (443, etc.) directly on the host machine. Do not forward proxy ports in the `ports` section for `popugate-backend` and do not assign `popugate-web` to port 443.
 
 ---
 
-## 🚀 Быстрый старт (Бинарный файл)
+## 🚀 Quick Start (Binary)
 
-Перед запуском убедитесь, что на сервере **установлен и запущен Docker**. Для корректной работы приложение необходимо запускать от имени суперпользователя (`root`), чтобы иметь права на взаимодействие с `iptables` и демоном Docker.
+Make sure **Docker is installed and running** on the server before launching. Run as `root` (for `iptables` and Docker access).
 
-1. Установите/скачайте последнюю версию (latest release) для вашей архитектуры (к примеру, `amd64`):
 ```bash
+# 1. Download the latest release
 wget -O popugate https://github.com/fussraider/PopuGate/releases/latest/download/popugate-linux-amd64
-```
-
-2. Выдайте права на выполнение файла:
-```bash
 chmod +x popugate
-```
 
-3. Установите первоначальный пароль администратора:
-```bash
+# 2. Set the admin password
 sudo ./popugate setup
-```
-*(Вам будет предложено ввести пароль для входа в панель управления).*
 
-4. Запустите бэкенд сервер:
-```bash
+# 3. Start the server
 sudo ./popugate server
 ```
 
-*(Сервер запустится в текущей сессии. Для запуска в фоновом режиме используйте системную службу, как описано ниже).*
+The backend is available on port `8090`, the proxy engine on port `443`. To run in the background, install the systemd service (see below).
 
-> **Примечание:** По умолчанию бэкенд сервер доступен на порту `8090`, а прокси-движок внутри Docker — на стандартном порту `443`. При использовании Docker Compose веб-интерфейс доступен на стандартном HTTP порту `80`. Все рабочие данные сохраняются в директорию, где находится бинарный файл, или в `/opt/popugate/` (в зависимости от прав доступа и ОС).
-
-### Важные особенности работы в Docker
-
-- **Network Host**: Прокси-движок (`telemt`) запускается бэкендом в режиме `network: host`. Это необходимо для корректной работы MTProxy и минимизации накладных расходов на сеть. 
-- **Порты**: Из-за использования `network: host`, прокси-движок **занимает порты (443 и другие) непосредственно на хост-машине**. 
-  - ⚠️ **ВНИМАНИЕ**: Не пытайтесь переназначить веб-интерфейс (`popugate-web`) на порт 443 в `docker-compose.yml`, если вы используете стандартный порт для прокси. Это приведет к конфликту портов.
-  - Не пробрасывайте порты прокси в секции `ports` для сервиса `popugate-backend`, так как движок сам откроет их на хосте.
-- **Docker Socket**: Бэкенду необходим доступ к `/var/run/docker.sock` для управления контейнерами движка.
-- **Связь с хостом**: Для того чтобы бэкенд в Docker мог собирать метрики с прокси (которые работают в сети хоста), в `docker-compose.yml` должна быть настроена секция `extra_hosts` с параметром `host.docker.internal:host-gateway`.
+**Supported platforms:** Linux (Ubuntu, Debian, CentOS, RHEL, Fedora, Rocky, AlmaLinux, Alpine).
 
 ---
 
-## 🌐 Сетевые настройки (Firewall)
+## 🌐 Network Settings
 
-Для полноценной работы приложения необходимо открыть следующие порты:
-- **`8090` (TCP)**: Веб-интерфейс и REST API (при запуске бинарным файлом).
-- **`80` (TCP)**: Веб-интерфейс по HTTP (при запуске через Docker Compose).
-- **`8443` (TCP)**: Веб-интерфейс по HTTPS (при настройке SSL в Docker Compose).
-- **`443` (TCP)**: Стандартный порт для входящих подключений пользователей MTProto (занят прокси-движком). Может быть изменен или добавлено несколько портов в настройках инстансов.
-- **`9090` (TCP)**: Порт для сбора метрик Prometheus по умолчанию. Если вы используете несколько инстансов, порты метрик также необходимо открыть.
+| Port | Purpose |
+|------|---------|
+| `8090` | REST API and web interface (binary mode) |
+| `80` / `8443` | Web interface HTTP/HTTPS (Docker Compose) |
+| `443` | Incoming MTProto connections (bound by the engine) |
+| `9090` | Prometheus metrics |
+
+Proxy and metrics ports are configured individually per instance.
 
 ---
 
-## ⚙️ Конфигурация и переменные окружения
+## ⚙️ Configuration
 
-Настройка работы бэкенд сервера возможна через переменные окружения (Environment Variables) и флаги командной строки:
+### Environment Variables
 
-### Переменные окружения (ENV)
-- `POPUGATE_DATA_DIR` — задает главную рабочую директорию, где будут храниться база данных SQLite (`settings.db`), кэши, конфигурации для движка (`mtproxy/config.toml`) и прочих сгенерированных файлов.
-  - *Порядок приоритета директории:*
-    1. Флаг `-data` (наивысший приоритет)
-    2. Переменная окружения `POPUGATE_DATA_DIR`
-    3. Директория, в которой находится запущенный бинарный файл
-    4. Текущая рабочая директория (CWD)
-    5. Стандартный путь `/opt/popugate/` (fallback)
-- `POPUGATE_DEPLOYMENT` — (автоматически) указывает тип развертывания. Значение `docker` автоматически устанавливается в Docker-образе и определяет режим обновления (pull образа вместо скачивания бинарного файла).
-- `DEBUG` — (опционально) включает режим отладки Gin (`true` или `false`). По умолчанию `false` (Release mode). Имеет приоритет над настройками в БД.
-- `GIN_MODE` — стандартная переменная Gin. `debug` эквивалентен `DEBUG=true`, `release` — `DEBUG=false`.
-- `TELEMT_VERSION` — (опционально) переопределяет версию движка `telemt` (по умолчанию: `3.3.39`).
-- `TELEMT_COMMIT` — (опционально) переопределяет конкретный commit/ref для сборки движка (по умолчанию: `bc69153`).
-- `TELEMT_REPO` — (опционально) переопределяет URL git-репозитория для сборки движка (по умолчанию: `https://github.com/telemt/telemt.git`).
+| Variable | Description |
+|----------|-------------|
+| `ADMIN_PASSWORD` | Admin password (first run) |
+| `POPUGATE_DATA_DIR` | Working directory (database, configs, caches). Also set via `--data` (`-d`) flag |
+| `POPUGATE_DEPLOYMENT` | Deployment type (`docker` — set automatically in the image) |
+| `DEBUG` / `GIN_MODE` | Debug mode (`true`/`debug` = debug, default is release) |
+| `LOG_LEVEL` | Log level (`debug`, `info`, `warn`, `error`, `fatal`) |
+| `BACKUP_ENCRYPTION_KEY` | Backup encryption key (64 hex characters, AES-256-GCM) |
+| `TELEMT_VERSION` | Override the telemt engine version |
+| `TELEMT_COMMIT` | Override the commit/ref for engine build |
+| `TELEMT_REPO` | Override the engine repository URL |
 
-### Флаги командной строки
-При запуске бинарного файла `popugate`, вы можете передать следующие флаги:
-- `-port <число>` — устанавливает порт для запуска HTTP сервера (по умолчанию: `8090`).
-- `-data <путь>` — явно переопределяет директорию хранения рабочих данных, имеет наивысший приоритет над `POPUGATE_DATA_DIR`.
-- `-db <путь>` — задает конкретный путь до SQLite файла базы данных (по умолчанию: `<data-dir>/settings.db`).
+### Command-line Flags
 
-*Команда setup также поддерживает флаг `-data` для инициализации в конкретной директории.*
+- `--port <number>` (`-p`) — HTTP server port (default: `8090`)
+- `--data <path>` (`-d`) — working directory (overrides `POPUGATE_DATA_DIR`)
+- `--db <path>` — path to the SQLite file (default: `<data-dir>/settings.db`)
 
-*Пример запуска с аргументами и настройкой движка:*
 ```bash
-# Инициализация пароля в кастомной директории
-sudo ./popugate setup -data /var/lib/popugate
-
-# Запуск с кастомной версией движка, портом и в режиме отладки
-export TELEMT_VERSION="3.4.0"
-export DEBUG=true
-sudo -E ./popugate server -port 9090 -data /var/lib/popugate
+# Example: run with a custom configuration
+sudo -E ./popugate server --port 9090 --data /var/lib/popugate
 ```
 
 ---
 
-## 🔒 Настройка HTTPS (SSL) для веб-интерфейса
+## 🔒 HTTPS Setup (SSL)
 
-При использовании Docker Compose вы можете настроить автоматический выпуск SSL-сертификатов Let's Encrypt для вашего домена. Веб-интерфейс будет доступен по адресу `https://your-domain.com:8443`.
+When using Docker Compose, you can set up automatic Let's Encrypt SSL certificate issuance:
 
-1. В файле `docker-compose.yml` (или через `.env` файл) укажите ваш домен:
-   ```yaml
-   environment:
-     - DOMAIN_NAME=your-domain.com
-   ```
+```bash
+sudo ./scripts/init-ssl.sh your-domain.com your-email@example.com
+```
 
-2. Запустите скрипт для первичного выпуска сертификата:
-   ```bash
-   sudo ./scripts/init-ssl.sh your-domain.com your-email@example.com
-   ```
-
-3. Скрипт автоматически запустит Certbot, выпустит сертификат и перезагрузит Nginx. Сертификаты будут автоматически обновляться сервисом `certbot` каждые 12 часов.
-
-*Примечание: Для работы Let's Encrypt порт 80 вашего сервера должен быть доступен из интернета.*
+Specify the domain in `docker-compose.yml`: `DOMAIN_NAME=your-domain.com`. Certificates are renewed automatically every 12 hours. Port 80 must be accessible from the internet for Let's Encrypt to work.
 
 ---
 
-## 🖥️ Веб-интерфейс
+## 🖥️ Web Interface Features
 
-PopuGate предоставляет интуитивно понятный веб-интерфейс для управления всеми аспектами MTProto прокси. Поддерживается **светлая и тёмная тема** (переключатель в верхней панели), а также **двуязычный интерфейс** (Русский / English). Ниже приведено описание основных разделов:
+The web interface supports **light/dark themes** and **bilingual UI** (Russian / English).
 
-### 📊 Панель управления (Dashboard)
-Центральный хаб мониторинга, где отображается текущий статус прокси, количество активных секретов, число подключений и статистика трафика. Здесь также доступны быстрые действия для запуска, остановки и перезагрузки сервиса, а также показатели "здоровья" системы (Docker, контейнер, порты, метрики).
+### 📊 Dashboard
+Proxy status, active secrets, connections, traffic, quick actions (start/stop/restart), system health, real-time resource monitoring (CPU, memory, disk).
 
-### 🖥️ Системное меню (System)
-Управление приложением как системной службой. Позволяет:
-- **Установить/Удалить службу**: Автоматическая генерация и установка unit-файла systemd.
-- **Управление**: Перезапуск и просмотр статуса службы прямо из интерфейса.
-- **Информация**: Просмотр версии ОС и текущего состояния системы.
+### 🔑 Secrets
+Access key management: creation, deletion, rotation, limits (connections, IPs, traffic quota), expiration, QR codes, tags, archiving, bulk operations, search, JSON export/import.
 
-### 🔑 Секреты (Secrets)
-Управление ключами доступа пользователей.
-- **Добавление/удаление**: Создание новых секретов с возможностью ручного ввода или автогенерации.
-- **Ограничения**: Установка лимитов по количеству одновременных подключений, уникальных IP-адресов и квот на трафик (в МБ).
-- **Срок действия**: Установка даты истечения ключа.
-- **Ротация**: Возможность быстрой смены секретного ключа для существующей метки.
-- **QR-коды**: Генерация QR-кодов для удобного подключения в Telegram.
-- **Переименование**: Изменение метки (label) существующего секрета.
-- **Продление**: Продление срока действия ключа на указанное количество дней с автоматическим повторным включением.
-- **Клонирование**: Создание точной копии секрета с новой меткой и автосгенерированным ключом.
-- **Теги**: Присвоение секрету произвольных тегов для группировки и фильтрации.
-- **Архивация**: Временное скрытие секретов из основного списка без удаления.
-- **Массовые операции**: Одновременное продление и ротация ключей для группы секретов.
-- **Поиск**: Быстрый поиск секретов по метке или заметкам.
-- **Топ**: Рейтинг секретов по объему потребленного трафика.
-- **Экспорт/Импорт**: Массовый экспорт и импорт секретов в формате JSON.
+### 📋 Templates
+Pre-configured limit presets (connections, IPs, quota, expiration, tags) for quick application to secrets.
 
-### 📋 Шаблоны (Templates)
-Отдельный раздел для создания и управления предустановками лимитов. Позволяет:
-- Создавать именованные шаблоны с параметрами (макс. подключений, IP, квота, срок действия, теги, заметки).
-- Применять шаблон к существующему секрету одним нажатием — все лимиты обновляются автоматически.
-- Управление шаблонами: создание, удаление и применение через веб-интерфейс или REST API.
+### 🖥️ Instances
+Independent proxies with their own port, masking domains, FakeTLS, and access tags. Multi-domain support, hot reload, logs (SSE), bulk operations.
 
 ### 🔀 Upstreams
-Настройка цепочек прокси. Позволяет перенаправлять трафик от вашего сервера к Telegram через промежуточные SOCKS4/SOCKS5 серверы. Поддерживается балансировка весов и привязка к конкретным сетевым интерфейсам.
+Proxy chains (SOCKS4/SOCKS5) with weight-based balancing and network interface binding.
 
-### 🖥️ Инстансы (Instances)
-Центральная страница управления прокси. Каждый инстанс — это полностью независимый прокси с собственным портом, доменом маскировки, настройками FakeTLS и тегами доступа. Поддерживается:
-- **Глобальное управление**: запуск, остановка, перезапуск и горячая перезагрузка всех инстансов разом.
-- **Мультидоменность**: один инстанс может обслуживать несколько TLS-доменов на одном порту (primary + дополнительные).
-- **FakeTLS**: включение/выключение TLS-эмуляции и маскировки трафика для каждого инстанса отдельно.
-- **Теги доступа**: ограничение доступа к инстансу по тегам — секрет получит ссылку только на те инстансы, чьи теги пересекаются с его тегами.
-- **Индивидуальное управление**: старт, стоп и горячая перезагрузка каждого инстанса независимо от других.
-- **Массовые операции**: групповой запуск, остановка, перезагрузка и включение/отключение выбранных инстансов.
-- **Логи**: просмотр логов каждого инстанса в реальном времени (SSE).
-- **Мониторинг**: собственные метрики (порт, трафик, подключения) для каждого инстанса.
-- **Мульти-ссылки**: при генерации ссылки создаются все комбинации (инстанс × домен), что даёт пользователю несколько вариантов подключения.
+### 🌍 Geoblock
+Country-based access restrictions (blacklist/whitelist) via `iptables`.
 
-### 🐳 Docker
-Управление инфраструктурой Docker. Позволяет проверить наличие установленного Docker в системе, установить его при необходимости, а также собрать или обновить образ движка `telemt`.
-
-### 🌍 Гео-блокировка (Geoblock)
-Управление доступом на основе географии пользователей. Поддерживаются два режима:
-- **Blacklist**: Блокировка трафика из указанных стран.
-- **Whitelist**: Разрешение трафика только из списка доверенных стран.
-Изменения применяются мгновенно на уровне `iptables`.
-
-### 📈 Трафик (Traffic)
-Детальная статистика использования ресурсов:
-- **Global**: Общий объем входящего и исходящего трафика сервера.
-- **Live Metrics**: Текущие активные подключения в разрезе каждого пользователя.
-- **Per-User**: Суммарная статистика потребления трафика каждым секретом.
+### 📈 Traffic
+Global statistics, real-time active connections, per-secret detailed stats.
 
 ### 🤖 Telegram Bot
-Настройка сервисного бота для управления прокси прямо из мессенджера. Поддерживает уведомления, отчеты по трафику, команды для управления секретами и команду `/tasks` для просмотра расписания и статуса фоновых задач.
+Proxy management, statistics, secret creation, QR codes, and scheduler task monitoring — right from Telegram.
 
-### 🔄 Репликация (Replication)
-Инструментарий для создания Master-Slave конфигураций. Позволяет синхронизировать настройки и секреты между несколькими серверами через SSH, обеспечивая масштабируемость и отказоустойчивость.
+### 🔄 Replication
+Master-Slave synchronization of settings and secrets between servers over SSH.
 
-### 🆙 Обновления (Updates)
-Система автоматической проверки и ручного применения обновлений PopuGate. Интерфейс автоматически определяет режим работы:
-- **Бинарный режим**: Скачивает новый бинарный файл с GitHub Releases (с проверкой SHA256), делает резервную копию текущего и перезапускает службу через systemd.
-- **Docker-режим**: Загружает новый образ контейнера из GHCR и пересоздаёт контейнер с сохранением всех настроек (тома, переменные окружения, сеть, политика перезапуска). Страница автоматически обновляется после перезапуска.
+### 💾 Backups
+Automatic daily backups (database, engine configs, SSH keys) with retention-based rotation. Optional AES-256-GCM encryption. Download and restore via the web interface.
 
-### 💾 Резервные копии (Backups)
-Создание и восстановление полных бэкапов конфигурации и базы данных. Поддерживается скачивание файлов бэкапа на локальный компьютер. Автоматическое ежедневное создание бекапов (по умолчанию в 3:00) с настраиваемой ротацией — устаревшие бекапы удаляются автоматически (по умолчанию старше 7 дней).
+### 🕐 Scheduler
+Background task management: enable/disable, change schedules (cron), manual runs, execution history with error details.
 
-#### Что входит в бэкап
+**Default tasks:** traffic-flush, quota-check, expiry-check, health-check, upstream-health, telegram-report, replication-sync, update-check, telemt-check, token-cleanup, daily-backup, backup-cleanup, history-cleanup, quota-reset, auto-rotate.
 
-Бэкап содержит полную копию всех данных приложения:
+### 🆙 Updates
+Automatic update checks and manual application. Binary mode — downloads from GitHub + restarts systemd. Docker mode — pulls a new image + recreates the container.
 
-| Компонент | Описание |
-|-----------|----------|
-| **База данных** | SQLite `settings.db` с полной схемой (см. ниже) |
-| **Конфигурация движка** | `mtproxy/config-<port>.toml` — настройки telemt (по одному на инстанс) |
-| **SSH-ключи** | `mtproxy/ssh_host_key` — ключ для репликации |
-| **Версия движка** | `.telemt_version` — версия telemt для восстановления |
-| **Manifest** | `manifest.json` — метаданные бэкапа (версия, контрольные суммы) |
+### 🐳 Docker
+Docker availability check, installation, building and updating the `telemt` engine image.
 
-**Таблицы базы данных (schema_version 10):**
-- `settings` — общие настройки приложения
-- `secrets` — пользовательские секреты (ключи доступа)
-- `upstreams` — цепочки прокси (SOCKS5/4)
-- `instances` — конфигурации прокси-инстансов (порт, домены, FakeTLS, маскировка, теги)
-- `slaves` — узлы репликации (Master-Slave)
-- `templates` — шаблоны секретов
-- `traffic_history` — история трафика
-- `traffic_user` — текущий трафик пользователей (по метке + инстансу)
-- `audit_log` — журнал аудита действий
-- `scheduler_tasks` — задачи планировщика
+### 🖥️ System Menu
+Install/remove the systemd service, restart, view status and system information.
 
-#### Шифрование
-
-Бэкапы могут быть защищены **AES-256-GCM** шифрованием:
-
-- **Ключ шифрования** задаётся через переменную окружения `BACKUP_ENCRYPTION_KEY` (64 hex-символа = 32 байта) при запуске сервера
-- Статус шифрования доступен через поле `encryption_enabled` в ответе `GET /api/v1/backups` (сам ключ не передаётся)
-- При восстановлении ключ автоматически применяется к расшифровке
-- Изменить ключ в рантайме нельзя — только через перезапуск с новой переменной окружения
-
-> **Важно:** Без ключа шифрования зашифрованный бэкап невозможно восстановить. Сохраняйте ключ в безопасном месте!
-
-#### Версионирование и совместимость
-
-Каждый бэкап содержит `manifest.json` с метаданными:
-
-```json
-{
-  "format_version": 1,
-  "app_version": "1.0.0",
-  "app_commit": "abc123",
-  "schema_version": 10,
-  "created_at": "2024-01-15T10:30:00Z",
-  "encryption": "aes-gcm",
-  "tables": ["settings", "secrets", ...]
-}
-```
-
-При восстановлении проверяется совместимость:
-- **schema_version ≤ текущая** — восстановление разрешено
-- **schema_version > текущая** — ошибка несовместимости
-- **Старые бэкапы без manifest** — работают с предупреждением
-
-#### Процесс восстановления
-
-1. **Остановка движка**: Перед восстановлением автоматически останавливается Docker-контейнер telemt
-2. **Расшифровка**: Если включено шифрование, архив расшифровывается
-3. **Проверка целостности**: Проверяется SHA256 контрольная сумма
-4. **Восстановление**: База данных и конфиги восстанавливаются атомарно (через temp-файлы)
-5. **Ротация JWT**: После восстановления генерируется новый `jwt_secret` (все старые токены становятся недействительными)
-6. **Запуск движка**: Контейнер автоматически запускается
-
-> **Безопасность:** JWT-ротация защищает от межокружных атак — даже при компрометации бэкапа злоумышленник не получит доступ к текущим токенам.
-
-#### Управление через API
-
-| Метод | Эндпоинт | Описание |
-|-------|----------|----------|
-| `POST` | `/api/v1/backups` | Создать новый бэкап |
-| `GET` | `/api/v1/backups` | Список доступных бэкапов |
-| `GET` | `/api/v1/backups/download/{filename}` | Скачать бэкап |
-| `POST` | `/api/v1/backups/restore` | Восстановить из бэкапа |
-| `DELETE` | `/api/v1/backups/{filename}` | Удалить бэкап |
-
-#### Корректный снимок SQLite
-
-Для обеспечения целостности базы данных используется `VACUUM INTO`:
-
-- Создаётся временная копия БД с чистой схемой
-- Исключаются WAL-файлы и временные данные
-- Гарантирует восстановление в любой момент
+### ⚙️ Settings
+Global parameters: Docker CPU/memory limits, custom IP, FakeTLS, PROXY protocol, custom Telegram URLs, Ad Tag, secret auto-rotation, maintenance mode, backup rotation, debug mode.
 
 ---
 
-### 🕐 Планировщик (Scheduler)
-Управление фоновыми задачами сервера в реальном времени. Доступны следующие возможности:
-- **Включение/отключение** отдельных задач без перезапуска сервера.
-- **Изменение расписания** (cron-выражения с точностью до секунд) — с возможностью сброса к значению по умолчанию.
-- **Ручной запуск** любой задачи нажатием одной кнопки.
-- **История выполнения**: просмотр записей о каждом запуске с статусом (успех/ошибка), временем и длительностью.
-- **Детали ошибок**: при сбое задачи отображается текст ошибки.
+## 🛠 System Service (Systemd)
 
-Управление доступно через веб-интерфейс (`/scheduler`), REST API и команду `/tasks` в Telegram-боте.
+PopuGate supports native installation as a `systemd` service — auto-start on boot and automatic restart on crashes. Installation is available via the web interface (System section).
 
-**Стандартные задачи:** traffic-flush, quota-check, expiry-check, health-check, telegram-report, replication-sync, update-check, telemt-check, token-cleanup, daily-backup, backup-cleanup, history-cleanup, quota-reset (ежемесячный сброс трафика), auto-rotate (авторотация ключей).
-
-### 📋 Аудит (Audit)
-Журнал действий пользователей. Все ключевые операции (создание, удаление, ротация секретов, изменение настроек) записываются в лог аудита с указанием пользователя, действия и деталей.
-
-### ⚙️ Настройки (Settings)
-Тонкая настройка глобальных параметров сервера:
-- Ограничения CPU и памяти для Docker-контейнеров.
-- Кастомный IP-адрес сервера (для генерации ссылок за NAT).
-- Длина фейкового сертификата (`fake_cert_len`).
-- Настройка PROXY протокола (для работы за балансировщиками, например HAProxy).
-- Кастомные URL Telegram для работы в регионах с ограничениями.
-- Рекламный тег (Ad Tag).
-- Настройки движка telemt (версия, commit, репозиторий).
-- Авторотация секретов (указание количества дней, после которых ключи обновляются автоматически).
-- Режим обслуживания (Maintenance Mode).
-- Настройка ротации бекапов (срок хранения в днях).
-- Включение режима отладки (Debug Mode) для логирования запросов.
-
-> **Примечание:** Порты, домены маскировки, параметры FakeTLS и маскировки трафика теперь настраиваются отдельно для каждого инстанса (раздел "Инстансы").
-
----
-
-## 🏗 Сборка и запуск фронтенда
-
-В текущей версии репозитория исходный код фронтенда находится в директории `web/` (Vue 3, Vite, TypeScript). 
-
-Для сборки и запуска интерфейса:
-1. Перейдите в папку: `cd web`
-2. Установите зависимости: `pnpm install`
-3. Соберите проект: `pnpm run build`
-
-Собранные файлы (`web/dist`) в данной версии необходимо отдавать внешним веб-сервером (например, **Nginx**) или настроить проксирование запросов к бэкенду. 
-
----
-
-## 🛠 Системная служба (Systemd)
-
-PopuGate поддерживает нативную установку в качестве системной службы `systemd` на Linux. Это обеспечивает автоматический запуск приложения при загрузке сервера и его перезапуск в случае сбоя.
-
-Управление службой доступно:
-- **Через веб-интерфейс**: В разделе "Настройки" или специальном системном меню.
-- **Через командную строку**: С помощью команд `systemctl`.
-
-Основные команды для ручного управления (после установки через интерфейс):
 ```bash
 sudo systemctl status popugate
 sudo systemctl restart popugate
@@ -461,76 +232,34 @@ sudo systemctl stop popugate
 
 ---
 
-## 🛠 Разработка и сборка из исходников
+## 🛠 Development
 
-Эта инструкция предназначена для разработчиков, желающих собрать бэкенд сервер самостоятельно или внести изменения в кодовую базу.
-
-### Предварительные требования
-Для сборки вам потребуются:
-- **Go** (версия 1.26.1 или новее)
-- **Make** (для запуска скриптов сборки)
-
-### Сборка проекта
-
-Вы можете скомпилировать бинарный файл с помощью утилиты Makefile. Откройте терминал в корне проекта и выполните:
+### Building the Backend
 
 ```bash
-# Установка недостающих зависимостей:
-make tidy
-
-# Сборка под текущую ОС:
-make build
-# Бинарный файл появится в папке bin/ с названием popugate
-
-# Кросс-компиляция сразу под Linux-архитектуры (amd64 и arm64) для деплоя:
-make cross-build
+make tidy        # Install dependencies
+make build       # Build for current OS → bin/popugate
+make cross-build # linux/amd64 + linux/arm64
 ```
 
-### Тестирование и линтинг
+Requirements: **Go 1.26+**, **Make**.
 
-При внесении изменений в кодовую базу обязательно проверяйте работоспособность тестов:
+### Building the Frontend
 
-- **Запуск всех тестов:** `make test`
-  *(Тесты работают полностью изолированно в in-memory базе SQLite и не требуют наличия Docker или настроенного сетевого окружения).*
-- **Запуск тестов отдельного пакета:** `go test ./internal/store/... -v`
-- **Запуск конкретного теста:** `go test ./internal/store/... -v -run TestSecretStore_Create`
-- **Проверка покрытия:** `go test ./... -cover`
-- **Проверка кода линтером:** `make lint`
-- **Форматирование кода:** `make fmt`
+```bash
+cd web
+pnpm install
+pnpm run build   # → web/dist/
+```
 
-Тесты разделены на четыре уровня:
-1. **Store-слой** (`internal/store/*_test.go`) — тестируют SQL-операции с in-memory SQLite
-2. **Service-слой** (`internal/service/*_test.go`) — тестируют бизнес-логику (SecretService, TrafficService, UpstreamService, CheckResources, ResourceMonitor и др.)
-3. **Model-валидация** (`internal/model/*_test.go`) — тестируют бизнес-правила моделей
-4. **Pkg-утилиты** (`pkg/*/*_test.go`) — тестируют вспомогательные функции (fmtutil, logger, telemt и др.)
+Built files are served via Nginx (see Docker Compose) or another web server that proxies to the backend.
 
-### База данных и миграции
+### Testing and Linting
 
-Проект использует SQLite. При первым запуске база данных `settings.db` создается автоматически, и в ней выполняются все необходимые миграции. Исходные файлы миграций находятся в директории `internal/database/migrations/` и встроены в бинарный файл (`embed.FS`).
+```bash
+make test   # All tests (in-memory SQLite, no Docker required)
+make lint   # golangci-lint
+make fmt    # gofmt + goimports
+```
 
----
-
-## 📂 Структура репозитория
-
-- `cmd/popugate/` — Точка входа в приложение (Cobra CLI). Содержит команды `server`, `setup`, `version` и др.
-- `internal/` — Внутренняя бизнес-логика приложения:
-  - `api/` — Обработчики HTTP-запросов (Gin handlers), роутинг и middleware.
-  - `auth/` — Механизмы авторизации и работы с JWT.
-  - `bot/` — Реализация сервисного Telegram-бота.
-  - `config/` — Глобальная конфигурация и константы.
-  - `database/` — Инициализация SQLite и управление схемой.
-  - `model/` — Описания структур данных и сущностей БД.
-  - `scheduler/` — Планировщик фоновых задач (cron) с поддержкой управления в реальном времени (включение/отключение, изменение расписания, история выполнения).
-  - `service/` — Ядро бизнес-логики (Docker, GeoIP, Репликация, Трафик, Планировщик).
-  - `store/` — Слой доступа к данным (Repository pattern).
-  - `testutil/` — Утилиты для тестирования (in-memory SQLite).
-- `pkg/` — Вспомогательные библиотеки и обертки:
-  - `dockerutil/`, `netutil/`, `sshutil/` — Утилиты для работы с Docker, сетью (iptables) и SSH.
-  - `fmtutil/` — Общие форматтеры (например, `FormatBytes` для человекочитаемых размеров).
-  - `logger/` — Собственная система логирования с уровнями и scope.
-  - `promutil/`, `qrutil/` — Работа с метриками Prometheus и генерация QR-кодов.
-  - `telemt/` — Интеграция с движком MTProxy.
-- `web/` — Исходный код фронтенда (Vue 3, Vite, TypeScript).
-- `scripts/` — Вспомогательные shell-скрипты для сборки и автоматизации.
-- `bin/` — Директория для скомпилированных бинарных файлов и локальных данных (бэкапы, конфиги).
-- `Makefile` — Сценарии для сборки, тестирования и развертывания проекта.
+Tests are isolated and do not require Docker or a network environment.

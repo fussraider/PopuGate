@@ -23,4 +23,5 @@ GEMINI.md
 *.tmp
 *.db
 *.tar
-*.gzcoverage.out
+*.gz
+coverage.out

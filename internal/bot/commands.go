@@ -457,7 +457,7 @@ func (b *Bot) cmdTraffic(ctx context.Context) string {
 // cmdUpdate shows version info.
 func (b *Bot) cmdUpdate(ctx context.Context) string {
 	var lines []string
-	lines = append(lines, fmt.Sprintf("📦 *PopuGate* `v%s`", model.Version))
+	lines = append(lines, fmt.Sprintf("📦 *PopuGate* `%s`", model.Version))
 	if model.Commit != "" && model.Commit != "unknown" {
 		lines = append(lines, fmt.Sprintf("Commit: `%s`", model.Commit))
 	}

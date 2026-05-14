@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/api/types/network"
@@ -108,8 +107,8 @@ func TestWebRootDir(t *testing.T) {
 	})
 }
 
-func makeInspect(config *container.Config, hostConfig *container.HostConfig, mounts []types.MountPoint) types.ContainerJSON {
-	return types.ContainerJSON{
+func makeInspect(config *container.Config, hostConfig *container.HostConfig, mounts []container.MountPoint) container.InspectResponse {
+	return container.InspectResponse{
 		ContainerJSONBase: &container.ContainerJSONBase{
 			HostConfig: hostConfig,
 		},
@@ -151,7 +150,7 @@ func TestBuildRecreateScriptInner(t *testing.T) {
 		inspect := makeInspect(
 			&container.Config{Image: "img", Cmd: []string{"server"}},
 			&container.HostConfig{},
-			[]types.MountPoint{
+			[]container.MountPoint{
 				{Type: mount.TypeVolume, Name: "data", Destination: "/data", RW: true},
 			},
 		)
@@ -185,7 +184,7 @@ func TestBuildRecreateScriptInner(t *testing.T) {
 			nil,
 		)
 		script := svc.buildRecreateScriptInner("popugate", inspect, "img:latest")
-		if !strings.Contains(script, "-p 0.0.0.0:8090/tcp:8090") {
+		if !strings.Contains(script, "-p '0.0.0.0':'8090/tcp':'8090'") {
 			t.Errorf("script missing port, got:\n%s", script)
 		}
 	})
@@ -357,7 +356,7 @@ func TestGetComposeInfo(t *testing.T) {
 	})
 
 	t.Run("returns nil for nil config", func(t *testing.T) {
-		inspect := types.ContainerJSON{ContainerJSONBase: &container.ContainerJSONBase{}}
+		inspect := container.InspectResponse{ContainerJSONBase: &container.ContainerJSONBase{}}
 		if ci := getComposeInfo(inspect); ci != nil {
 			t.Errorf("expected nil, got %+v", ci)
 		}
@@ -435,12 +434,12 @@ func TestBuildComposeRecreateScript(t *testing.T) {
 
 func TestBuildRecreateScriptNetworkSettings(t *testing.T) {
 	svc := &UpdateService{}
-	inspect := types.ContainerJSON{
+	inspect := container.InspectResponse{
 		ContainerJSONBase: &container.ContainerJSONBase{
 			HostConfig: &container.HostConfig{NetworkMode: "bridge"},
 		},
 		Config: &container.Config{Image: "img", Cmd: []string{"server"}},
-		NetworkSettings: &types.NetworkSettings{
+		NetworkSettings: &container.NetworkSettings{
 			Networks: map[string]*network.EndpointSettings{"bridge": {}},
 		},
 	}

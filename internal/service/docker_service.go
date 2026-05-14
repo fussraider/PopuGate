@@ -216,19 +216,28 @@ func (s *DockerService) GetInstalledVersion() string {
 	return ""
 }
 
+func isSafeGitURLChar(r rune) bool {
+	return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') ||
+		r == ':' || r == '/' || r == '.' || r == '-' || r == '_' || r == '@' ||
+		r == '~' || r == '+' || r == '?'
+}
+
 // isSafeGitURL validates that a git URL only contains safe characters.
 func isSafeGitURL(url string) bool {
-	if url == "" {
+	if url == "" || strings.Contains(url, `"`) {
 		return false
 	}
 	for _, r := range url {
-		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') ||
-			r == ':' || r == '/' || r == '.' || r == '-' || r == '_' || r == '@' ||
-			r == '~' || r == '+' || r == '?') {
+		if !isSafeGitURLChar(r) {
 			return false
 		}
 	}
-	return !strings.Contains(url, `"`)
+	return true
+}
+
+func isSafeGitRefChar(r rune) bool {
+	return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') ||
+		r == '.' || r == '-' || r == '_' || r == '/'
 }
 
 // IsSafeGitRef validates that a git ref (commit/branch/tag) only contains safe characters.
@@ -237,8 +246,7 @@ func IsSafeGitRef(ref string) bool {
 		return false
 	}
 	for _, r := range ref {
-		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') ||
-			r == '.' || r == '-' || r == '_' || r == '/') {
+		if !isSafeGitRefChar(r) {
 			return false
 		}
 	}

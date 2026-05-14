@@ -26,6 +26,7 @@
           >
             <component :is="item.icon" class="nav-icon" :size="18" />
             <span class="nav-label">{{ item.label }}</span>
+            <span v-if="showBadge(item.path)" class="nav-badge-dot"></span>
           </router-link>
         </template>
       </nav>
@@ -61,10 +62,15 @@
 </template>
 
 <script setup lang="ts">
-import {computed, ref} from 'vue'
+import {computed, onMounted, ref} from 'vue'
 import {useRoute, useRouter} from 'vue-router'
 import {useI18n} from 'vue-i18n'
 import {useAuthStore} from '@/stores/auth'
+import {useDockerStore} from '@/stores/docker'
+import {useSchedulerStore} from '@/stores/scheduler'
+import {useSecretsStore} from '@/stores/secrets'
+import {useUpdateStore} from '@/stores/update'
+import {useUpstreamsStore} from '@/stores/upstreams'
 import Toast from '@/components/common/Toast.vue'
 import ThemeToggle from '@/components/common/ThemeToggle.vue'
 import LanguageSwitcher from '@/components/common/LanguageSwitcher.vue'
@@ -101,8 +107,21 @@ const APP_VERSION_URL = __APP_VERSION_URL__
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
+const dockerStore = useDockerStore()
+const schedulerStore = useSchedulerStore()
+const secretsStore = useSecretsStore()
+const updateStore = useUpdateStore()
+const upstreamsStore = useUpstreamsStore()
 
 const sidebarOpen = ref(false)
+
+onMounted(() => {
+  updateStore.check()
+  dockerStore.loadTelemtUpdateStatus()
+  schedulerStore.load()
+  secretsStore.load()
+  upstreamsStore.load()
+})
 
 const navItems = computed(() => [
   { path: '/',            icon: LayoutDashboard, label: t('common.dashboard'),   group: 'overview' },
@@ -139,6 +158,15 @@ const groupedNavItems = computed(() => {
       label: groupLabels[g],
       items: navItems.value.filter((item) => item.group === g),
     }))
+})
+
+const showBadge = computed(() => (path: string) => {
+  if (path === '/updates') return !!updateStore.status?.update_available
+  if (path === '/docker') return !!dockerStore.telemtUpdateStatus?.update_available
+  if (path === '/scheduler') return schedulerStore.tasks.some(t => t.last_run?.status === 'error')
+  if (path === '/secrets') return secretsStore.secrets.some(s => s.enabled && s.expires_at && new Date(s.expires_at) < new Date())
+  if (path === '/upstreams') return upstreamsStore.upstreams.some(u => u.enabled && u.last_check_ok === false)
+  return false
 })
 
 const pageTitle = computed(() => {
@@ -259,6 +287,15 @@ async function handleLogout() {
 
 .nav-icon { flex-shrink: 0; }
 .nav-label { white-space: nowrap; }
+
+.nav-badge-dot {
+  width: 6px;
+  height: 6px;
+  background: #f59e0b;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-left: auto;
+}
 
 .nav-group-label {
   padding: 16px $spacing-lg 4px;

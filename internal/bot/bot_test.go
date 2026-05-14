@@ -1,6 +1,7 @@
 package bot
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"net/http"
@@ -46,7 +47,7 @@ func TestSendMessage_ErrorDoesNotLeakToken(t *testing.T) {
 	// Override the API URL by using a custom method — we test via the real method
 	// but redirect the HTTP client to our test server.
 	// Since the URL is hardcoded, we instead verify the error message doesn't contain the token.
-	err := b.SendMessage(nil, "test message")
+	err := b.SendMessage(context.TODO(), "test message")
 	if err == nil {
 		t.Fatal("expected error from SendMessage with no server")
 	}
@@ -86,13 +87,13 @@ func TestBotAuthCheck(t *testing.T) {
 func TestHandleUpdate_NilMessage(t *testing.T) {
 	b := New("test-token", "123456789", "test-label", nil)
 	// Should not panic
-	b.handleUpdate(nil, TelegramUpdate{UpdateID: 1, Message: nil})
+	b.handleUpdate(context.TODO(), TelegramUpdate{UpdateID: 1, Message: nil})
 }
 
 func TestHandleUpdate_NonCommandMessage(t *testing.T) {
 	b := New("test-token", "123456789", "test-label", nil)
 	// Should not panic, should return early
-	b.handleUpdate(nil, TelegramUpdate{
+	b.handleUpdate(context.TODO(), TelegramUpdate{
 		UpdateID: 2,
 		Message: &TelegramMessage{
 			MessageID: 10,
@@ -125,7 +126,7 @@ func TestHandleUpdate_AuthCheckRejectsBeforeCommandDispatch(t *testing.T) {
 
 	// This should NOT panic because auth rejects user 999 before reaching cmdStatus
 	// which would dereference nil Settings deps.
-	b.handleUpdate(nil, TelegramUpdate{
+	b.handleUpdate(context.TODO(), TelegramUpdate{
 		UpdateID: 3,
 		Message: &TelegramMessage{
 			MessageID: 11,
@@ -142,7 +143,7 @@ func TestHandleUpdate_AuthCheckRejectsBeforeRestart(t *testing.T) {
 	b := New("test-token", "123456789", "test-label", nil)
 
 	// /restart with nil RestartProxy callback — would panic without auth check
-	b.handleUpdate(nil, TelegramUpdate{
+	b.handleUpdate(context.TODO(), TelegramUpdate{
 		UpdateID: 4,
 		Message: &TelegramMessage{
 			MessageID: 12,

@@ -170,29 +170,40 @@ type updateInstanceRequest struct {
 // @Failure      500  {object}  map[string]string
 // @Security     BearerAuth
 // @Router       /instances/{id} [put]
-func (h *InstanceHandler) Update(c *gin.Context) {
+func (h *InstanceHandler) getInstanceForUpdate(c *gin.Context) (int64, *model.Instance, bool) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid instance id"})
-		return
+		return 0, nil, false
 	}
-
 	inst, err := h.instances.GetByID(c.Request.Context(), id)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
-		return
+		return 0, nil, false
 	}
 	if inst == nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "instance not found"})
-		return
+		return 0, nil, false
 	}
+	return id, inst, true
+}
 
-	var req updateInstanceRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		HandleBindError(c, err)
-		return
+func validateTLSDomainsField(val string) error {
+	if val == "" || val == "[]" {
+		return nil
 	}
+	var domains []string
+	return json.Unmarshal([]byte(val), &domains)
+}
 
+func validateTagsField(val string) error {
+	if val == "" || val == "[]" {
+		return nil
+	}
+	return model.ValidateTags(val)
+}
+
+func (h *InstanceHandler) applyInstanceUpdates(c *gin.Context, inst *model.Instance, req *updateInstanceRequest) bool {
 	if req.Port != nil {
 		inst.Port = *req.Port
 	}
@@ -214,12 +225,9 @@ func (h *InstanceHandler) Update(c *gin.Context) {
 		inst.TLSDomain = *req.TLSDomain
 	}
 	if req.TLSDomains != nil {
-		if *req.TLSDomains != "" && *req.TLSDomains != "[]" {
-			var domains []string
-			if err := json.Unmarshal([]byte(*req.TLSDomains), &domains); err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "tls_domains must be a valid JSON array"})
-				return
-			}
+		if err := validateTLSDomainsField(*req.TLSDomains); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "tls_domains must be a valid JSON array"})
+			return false
 		}
 		inst.TLSDomains = *req.TLSDomains
 	}
@@ -233,39 +241,56 @@ func (h *InstanceHandler) Update(c *gin.Context) {
 		inst.MaskPort = *req.MaskPort
 	}
 	if req.Tags != nil {
-		if *req.Tags != "" && *req.Tags != "[]" {
-			if err := model.ValidateTags(*req.Tags); err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-				return
-			}
+		if err := validateTagsField(*req.Tags); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return false
 		}
 		inst.Tags = *req.Tags
 	}
+	return true
+}
 
+func (h *InstanceHandler) validateAndSaveInstance(c *gin.Context, id int64, inst *model.Instance) bool {
 	if inst.MetricsPort == 0 {
 		inst.MetricsPort = h.nextMetricsPort(c)
 	}
-
 	if inst.MetricsPort == inst.Port {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "metrics_port must differ from port"})
-		return
+		return false
 	}
-
 	if err := inst.Validate(); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
+		return false
 	}
-
 	if err := h.instances.Update(c.Request.Context(), inst); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
-		return
+		return false
 	}
-
 	auditLog(c, "instance.update", fmt.Sprintf("id=%d label=%s port=%d", id, inst.Label, inst.Port))
 	if h.containerSvc != nil {
 		h.containerSvc.RevalidateInstance(c.Request.Context(), id)
 	}
 	c.JSON(http.StatusOK, inst)
+	return true
+}
+
+func (h *InstanceHandler) Update(c *gin.Context) {
+	id, inst, ok := h.getInstanceForUpdate(c)
+	if !ok {
+		return
+	}
+
+	var req updateInstanceRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		HandleBindError(c, err)
+		return
+	}
+
+	if !h.applyInstanceUpdates(c, inst, &req) {
+		return
+	}
+
+	h.validateAndSaveInstance(c, id, inst)
 }
 
 // Remove handles DELETE /api/v1/instances/:id

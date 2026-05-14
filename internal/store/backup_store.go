@@ -735,4 +735,3 @@ func (s *BackupStore) calculateFileChecksum(path string) (string, error) {
 
 	return fmt.Sprintf("%x", hash.Sum(nil)), nil
 }
-

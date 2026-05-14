@@ -4,9 +4,9 @@ import "testing"
 
 func TestSlaveValidate(t *testing.T) {
 	tests := []struct {
-		name    string
-		slave   Slave
-		wantErr bool
+		name      string
+		slave     Slave
+		wantErr   bool
 		wantLabel string // expected label after Validate
 	}{
 		{

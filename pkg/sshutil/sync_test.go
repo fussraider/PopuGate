@@ -1,6 +1,7 @@
 package sshutil
 
 import (
+	"context"
 	"strings"
 	"testing"
 )
@@ -148,7 +149,7 @@ func TestRestartRemote_RejectsInvalidContainerName(t *testing.T) {
 	}
 
 	for _, name := range invalidNames {
-		err := RestartRemote(nil, SyncConfig{}, name)
+		err := RestartRemote(context.TODO(), SyncConfig{}, name)
 		if err == nil {
 			t.Errorf("expected error for container name %q, got nil", name)
 		}
@@ -160,7 +161,7 @@ func TestRestartRemote_RejectsInvalidContainerName(t *testing.T) {
 
 func TestRestartRemote_AcceptsValidContainerName(t *testing.T) {
 	// Valid names should pass the check and fail only on SSH connection (no real server)
-	err := RestartRemote(nil, SyncConfig{}, "popugate")
+	err := RestartRemote(context.TODO(), SyncConfig{}, "popugate")
 	// Should NOT fail with "invalid container name"
 	if err != nil && strings.Contains(err.Error(), "invalid container name") {
 		t.Errorf("valid name 'popugate' rejected: %v", err)

@@ -92,7 +92,8 @@
     "secrets_disabled": "disabled",
     "no_secret_instances": "instances without matching secrets",
     "top_users": "Top Users",
-    "no_data": "No data"
+    "no_data": "No data",
+    "update_banner": "PopuGate {latest} is available (current: {current})."
   },
   "secrets": {
     "add_secret": "Add Secret",
@@ -514,7 +515,9 @@
     "confirm_apply": "Apply the update? The service will need to be restarted.",
     "confirm_apply_docker": "Apply the update? The container will be recreated.",
     "success": "Updated from v{old} to v{new}. Restart the service to apply changes.",
-    "success_docker": "Updated from v{old} to v{new}. The container is being recreated, the page will refresh automatically..."
+    "success_docker": "Updated from v{old} to v{new}. The container is being recreated, the page will refresh automatically...",
+    "release_notes": "Release Notes",
+    "changelog": "Changelog"
   },
   "upstreams": {
     "add": "Add Upstream",
@@ -688,7 +691,9 @@
     "hint_concurrency": "Max concurrent connections",
     "hint_cert_len": "Length of generated fake certificate",
     "hint_auto_rotate_days": "Secret auto-rotation interval (0 — disabled)",
-    "hint_backup_retention": "Backup retention period in days"
+    "hint_backup_retention": "Backup retention period in days",
+    "web_url": "Web UI URL",
+    "web_url_hint": "Public URL of this PopuGate web interface, used for Telegram bot buttons (e.g. https://proxy.example.com:8080)"
   },
   "setup": {
     "welcome": "Welcome to PopuGate",

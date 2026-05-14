@@ -65,6 +65,15 @@
         </div>
       </div>
 
+      <!-- Web UI URL -->
+      <div class="card mb-lg">
+        <h3 class="mb-md">{{ t('settings_view.web_url') }}</h3>
+        <div class="form-group">
+          <input v-model="form.web_url" class="input" placeholder="https://popugate.example.com:8090" />
+          <span class="text-muted text-sm">{{ t('settings_view.web_url_hint') }}</span>
+        </div>
+      </div>
+
       <!-- Ad Tag -->
       <div class="card mb-lg">
         <h3 class="mb-md">{{ t('settings_view.ad_tag_title') }}</h3>

@@ -105,7 +105,7 @@ func (h *BotHandler) Test(c *gin.Context) {
 	}
 
 	testBot := bot.New(settings.TelegramBotToken, settings.TelegramChatID, settings.TelegramServerLabel, nil)
-	msg := fmt.Sprintf("🧪 Test message from %s %s", settings.TelegramServerLabel, model.Version)
+	msg := fmt.Sprintf("🧪 Test message from %s %s", settings.TelegramServerLabel, model.VersionTag())
 	if err := testBot.SendMessage(c.Request.Context(), msg); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return

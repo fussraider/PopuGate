@@ -17,7 +17,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/fussraider/PopuGate/internal/model"
 	"github.com/fussraider/PopuGate/pkg/dockerutil"
@@ -101,15 +100,16 @@ func (s *UpdateService) Check(ctx context.Context) (*UpdateStatus, error) {
 	}
 
 	latest := strings.TrimPrefix(release.TagName, "v")
+	current := strings.TrimPrefix(model.Version, "v")
 	mode := "binary"
 	if s.isDocker {
 		mode = "docker"
 	}
 
 	return &UpdateStatus{
-		Current:         model.Version,
+		Current:         current,
 		Latest:          latest,
-		UpdateAvailable: latest != model.Version && latest != "",
+		UpdateAvailable: latest != current && latest != "",
 		HTMLURL:         release.HTMLURL,
 		Mode:            mode,
 	}, nil
@@ -147,42 +147,24 @@ func (s *UpdateService) ApplyBinary(ctx context.Context) (*UpdateResult, error) 
 		return nil, err
 	}
 
-	assetName := fmt.Sprintf("popugate-%s-%s", runtime.GOOS, runtime.GOARCH)
-	var asset *githubReleaseAsset
-	for i := range release.Assets {
-		if release.Assets[i].Name == assetName {
-			asset = &release.Assets[i]
-			break
-		}
-	}
+	asset := findAsset(release.Assets, fmt.Sprintf("popugate-%s-%s", runtime.GOOS, runtime.GOARCH))
 	if asset == nil {
 		return nil, fmt.Errorf("no binary found for %s/%s in release %s", runtime.GOOS, runtime.GOARCH, release.TagName)
 	}
 
-	var checksumsAsset *githubReleaseAsset
-	for i := range release.Assets {
-		if release.Assets[i].Name == "checksums.txt" {
-			checksumsAsset = &release.Assets[i]
-			break
-		}
-	}
-
+	checksumsAsset := findAsset(release.Assets, "checksums.txt")
 	var expectedSHA256 string
 	if checksumsAsset != nil {
-		hash, err := s.fetchChecksum(ctx, checksumsAsset.BrowserDownloadURL, assetName)
+		hash, err := s.fetchChecksum(ctx, checksumsAsset.BrowserDownloadURL, asset.Name)
 		if err != nil {
 			return nil, fmt.Errorf("fetch checksums: %w", err)
 		}
 		expectedSHA256 = hash
 	}
 
-	exePath, err := os.Executable()
+	exePath, err := resolveExePath()
 	if err != nil {
-		return nil, fmt.Errorf("resolve executable: %w", err)
-	}
-	exePath, err = filepath.EvalSymlinks(exePath)
-	if err != nil {
-		return nil, fmt.Errorf("eval symlinks: %w", err)
+		return nil, err
 	}
 
 	tmpFile, err := s.downloadAsset(ctx, asset.BrowserDownloadURL, asset.Size, filepath.Dir(exePath), expectedSHA256)
@@ -195,14 +177,9 @@ func (s *UpdateService) ApplyBinary(ctx context.Context) (*UpdateResult, error) 
 		return nil, fmt.Errorf("chmod: %w", err)
 	}
 
-	backupPath := exePath + ".bak"
-	if err := os.Rename(exePath, backupPath); err != nil {
-		return nil, fmt.Errorf("backup current binary: %w", err)
-	}
-
-	if err := os.Rename(tmpFile, exePath); err != nil {
-		_ = os.Rename(backupPath, exePath)
-		return nil, fmt.Errorf("replace binary: %w", err)
+	backupPath, err := replaceBinary(tmpFile, exePath)
+	if err != nil {
+		return nil, err
 	}
 
 	result := &UpdateResult{
@@ -212,37 +189,68 @@ func (s *UpdateService) ApplyBinary(ctx context.Context) (*UpdateResult, error) 
 		BackupPath:      backupPath,
 	}
 
-	// Download and extract web dist
-	var webAsset *githubReleaseAsset
-	for i := range release.Assets {
-		if release.Assets[i].Name == webDistAssetName {
-			webAsset = &release.Assets[i]
-			break
-		}
-	}
-	if webAsset != nil {
-		destDir := webRootDir()
-		var webChecksum string
-		if checksumsAsset != nil {
-			if h, err := s.fetchChecksum(ctx, checksumsAsset.BrowserDownloadURL, webDistAssetName); err == nil {
-				webChecksum = h
-			}
-		}
-		tmpWeb, err := s.downloadWebArchive(ctx, webAsset.BrowserDownloadURL, webAsset.Size, webChecksum)
-		if err != nil {
-			log.Warnf("web dist download failed: %v", err)
-		} else {
-			defer os.Remove(tmpWeb)
-			if err := extractWebDist(tmpWeb, destDir); err != nil {
-				log.Warnf("web dist extraction failed: %v", err)
-			} else {
-				log.Infof("web dist updated: %s", destDir)
-				result.WebDistPath = destDir
-			}
-		}
-	}
+	s.updateWebDist(ctx, release, checksumsAsset, log, result)
 
 	return result, nil
+}
+
+func findAsset(assets []githubReleaseAsset, name string) *githubReleaseAsset {
+	for i := range assets {
+		if assets[i].Name == name {
+			return &assets[i]
+		}
+	}
+	return nil
+}
+
+func resolveExePath() (string, error) {
+	exePath, err := os.Executable()
+	if err != nil {
+		return "", fmt.Errorf("resolve executable: %w", err)
+	}
+	exePath, err = filepath.EvalSymlinks(exePath)
+	if err != nil {
+		return "", fmt.Errorf("eval symlinks: %w", err)
+	}
+	return exePath, nil
+}
+
+func replaceBinary(tmpFile, exePath string) (string, error) {
+	backupPath := exePath + ".bak"
+	if err := os.Rename(exePath, backupPath); err != nil {
+		return "", fmt.Errorf("backup current binary: %w", err)
+	}
+	if err := os.Rename(tmpFile, exePath); err != nil {
+		_ = os.Rename(backupPath, exePath)
+		return "", fmt.Errorf("replace binary: %w", err)
+	}
+	return backupPath, nil
+}
+
+func (s *UpdateService) updateWebDist(ctx context.Context, release *githubRelease, checksumsAsset *githubReleaseAsset, log *logger.Logger, result *UpdateResult) {
+	webAsset := findAsset(release.Assets, webDistAssetName)
+	if webAsset == nil {
+		return
+	}
+	destDir := webRootDir()
+	var webChecksum string
+	if checksumsAsset != nil {
+		if h, err := s.fetchChecksum(ctx, checksumsAsset.BrowserDownloadURL, webDistAssetName); err == nil {
+			webChecksum = h
+		}
+	}
+	tmpWeb, err := s.downloadWebArchive(ctx, webAsset.BrowserDownloadURL, webAsset.Size, webChecksum)
+	if err != nil {
+		log.Warnf("web dist download failed: %v", err)
+		return
+	}
+	defer os.Remove(tmpWeb)
+	if err := extractWebDist(tmpWeb, destDir); err != nil {
+		log.Warnf("web dist extraction failed: %v", err)
+		return
+	}
+	log.Infof("web dist updated: %s", destDir)
+	result.WebDistPath = destDir
 }
 
 // ApplyDocker pulls the new backend and web images.
@@ -267,8 +275,13 @@ func (s *UpdateService) ApplyDocker(ctx context.Context) (*UpdateResult, error) 
 	if err != nil {
 		return nil, fmt.Errorf("pull image %s: %w", newImage, err)
 	}
-	io.Copy(io.Discard, reader)
-	reader.Close()
+	if _, err := io.Copy(io.Discard, reader); err != nil {
+		reader.Close()
+		return nil, fmt.Errorf("read pull response for %s: %w", newImage, err)
+	}
+	if err := reader.Close(); err != nil {
+		return nil, fmt.Errorf("close pull stream for %s: %w", newImage, err)
+	}
 	log.Infof("image pulled successfully: %s", newImage)
 
 	var webPulled string
@@ -276,8 +289,12 @@ func (s *UpdateService) ApplyDocker(ctx context.Context) (*UpdateResult, error) 
 	if err != nil {
 		log.Warnf("failed to pull web image %s: %v", webImageRef, err)
 	} else {
-		io.Copy(io.Discard, webReader)
-		webReader.Close()
+		if _, copyErr := io.Copy(io.Discard, webReader); copyErr != nil {
+			log.Warnf("failed to read web pull response: %v", copyErr)
+		}
+		if closeErr := webReader.Close(); closeErr != nil {
+			log.Warnf("failed to close web pull stream: %v", closeErr)
+		}
 		webPulled = webImageRef
 		log.Infof("web image pulled successfully: %s", webImageRef)
 	}
@@ -390,7 +407,7 @@ func (s *UpdateService) RestartSelfDocker(newImage string) error {
 }
 
 // getComposeInfo extracts docker-compose project metadata from container labels.
-func getComposeInfo(inspect types.ContainerJSON) *composeInfo {
+func getComposeInfo(inspect container.InspectResponse) *composeInfo {
 	if inspect.Config == nil || inspect.Config.Labels == nil {
 		return nil
 	}
@@ -482,7 +499,7 @@ func webRootDir() string {
 }
 
 // buildRecreateScript generates a shell script for recreating a single container.
-func (s *UpdateService) buildRecreateScript(containerName string, inspect types.ContainerJSON, newImage string) string {
+func (s *UpdateService) buildRecreateScript(containerName string, inspect container.InspectResponse, newImage string) string {
 	var script strings.Builder
 	fmt.Fprintf(&script, "set -e\n")
 	fmt.Fprintf(&script, "echo '[popugate-updater] Waiting for HTTP response to be delivered...'\n")
@@ -495,7 +512,7 @@ func (s *UpdateService) buildRecreateScript(containerName string, inspect types.
 }
 
 // buildRecreateScriptInner generates stop/rm/create/start commands for one container.
-func (s *UpdateService) buildRecreateScriptInner(containerName string, inspect types.ContainerJSON, newImage string) string {
+func (s *UpdateService) buildRecreateScriptInner(containerName string, inspect container.InspectResponse, newImage string) string {
 	var flags []string
 	flags = append(flags, "-d")
 	flags = append(flags, fmt.Sprintf("--name %s", shellescape(containerName)))
@@ -540,7 +557,7 @@ func (s *UpdateService) buildRecreateScriptInner(containerName string, inspect t
 			if hostIP == "" {
 				hostIP = "0.0.0.0"
 			}
-			flags = append(flags, "-p", fmt.Sprintf("%s:%s:%s", hostIP, hostPort, b.HostPort))
+			flags = append(flags, "-p", fmt.Sprintf("%s:%s:%s", shellescape(hostIP), shellescape(string(hostPort)), shellescape(b.HostPort)))
 		}
 	}
 	for _, eh := range inspect.HostConfig.ExtraHosts {
@@ -583,7 +600,7 @@ func (s *UpdateService) buildRecreateScriptInner(containerName string, inspect t
 
 // buildDualRecreateScript generates a sidecar script that recreates both
 // the backend and web containers.
-func (s *UpdateService) buildDualRecreateScript(backendName string, backendInspect types.ContainerJSON, backendImage string, webInspect types.ContainerJSON, webName, webImage string) string {
+func (s *UpdateService) buildDualRecreateScript(backendName string, backendInspect container.InspectResponse, backendImage string, webInspect container.InspectResponse, webName, webImage string) string {
 	var script strings.Builder
 	fmt.Fprintf(&script, "set -e\n")
 	fmt.Fprintf(&script, "echo '[popugate-updater] Waiting for HTTP response to be delivered...'\n")

@@ -16,6 +16,15 @@
         </StatusBadge>
       </div>
 
+      <div v-if="updateStore.status?.update_available" class="update-links mb-md">
+        <a v-if="updateStore.status.url" :href="updateStore.status.url" target="_blank" rel="noopener" class="update-link">
+          <ExternalLink :size="14" /> {{ t('updates.release_notes') }}
+        </a>
+        <a href="https://github.com/fussraider/PopuGate/blob/main/CHANGELOG.md" target="_blank" rel="noopener" class="update-link">
+          <FileText :size="14" /> {{ t('updates.changelog') }}
+        </a>
+      </div>
+
       <div class="flex gap-sm">
         <button class="btn btn-primary" :disabled="updateStore.loading" @click="updateStore.check()">
           <Loader2 v-if="updateStore.loading" :size="16" class="animate-spin" />
@@ -53,11 +62,11 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue'
-import { useI18n } from 'vue-i18n'
-import { useUpdateStore } from '@/stores/update'
-import { useConfirmDialog } from '@/composables/useConfirmDialog'
-import { Loader2 } from '@lucide/vue'
+import {onMounted} from 'vue'
+import {useI18n} from 'vue-i18n'
+import {useUpdateStore} from '@/stores/update'
+import {useConfirmDialog} from '@/composables/useConfirmDialog'
+import {ExternalLink, FileText, Loader2} from '@lucide/vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 
@@ -76,3 +85,23 @@ async function handleApply() {
 
 onMounted(() => updateStore.check())
 </script>
+
+<style scoped lang="scss">
+@use '@/assets/scss/variables' as *;
+
+.update-links {
+  display: flex;
+  gap: $spacing-md;
+}
+
+.update-link {
+  display: inline-flex;
+  align-items: center;
+  gap: $spacing-xs;
+  color: var(--color-primary);
+  text-decoration: none;
+  font-size: $font-size-sm;
+
+  &:hover { text-decoration: underline; }
+}
+</style>

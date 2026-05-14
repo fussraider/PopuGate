@@ -9,7 +9,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/image"
@@ -79,7 +78,7 @@ func (d *DockerClient) IsRunning(ctx context.Context) (bool, error) {
 }
 
 // ContainerInspect returns detailed container info.
-func (d *DockerClient) ContainerInspect(ctx context.Context, name string) (types.ContainerJSON, error) {
+func (d *DockerClient) ContainerInspect(ctx context.Context, name string) (container.InspectResponse, error) {
 	if name == "" {
 		name = ContainerName
 	}

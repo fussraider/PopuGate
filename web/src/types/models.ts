@@ -18,6 +18,7 @@ export interface Settings {
   telegram_interval: number
   telegram_alerts_enabled: boolean
   telegram_server_label: string
+  web_url: string
   auto_update_enabled: boolean
   secret_auto_rotate_days: number
   maintenance_mode: boolean

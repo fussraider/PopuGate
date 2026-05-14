@@ -27,15 +27,16 @@ var ErrNoMatchingSecrets = errors.New("no matching secrets: add a secret with a 
 
 // ContainerService manages proxy container lifecycle.
 type ContainerService struct {
-	docker     *dockerutil.DockerClient
-	secrets    *store.SecretStore
-	upstreams  *store.UpstreamStore
-	instances  *store.InstanceStore
-	traffic    *store.TrafficStore
-	settings   *store.SettingsStore
-	trafficSvc *TrafficService
-	notify     NotifyFunc
-	client     *http.Client
+	docker         *dockerutil.DockerClient
+	secrets        *store.SecretStore
+	upstreams      *store.UpstreamStore
+	instances      *store.InstanceStore
+	traffic        *store.TrafficStore
+	settings       *store.SettingsStore
+	trafficSvc     *TrafficService
+	notify         NotifyFunc
+	notifyWithBtns NotifyWithButtonsFunc
+	client         *http.Client
 }
 
 // NewContainerService creates a new ContainerService.
@@ -62,6 +63,8 @@ func NewContainerService(
 
 // SetNotify sets the notification callback.
 func (s *ContainerService) SetNotify(fn NotifyFunc) { s.notify = fn }
+
+func (s *ContainerService) SetNotifyWithButtons(fn NotifyWithButtonsFunc) { s.notifyWithBtns = fn }
 
 // Start starts all enabled proxy instances.
 func (s *ContainerService) Start(ctx context.Context) error {
@@ -238,6 +241,61 @@ func (s *ContainerService) Reload(ctx context.Context) error {
 	return nil
 }
 
+func (s *ContainerService) buildSecretCounts(ctx context.Context, insts []model.Instance) map[int64]int {
+	dbSecrets, _ := s.secrets.List(ctx)
+	counts := make(map[int64]int, len(insts))
+	for _, inst := range insts {
+		instanceTags := inst.GetTags()
+		count := 0
+		for _, sec := range dbSecrets {
+			if sec.Enabled && model.TagsMatch(instanceTags, sec.GetTags()) {
+				count++
+			}
+		}
+		counts[inst.ID] = count
+	}
+	return counts
+}
+
+func buildInstanceStatus(inst model.Instance, running bool, matchingSecrets int) model.InstanceStatus {
+	is := model.InstanceStatus{
+		ID:                  inst.ID,
+		Port:                inst.Port,
+		Running:             running,
+		Label:               inst.Label,
+		TLSDomain:           inst.TLSDomain,
+		FakeTLS:             inst.FakeTLS,
+		ContainerName:       inst.ContainerName(),
+		MatchingSecretCount: matchingSecrets,
+	}
+	if running {
+		is.Status = "healthy"
+	} else if inst.Enabled {
+		is.Status = "stopped"
+	}
+	return is
+}
+
+func (s *ContainerService) enrichWithRuntimeInfo(ctx context.Context, status *model.ProxyStatus, inst *model.Instance) {
+	info, err := s.docker.ContainerInspect(ctx, inst.ContainerName())
+	if err == nil {
+		status.ContainerID = info.ID[:12]
+		if t, err := time.Parse(time.RFC3339Nano, info.State.StartedAt); err == nil {
+			status.StartedAt = t
+			status.UptimeSeconds = int64(time.Since(t).Seconds())
+			status.Uptime = formatDuration(time.Since(t))
+		}
+	}
+
+	metrics, err := s.trafficSvc.GetLiveMetrics(ctx)
+	if err != nil {
+		statusLog.Warnf("live metrics unavailable: %v", err)
+	} else {
+		status.ConnsCurrent = int(metrics.ConnsCurrent)
+		status.ConnsTotal = int64(metrics.ConnsTotal)
+	}
+}
+
 // Status returns the current status of all proxy instances.
 func (s *ContainerService) Status(ctx context.Context) (*model.ProxyStatus, error) {
 	status := &model.ProxyStatus{
@@ -249,39 +307,12 @@ func (s *ContainerService) Status(ctx context.Context) (*model.ProxyStatus, erro
 		return status, nil
 	}
 
-	// Pre-load matching secret counts for all instances
-	secretCounts := make(map[int64]int, len(insts))
-	dbSecrets, _ := s.secrets.List(ctx)
-	for _, inst := range insts {
-		instanceTags := inst.GetTags()
-		count := 0
-		for _, sec := range dbSecrets {
-			if sec.Enabled && model.TagsMatch(instanceTags, sec.GetTags()) {
-				count++
-			}
-		}
-		secretCounts[inst.ID] = count
-	}
+	secretCounts := s.buildSecretCounts(ctx, insts)
 
 	var firstRunningInst *model.Instance
 	for i, inst := range insts {
 		running, _ := s.docker.IsInstanceRunning(ctx, inst.ContainerName())
-		is := model.InstanceStatus{
-			ID:                  inst.ID,
-			Port:                inst.Port,
-			Running:             running,
-			Label:               inst.Label,
-			TLSDomain:           inst.TLSDomain,
-			FakeTLS:             inst.FakeTLS,
-			ContainerName:       inst.ContainerName(),
-			MatchingSecretCount: secretCounts[inst.ID],
-		}
-		if running {
-			is.Status = "healthy"
-		} else if inst.Enabled {
-			is.Status = "stopped"
-		}
-		status.Instances = append(status.Instances, is)
+		status.Instances = append(status.Instances, buildInstanceStatus(inst, running, secretCounts[inst.ID]))
 		if running {
 			status.Running = true
 			if firstRunningInst == nil {
@@ -291,23 +322,7 @@ func (s *ContainerService) Status(ctx context.Context) (*model.ProxyStatus, erro
 	}
 
 	if firstRunningInst != nil {
-		info, err := s.docker.ContainerInspect(ctx, firstRunningInst.ContainerName())
-		if err == nil {
-			status.ContainerID = info.ID[:12]
-			if t, err := time.Parse(time.RFC3339Nano, info.State.StartedAt); err == nil {
-				status.StartedAt = t
-				status.UptimeSeconds = int64(time.Since(t).Seconds())
-				status.Uptime = formatDuration(time.Since(t))
-			}
-		}
-
-		metrics, err := s.trafficSvc.GetLiveMetrics(ctx)
-		if err != nil {
-			statusLog.Warnf("live metrics unavailable: %v", err)
-		} else {
-			status.ConnsCurrent = int(metrics.ConnsCurrent)
-			status.ConnsTotal = int64(metrics.ConnsTotal)
-		}
+		s.enrichWithRuntimeInfo(ctx, status, firstRunningInst)
 	}
 
 	if global, err := s.traffic.GetGlobal(ctx); err == nil && global != nil {
@@ -395,8 +410,11 @@ func (s *ContainerService) RevalidateAllInstances(ctx context.Context) {
 				statusLog.Warnf("revalidate: stop instance %s: %v", inst.ContainerName(), err)
 			}
 			cancel()
-			if s.notify != nil {
-				s.notify(ctx, "⚠️ *%s* Instance \"%s\" (port %d) stopped: no matching secrets")
+			if s.notifyWithBtns != nil {
+				s.notifyWithBtns(ctx, "⚠️ *%s* Instance \"%s\" (port %d) stopped: no matching secrets",
+					[]KeyboardButton{dashboardButton(ctx, s.settings)}, inst.Label, inst.Port)
+			} else if s.notify != nil {
+				s.notify(ctx, "⚠️ *%s* Instance \"%s\" (port %d) stopped: no matching secrets", inst.Label, inst.Port)
 			}
 		}
 	}
@@ -424,7 +442,10 @@ func (s *ContainerService) RevalidateInstance(ctx context.Context, id int64) {
 			statusLog.Warnf("revalidate: stop instance %s: %v", inst.ContainerName(), err)
 		}
 		cancel()
-		if s.notify != nil {
+		if s.notifyWithBtns != nil {
+			s.notifyWithBtns(ctx, "⚠️ *%s* Instance stopped: no matching secrets",
+				[]KeyboardButton{dashboardButton(ctx, s.settings)})
+		} else if s.notify != nil {
 			s.notify(ctx, "⚠️ *%s* Instance stopped: no matching secrets")
 		}
 	}

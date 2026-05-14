@@ -64,70 +64,78 @@ type OSType struct {
 	Arch    string `json:"arch"`
 }
 
-// DetectOS detects the operating system details.
-func DetectOS() *OSType {
-	res := &OSType{
+func newOSType() *OSType {
+	return &OSType{
 		Family:  "unknown",
 		Version: "unknown",
 		Arch:    runtime.GOARCH,
 	}
+}
 
-	// Check for macOS
-	if runtime.GOOS == "darwin" {
-		res.Family = "macos"
-		// Simple version check for macOS
-		if out, err := exec.Command("sw_vers", "-productVersion").Output(); err == nil {
-			res.Version = strings.TrimSpace(string(out))
-		}
-		return res
+func detectMacOS() *OSType {
+	res := newOSType()
+	res.Family = "macos"
+	if out, err := exec.Command("sw_vers", "-productVersion").Output(); err == nil {
+		res.Version = strings.TrimSpace(string(out))
 	}
+	return res
+}
 
-	// Check /etc/os-release for Linux
-	if data, err := os.ReadFile("/etc/os-release"); err == nil {
-		content := strings.ToLower(string(data))
-		lines := strings.Split(content, "\n")
-		for _, line := range lines {
-			if strings.HasPrefix(line, "id=") {
-				res.Family = strings.Trim(strings.TrimPrefix(line, "id="), "\"")
-			}
-			if strings.HasPrefix(line, "version_id=") {
-				res.Version = strings.Trim(strings.TrimPrefix(line, "version_id="), "\"")
-			}
+func parseOSRelease(data []byte) *OSType {
+	res := newOSType()
+	content := strings.ToLower(string(data))
+	for _, line := range strings.Split(content, "\n") {
+		if strings.HasPrefix(line, "id=") {
+			res.Family = strings.Trim(strings.TrimPrefix(line, "id="), "\"")
 		}
-
-		// Map to common families if needed
-		switch {
-		case containsAny(content, "ubuntu", "debian", "pop", "linuxmint", "kali"):
-			if res.Family == "unknown" {
-				res.Family = "debian"
-			}
-		case containsAny(content, "centos", "rhel", "fedora", "rocky", "alma", "oracle"):
-			if res.Family == "unknown" {
-				res.Family = "rhel"
-			}
-		case strings.Contains(content, "alpine"):
-			if res.Family == "unknown" {
-				res.Family = "alpine"
-			}
+		if strings.HasPrefix(line, "version_id=") {
+			res.Version = strings.Trim(strings.TrimPrefix(line, "version_id="), "\"")
 		}
-		return res
 	}
+	if res.Family == "unknown" {
+		res.Family = mapOSFamily(content)
+	}
+	return res
+}
 
-	// Fallback Linux checks
-	if _, err := os.Stat("/etc/debian_version"); err == nil {
+func mapOSFamily(content string) string {
+	switch {
+	case containsAny(content, "ubuntu", "debian", "pop", "linuxmint", "kali"):
+		return "debian"
+	case containsAny(content, "centos", "rhel", "fedora", "rocky", "alma", "oracle"):
+		return "rhel"
+	case strings.Contains(content, "alpine"):
+		return "alpine"
+	}
+	return "unknown"
+}
+
+func detectLinuxFallback() *OSType {
+	if data, err := os.ReadFile("/etc/debian_version"); err == nil {
+		res := newOSType()
 		res.Family = "debian"
-		if v, err := os.ReadFile("/etc/debian_version"); err == nil {
-			res.Version = strings.TrimSpace(string(v))
-		}
+		res.Version = strings.TrimSpace(string(data))
 		return res
 	}
 	if _, err := os.Stat("/etc/redhat-release"); err == nil {
+		res := newOSType()
 		res.Family = "rhel"
-		// Could parse version here, but common distributions use os-release anyway
 		return res
 	}
+	return newOSType()
+}
 
-	return res
+// DetectOS detects the operating system details.
+func DetectOS() *OSType {
+	if runtime.GOOS == "darwin" {
+		return detectMacOS()
+	}
+
+	if data, err := os.ReadFile("/etc/os-release"); err == nil {
+		return parseOSRelease(data)
+	}
+
+	return detectLinuxFallback()
 }
 
 // InstallSystemdService creates and enables the popugate systemd service.

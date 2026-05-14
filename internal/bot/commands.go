@@ -116,7 +116,7 @@ func (b *Bot) cmdSecrets(ctx context.Context) string {
 }
 
 // cmdLink shows proxy links for a specific secret or all enabled secrets.
-func (b *Bot) cmdLink(ctx context.Context, text string) string {
+func (b *Bot) resolvePublicIP(ctx context.Context) string {
 	settings, _ := b.deps.Settings.Load(ctx)
 	publicIP := ""
 	if b.deps.GetPublicIP != nil {
@@ -125,42 +125,42 @@ func (b *Bot) cmdLink(ctx context.Context, text string) string {
 	if publicIP == "" {
 		publicIP = settings.CustomIP
 	}
+	return publicIP
+}
 
-	instances, _ := b.deps.Instances.List(ctx)
+func (b *Bot) sendQRForLink(ctx context.Context, link model.ProxyLink, secretLabel string) {
+	if b.deps.GenerateQR == nil {
+		return
+	}
+	qrPNG, err := b.deps.GenerateQR(ctx, link.WebLink)
+	if err != nil {
+		return
+	}
+	caption := fmt.Sprintf("🔗 %s — %s :%d — %s", secretLabel, link.InstanceLabel, link.InstancePort, link.Domain)
+	if sendErr := b.SendPhoto(ctx, qrPNG, caption); sendErr != nil {
+		log.Errorf("QR photo send error: %v", sendErr)
+	}
+}
 
-	label := b.args(text)
-	if label != "" {
-		sec, err := b.deps.Secrets.GetByLabel(ctx, label)
-		if err != nil || sec == nil {
-			return fmt.Sprintf("Secret `%s` not found.", label)
-		}
+func (b *Bot) cmdLinkSingle(ctx context.Context, sec *model.Secret, instances []model.Instance, publicIP string) string {
+	var lines []string
+	lines = append(lines, fmt.Sprintf("🔗 *Links* — `%s`:", sec.Label))
 
-		var lines []string
-		lines = append(lines, fmt.Sprintf("🔗 *Links* — `%s`:", sec.Label))
-
-		links := service.BuildLinksForSecret(sec, instances, publicIP)
-		for _, link := range links {
-			lines = append(lines, fmt.Sprintf("`%s` :%d — `%s`", link.InstanceLabel, link.InstancePort, link.Domain))
-			lines = append(lines, fmt.Sprintf("`%s`", link.TGLink))
-			lines = append(lines, link.WebLink)
-
-			if b.deps.GenerateQR != nil {
-				if qrPNG, err := b.deps.GenerateQR(ctx, link.WebLink); err == nil {
-					caption := fmt.Sprintf("🔗 %s — %s :%d — %s", sec.Label, link.InstanceLabel, link.InstancePort, link.Domain)
-					if sendErr := b.SendPhoto(ctx, qrPNG, caption); sendErr != nil {
-						log.Errorf("QR photo send error: %v", sendErr)
-					}
-				}
-			}
-		}
-
-		if len(lines) <= 1 {
-			return fmt.Sprintf("No accessible instances for secret `%s`.", label)
-		}
-		return strings.Join(lines, "\n")
+	links := service.BuildLinksForSecret(sec, instances, publicIP)
+	for _, link := range links {
+		lines = append(lines, fmt.Sprintf("`%s` :%d — `%s`", link.InstanceLabel, link.InstancePort, link.Domain))
+		lines = append(lines, fmt.Sprintf("`%s`", link.TGLink))
+		lines = append(lines, link.WebLink)
+		b.sendQRForLink(ctx, link, sec.Label)
 	}
 
-	// Show all enabled secrets
+	if len(lines) <= 1 {
+		return fmt.Sprintf("No accessible instances for secret `%s`.", sec.Label)
+	}
+	return strings.Join(lines, "\n")
+}
+
+func (b *Bot) cmdLinkAll(ctx context.Context, instances []model.Instance, publicIP string) string {
 	secrets, _ := b.deps.Secrets.List(ctx)
 	var allLines []string
 	for _, s := range secrets {
@@ -170,21 +170,30 @@ func (b *Bot) cmdLink(ctx context.Context, text string) string {
 		links := service.BuildLinksForSecret(&s, instances, publicIP)
 		for _, link := range links {
 			allLines = append(allLines, fmt.Sprintf("🔗 `%s` `%s` :%d `%s`: `%s`", s.Label, link.InstanceLabel, link.InstancePort, link.Domain, link.TGLink))
-
-			if b.deps.GenerateQR != nil {
-				if qrPNG, err := b.deps.GenerateQR(ctx, link.WebLink); err == nil {
-					caption := fmt.Sprintf("🔗 %s — %s :%d — %s", s.Label, link.InstanceLabel, link.InstancePort, link.Domain)
-					if sendErr := b.SendPhoto(ctx, qrPNG, caption); sendErr != nil {
-						log.Errorf("QR photo send error for %s: %v", s.Label, sendErr)
-					}
-				}
-			}
+			b.sendQRForLink(ctx, link, s.Label)
 		}
 	}
 	if len(allLines) == 0 {
 		return "No enabled secrets or instances."
 	}
 	return strings.Join(allLines, "\n")
+}
+
+// cmdLink shows proxy links for a specific secret or all enabled secrets.
+func (b *Bot) cmdLink(ctx context.Context, text string) string {
+	publicIP := b.resolvePublicIP(ctx)
+	instances, _ := b.deps.Instances.List(ctx)
+
+	label := b.args(text)
+	if label != "" {
+		sec, err := b.deps.Secrets.GetByLabel(ctx, label)
+		if err != nil || sec == nil {
+			return fmt.Sprintf("Secret `%s` not found.", label)
+		}
+		return b.cmdLinkSingle(ctx, sec, instances, publicIP)
+	}
+
+	return b.cmdLinkAll(ctx, instances, publicIP)
 }
 
 // cmdAdd adds a new secret with the given label.
@@ -457,7 +466,7 @@ func (b *Bot) cmdTraffic(ctx context.Context) string {
 // cmdUpdate shows version info.
 func (b *Bot) cmdUpdate(ctx context.Context) string {
 	var lines []string
-	lines = append(lines, fmt.Sprintf("📦 *PopuGate* `%s`", model.Version))
+	lines = append(lines, fmt.Sprintf("📦 *PopuGate* `%s`", model.VersionTag()))
 	if model.Commit != "" && model.Commit != "unknown" {
 		lines = append(lines, fmt.Sprintf("Commit: `%s`", model.Commit))
 	}

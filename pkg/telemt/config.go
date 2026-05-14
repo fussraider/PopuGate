@@ -143,12 +143,111 @@ type UpstreamEntry struct {
 	Enabled  bool
 }
 
+func newEmptyAccess() AccessConfig {
+	return AccessConfig{
+		ReplayCheckLen:   65536,
+		ReplayWindowSecs: 1800,
+		IgnoreTimeSkew:   false,
+		Users:            make(map[string]string),
+		UserMaxTCPConns:  make(map[string]int),
+		UserMaxUniqueIPs: make(map[string]int),
+		UserDataQuota:    make(map[string]int64),
+		UserExpirations:  make(map[string]string),
+	}
+}
+
+func applySecretsToAccess(access *AccessConfig, secrets []SecretEntry) {
+	for _, sec := range secrets {
+		if !sec.Enabled {
+			continue
+		}
+		access.Users[sec.Label] = sec.SecretKey
+		if sec.MaxConns > 0 {
+			access.UserMaxTCPConns[sec.Label] = sec.MaxConns
+		}
+		if sec.MaxIPs > 0 {
+			access.UserMaxUniqueIPs[sec.Label] = sec.MaxIPs
+		}
+		if sec.QuotaBytes > 0 {
+			access.UserDataQuota[sec.Label] = sec.QuotaBytes
+		}
+		if sec.ExpiresAt != "" && sec.ExpiresAt != "0" {
+			access.UserExpirations[sec.Label] = sec.ExpiresAt
+		}
+	}
+}
+
+func buildUpstreamConfig(up UpstreamEntry) UpstreamConfig {
+	uc := UpstreamConfig{
+		Type:   string(up.Type),
+		Weight: up.Weight,
+	}
+	if up.Type != model.UpstreamDirect {
+		uc.Address = up.Address
+		if up.Type == model.UpstreamSOCKS5 {
+			uc.Username = up.Username
+			uc.Password = up.Password
+		} else if up.Type == model.UpstreamSOCKS4 {
+			uc.UserID = up.Username
+		}
+	}
+	if up.Iface != "" {
+		uc.Interface = up.Iface
+	}
+	return uc
+}
+
+func buildUpstreams(entries []UpstreamEntry) []UpstreamConfig {
+	var upstreams []UpstreamConfig
+	for _, up := range entries {
+		if !up.Enabled {
+			continue
+		}
+		upstreams = append(upstreams, buildUpstreamConfig(up))
+	}
+	return upstreams
+}
+
+func buildMetricsWhitelist(extra []string) []string {
+	wl := []string{"127.0.0.1", "::1"}
+	return append(wl, extra...)
+}
+
+func defaultTimeouts() TimeoutsConfig {
+	return TimeoutsConfig{
+		ClientHandshake: 30,
+		TGConnect:       10,
+		ClientKeepalive: 15,
+		ClientAck:       90,
+	}
+}
+
+func maskingHost(enabled bool, host string) string {
+	if enabled {
+		return host
+	}
+	return ""
+}
+
+func telegramHasURLs(tc TelegramConfig) bool {
+	return tc.ProxySecretURL != "" || tc.ProxyConfigV4URL != "" || tc.ProxyConfigV6URL != ""
+}
+
+func telegramConfigFromURLs(secretURL, v4URL, v6URL string) TelegramConfig {
+	if secretURL == "" && v4URL == "" && v6URL == "" {
+		return TelegramConfig{}
+	}
+	return TelegramConfig{
+		ProxySecretURL:   secretURL,
+		ProxyConfigV4URL: v4URL,
+		ProxyConfigV6URL: v6URL,
+	}
+}
+
 // BuildConfig constructs the telemt TOML configuration (legacy: from global settings).
 func BuildConfig(params *ConfigParams) *TelemtConfig {
 	s := params.Settings
-
-	metricsWhitelist := []string{"127.0.0.1", "::1"}
-	metricsWhitelist = append(metricsWhitelist, params.ExtraMetricsWhitelist...)
+	metricsWhitelist := buildMetricsWhitelist(params.ExtraMetricsWhitelist)
 
 	cfg := &TelemtConfig{
 		General: GeneralConfig{
@@ -156,6 +255,7 @@ func BuildConfig(params *ConfigParams) *TelemtConfig {
 			FastMode:       true,
 			UseMiddleProxy: true,
 			LogLevel:       "normal",
+			AdTag:          s.AdTag,
 			Modes: ModesConfig{
 				Classic: false,
 				Secure:  !s.MaskingEnabled,
@@ -173,121 +273,60 @@ func BuildConfig(params *ConfigParams) *TelemtConfig {
 			MetricsListen:    metricsListenAddr(s.ProxyMetricsPort, params.ExtraMetricsWhitelist),
 			MetricsWhitelist: metricsWhitelist,
 		},
-		Timeouts: TimeoutsConfig{
-			ClientHandshake: 30,
-			TGConnect:       10,
-			ClientKeepalive: 15,
-			ClientAck:       90,
-		},
+		Timeouts: defaultTimeouts(),
 		Censorship: CensorshipConfig{
 			TLSDomain:         s.ProxyDomain,
 			UnknownSNIAction:  s.UnknownSNIAction,
 			Mask:              s.MaskingEnabled,
 			MaskPort:          s.MaskingPort,
+			MaskHost:          maskingHost(s.MaskingEnabled, s.MaskingHost),
 			FakeCertLen:       s.FakeCertLen,
 			MaskRelayMaxBytes: s.MaskingRelayMaxBytes,
 		},
-		Access: AccessConfig{
-			ReplayCheckLen:   65536,
-			ReplayWindowSecs: 1800,
-			IgnoreTimeSkew:   false,
-			Users:            make(map[string]string),
-		},
+		Access: newEmptyAccess(),
 	}
 
-	// Ad tag
-	if s.AdTag != "" {
-		cfg.General.AdTag = s.AdTag
-	}
+	cfg.Telegram = telegramConfigFromURLs(s.ProxySecretURL, s.ProxyConfigV4URL, s.ProxyConfigV6URL)
 
-	// Masking host
-	if s.MaskingEnabled && s.MaskingHost != "" {
-		cfg.Censorship.MaskHost = s.MaskingHost
-	}
-
-	// Telegram custom URLs (for restricted regions)
-	if s.ProxySecretURL != "" || s.ProxyConfigV4URL != "" || s.ProxyConfigV6URL != "" {
-		cfg.Telegram = TelegramConfig{
-			ProxySecretURL:   s.ProxySecretURL,
-			ProxyConfigV4URL: s.ProxyConfigV4URL,
-			ProxyConfigV6URL: s.ProxyConfigV6URL,
-		}
-	}
-
-	// Proxy protocol trusted CIDRs
 	if s.ProxyProtocol && s.ProxyProtocolTrustedCIDRs != "" {
 		cfg.Server.ProxyProtocolTrustedCIDRs = parseCIDRList(s.ProxyProtocolTrustedCIDRs)
 	}
 
-	// Secrets
-	cfg.Access.Users = make(map[string]string)
-	cfg.Access.UserMaxTCPConns = make(map[string]int)
-	cfg.Access.UserMaxUniqueIPs = make(map[string]int)
-	cfg.Access.UserDataQuota = make(map[string]int64)
-	cfg.Access.UserExpirations = make(map[string]string)
-
-	for _, sec := range params.Secrets {
-		if !sec.Enabled {
-			continue
-		}
-		cfg.Access.Users[sec.Label] = sec.SecretKey
-
-		if sec.MaxConns > 0 {
-			cfg.Access.UserMaxTCPConns[sec.Label] = sec.MaxConns
-		}
-		if sec.MaxIPs > 0 {
-			cfg.Access.UserMaxUniqueIPs[sec.Label] = sec.MaxIPs
-		}
-		if sec.QuotaBytes > 0 {
-			cfg.Access.UserDataQuota[sec.Label] = sec.QuotaBytes
-		}
-		if sec.ExpiresAt != "" && sec.ExpiresAt != "0" {
-			cfg.Access.UserExpirations[sec.Label] = sec.ExpiresAt
-		}
-	}
-
-	// Upstreams
-	for _, up := range params.Upstreams {
-		if !up.Enabled {
-			continue
-		}
-		uc := UpstreamConfig{
-			Type:   string(up.Type),
-			Weight: up.Weight,
-		}
-		if up.Type != model.UpstreamDirect {
-			uc.Address = up.Address
-			if up.Type == model.UpstreamSOCKS5 {
-				uc.Username = up.Username
-				uc.Password = up.Password
-			} else if up.Type == model.UpstreamSOCKS4 {
-				uc.UserID = up.Username
-			}
-		}
-		if up.Iface != "" {
-			uc.Interface = up.Iface
-		}
-		cfg.Upstreams = append(cfg.Upstreams, uc)
-	}
+	applySecretsToAccess(&cfg.Access, params.Secrets)
+	cfg.Upstreams = buildUpstreams(params.Upstreams)
 
 	return cfg
+}
+
+func instanceModes(fakeTLS bool) ModesConfig {
+	modes := ModesConfig{TLS: fakeTLS, Secure: false}
+	if !fakeTLS {
+		modes.Classic = true
+	}
+	return modes
+}
+
+func instanceCensorship(inst *model.Instance, fakeCertLen int) CensorshipConfig {
+	if !inst.FakeTLS {
+		return CensorshipConfig{}
+	}
+	return CensorshipConfig{
+		TLSDomain:        inst.TLSDomain,
+		TLSDomains:       inst.GetTLSDomains(),
+		UnknownSNIAction: "mask",
+		Mask:             true,
+		MaskHost:         inst.GetMaskHost(),
+		MaskPort:         inst.MaskPort,
+		FakeCertLen:      fakeCertLen,
+		TLSEmulation:     true,
+		TLSFrontDir:      "tlsfront",
+	}
 }
 
 // BuildInstanceConfig constructs a telemt TOML config for a specific instance.
 func BuildInstanceConfig(params *InstanceConfigParams) *TelemtConfig {
 	inst := params.Instance
-
-	metricsWhitelist := []string{"127.0.0.1", "::1"}
-	metricsWhitelist = append(metricsWhitelist, params.ExtraMetricsWhitelist...)
-
-	// Modes: FakeTLS → tls=true, classic=false; no FakeTLS → classic=true, secure=false.
-	// Secure mode (dd-secrets) is intentionally false when FakeTLS is disabled,
-	// matching the legacy behavior where Secure = !MaskingEnabled and no FakeTLS
-	// means no masking.
-	modes := ModesConfig{TLS: inst.FakeTLS, Secure: false}
-	if !inst.FakeTLS {
-		modes.Classic = true
-	}
+	metricsWhitelist := buildMetricsWhitelist(params.ExtraMetricsWhitelist)
 
 	cfg := &TelemtConfig{
 		General: GeneralConfig{
@@ -295,7 +334,8 @@ func BuildInstanceConfig(params *InstanceConfigParams) *TelemtConfig {
 			FastMode:       true,
 			UseMiddleProxy: true,
 			LogLevel:       "normal",
-			Modes:          modes,
+			AdTag:          params.AdTag,
+			Modes:          instanceModes(inst.FakeTLS),
 			Links: LinksConfig{
 				Show: getEnabledLabels(params.Secrets),
 			},
@@ -308,100 +348,21 @@ func BuildInstanceConfig(params *InstanceConfigParams) *TelemtConfig {
 			MetricsListen:    metricsListenAddr(inst.MetricsPort, params.ExtraMetricsWhitelist),
 			MetricsWhitelist: metricsWhitelist,
 		},
-		Timeouts: TimeoutsConfig{
-			ClientHandshake: 30,
-			TGConnect:       10,
-			ClientKeepalive: 15,
-			ClientAck:       90,
-		},
-		Access: AccessConfig{
-			ReplayCheckLen:   65536,
-			ReplayWindowSecs: 1800,
-			IgnoreTimeSkew:   false,
-			Users:            make(map[string]string),
-		},
+		Timeouts:   defaultTimeouts(),
+		Censorship: instanceCensorship(inst, params.FakeCertLen),
+		Access:     newEmptyAccess(),
 	}
 
-	// Ad tag
-	if params.AdTag != "" {
-		cfg.General.AdTag = params.AdTag
-	}
-
-	// Censorship section — only for FakeTLS instances
-	if inst.FakeTLS {
-		tlsDomains := inst.GetTLSDomains()
-		cfg.Censorship = CensorshipConfig{
-			TLSDomain:        inst.TLSDomain,
-			TLSDomains:       tlsDomains,
-			UnknownSNIAction: "mask",
-			Mask:             true,
-			MaskHost:         inst.GetMaskHost(),
-			MaskPort:         inst.MaskPort,
-			FakeCertLen:      params.FakeCertLen,
-			TLSEmulation:     true,
-			TLSFrontDir:      "tlsfront",
-		}
-	}
-
-	// Proxy protocol trusted CIDRs
 	if params.ProxyProtocol && len(params.ProxyProtocolCIDRs) > 0 {
 		cfg.Server.ProxyProtocolTrustedCIDRs = params.ProxyProtocolCIDRs
 	}
 
-	// Telegram
-	if params.Telegram.ProxySecretURL != "" || params.Telegram.ProxyConfigV4URL != "" || params.Telegram.ProxyConfigV6URL != "" {
+	if telegramHasURLs(params.Telegram) {
 		cfg.Telegram = params.Telegram
 	}
 
-	// Secrets
-	cfg.Access.UserMaxTCPConns = make(map[string]int)
-	cfg.Access.UserMaxUniqueIPs = make(map[string]int)
-	cfg.Access.UserDataQuota = make(map[string]int64)
-	cfg.Access.UserExpirations = make(map[string]string)
-
-	for _, sec := range params.Secrets {
-		if !sec.Enabled {
-			continue
-		}
-		cfg.Access.Users[sec.Label] = sec.SecretKey
-
-		if sec.MaxConns > 0 {
-			cfg.Access.UserMaxTCPConns[sec.Label] = sec.MaxConns
-		}
-		if sec.MaxIPs > 0 {
-			cfg.Access.UserMaxUniqueIPs[sec.Label] = sec.MaxIPs
-		}
-		if sec.QuotaBytes > 0 {
-			cfg.Access.UserDataQuota[sec.Label] = sec.QuotaBytes
-		}
-		if sec.ExpiresAt != "" && sec.ExpiresAt != "0" {
-			cfg.Access.UserExpirations[sec.Label] = sec.ExpiresAt
-		}
-	}
-
-	// Upstreams (global)
-	for _, up := range params.Upstreams {
-		if !up.Enabled {
-			continue
-		}
-		uc := UpstreamConfig{
-			Type:   string(up.Type),
-			Weight: up.Weight,
-		}
-		if up.Type != model.UpstreamDirect {
-			uc.Address = up.Address
-			if up.Type == model.UpstreamSOCKS5 {
-				uc.Username = up.Username
-				uc.Password = up.Password
-			} else if up.Type == model.UpstreamSOCKS4 {
-				uc.UserID = up.Username
-			}
-		}
-		if up.Iface != "" {
-			uc.Interface = up.Iface
-		}
-		cfg.Upstreams = append(cfg.Upstreams, uc)
-	}
+	applySecretsToAccess(&cfg.Access, params.Secrets)
+	cfg.Upstreams = buildUpstreams(params.Upstreams)
 
 	return cfg
 }
@@ -438,14 +399,26 @@ func WriteConfigTOML(cfg *TelemtConfig, path string) error {
 	return nil
 }
 
-// renderTOML produces a TOML string matching the format the bash script generated.
 func renderTOML(cfg *TelemtConfig) string {
 	var b strings.Builder
 
 	b.WriteString("# PopuGate — telemt configuration\n")
 	b.WriteString(fmt.Sprintf("# Generated: %s\n\n", time.Now().UTC().Format("2006-01-02 15:04:05 UTC")))
 
-	// [general]
+	renderGeneralSection(&b, cfg)
+	renderModesSection(&b, cfg)
+	renderLinksSection(&b, cfg)
+	renderServerSection(&b, cfg)
+	renderTimeoutsSection(&b, cfg)
+	renderCensorshipSection(&b, cfg)
+	renderAccessSection(&b, cfg)
+	renderUpstreamsSection(&b, cfg)
+	renderTelegramSection(&b, cfg)
+
+	return b.String()
+}
+
+func renderGeneralSection(b *strings.Builder, cfg *TelemtConfig) {
 	b.WriteString("[general]\n")
 	b.WriteString(fmt.Sprintf("prefer_ipv6 = %v\n", cfg.General.PreferIPv6))
 	b.WriteString(fmt.Sprintf("fast_mode = %v\n", cfg.General.FastMode))
@@ -457,22 +430,25 @@ func renderTOML(cfg *TelemtConfig) string {
 		b.WriteString("# ad_tag = \"\"  # Get from @MTProxyBot\n")
 	}
 	b.WriteString("\n")
+}
 
-	// [general.modes]
+func renderModesSection(b *strings.Builder, cfg *TelemtConfig) {
 	b.WriteString("[general.modes]\n")
 	b.WriteString(fmt.Sprintf("classic = %v\n", cfg.General.Modes.Classic))
 	b.WriteString(fmt.Sprintf("secure = %v\n", cfg.General.Modes.Secure))
 	b.WriteString(fmt.Sprintf("tls = %v\n", cfg.General.Modes.TLS))
 	b.WriteString("\n")
+}
 
-	// [general.links]
+func renderLinksSection(b *strings.Builder, cfg *TelemtConfig) {
 	b.WriteString("[general.links]\n")
 	b.WriteString(fmt.Sprintf("show = %s\n", formatStringArray(cfg.General.Links.Show)))
 	b.WriteString("# public_host = \"\"\n")
 	b.WriteString(fmt.Sprintf("# public_port = %d\n", cfg.Server.Port))
 	b.WriteString("\n")
+}
 
-	// [server]
+func renderServerSection(b *strings.Builder, cfg *TelemtConfig) {
 	b.WriteString("[server]\n")
 	b.WriteString(fmt.Sprintf("port = %d\n", cfg.Server.Port))
 	b.WriteString(fmt.Sprintf("listen_addr_ipv4 = %q\n", cfg.Server.ListenAddrIPv4))
@@ -484,56 +460,58 @@ func renderTOML(cfg *TelemtConfig) string {
 	b.WriteString(fmt.Sprintf("metrics_listen = %q\n", cfg.Server.MetricsListen))
 	b.WriteString(fmt.Sprintf("metrics_whitelist = %s\n", formatStringArray(cfg.Server.MetricsWhitelist)))
 	b.WriteString("\n")
+}
 
-	// [timeouts]
+func renderTimeoutsSection(b *strings.Builder, cfg *TelemtConfig) {
 	b.WriteString("[timeouts]\n")
 	b.WriteString(fmt.Sprintf("client_handshake = %d\n", cfg.Timeouts.ClientHandshake))
 	b.WriteString(fmt.Sprintf("tg_connect = %d\n", cfg.Timeouts.TGConnect))
 	b.WriteString(fmt.Sprintf("client_keepalive = %d\n", cfg.Timeouts.ClientKeepalive))
 	b.WriteString(fmt.Sprintf("client_ack = %d\n", cfg.Timeouts.ClientAck))
 	b.WriteString("\n")
+}
 
-	// [censorship] — only if FakeTLS is enabled (TLSDomain is non-empty)
-	if cfg.Censorship.TLSDomain != "" {
-		b.WriteString("[censorship]\n")
-		b.WriteString(fmt.Sprintf("tls_domain = %q\n", cfg.Censorship.TLSDomain))
-		if len(cfg.Censorship.TLSDomains) > 0 {
-			b.WriteString(fmt.Sprintf("tls_domains = %s\n", formatStringArray(cfg.Censorship.TLSDomains)))
-		}
-		b.WriteString(fmt.Sprintf("unknown_sni_action = %q\n", cfg.Censorship.UnknownSNIAction))
-		b.WriteString(fmt.Sprintf("mask = %v\n", cfg.Censorship.Mask))
-		b.WriteString(fmt.Sprintf("mask_port = %d\n", cfg.Censorship.MaskPort))
-		if cfg.Censorship.Mask && cfg.Censorship.MaskHost != "" {
-			b.WriteString(fmt.Sprintf("mask_host = %q\n", cfg.Censorship.MaskHost))
-		}
-		b.WriteString(fmt.Sprintf("fake_cert_len = %d\n", cfg.Censorship.FakeCertLen))
-		if cfg.Censorship.MaskRelayMaxBytes > 0 {
-			b.WriteString(fmt.Sprintf("mask_relay_max_bytes = %d\n", cfg.Censorship.MaskRelayMaxBytes))
-		}
-		if cfg.Censorship.TLSEmulation {
-			b.WriteString("tls_emulation = true\n")
-		}
-		if cfg.Censorship.TLSFrontDir != "" {
-			b.WriteString(fmt.Sprintf("tls_front_dir = %q\n", cfg.Censorship.TLSFrontDir))
-		}
-		b.WriteString("# Note: geo-blocking is enforced at the host firewall level (iptables/nftables),\n")
-		b.WriteString("# not via telemt config.\n\n")
+func renderCensorshipSection(b *strings.Builder, cfg *TelemtConfig) {
+	if cfg.Censorship.TLSDomain == "" {
+		return
 	}
+	b.WriteString("[censorship]\n")
+	b.WriteString(fmt.Sprintf("tls_domain = %q\n", cfg.Censorship.TLSDomain))
+	if len(cfg.Censorship.TLSDomains) > 0 {
+		b.WriteString(fmt.Sprintf("tls_domains = %s\n", formatStringArray(cfg.Censorship.TLSDomains)))
+	}
+	b.WriteString(fmt.Sprintf("unknown_sni_action = %q\n", cfg.Censorship.UnknownSNIAction))
+	b.WriteString(fmt.Sprintf("mask = %v\n", cfg.Censorship.Mask))
+	b.WriteString(fmt.Sprintf("mask_port = %d\n", cfg.Censorship.MaskPort))
+	if cfg.Censorship.Mask && cfg.Censorship.MaskHost != "" {
+		b.WriteString(fmt.Sprintf("mask_host = %q\n", cfg.Censorship.MaskHost))
+	}
+	b.WriteString(fmt.Sprintf("fake_cert_len = %d\n", cfg.Censorship.FakeCertLen))
+	if cfg.Censorship.MaskRelayMaxBytes > 0 {
+		b.WriteString(fmt.Sprintf("mask_relay_max_bytes = %d\n", cfg.Censorship.MaskRelayMaxBytes))
+	}
+	if cfg.Censorship.TLSEmulation {
+		b.WriteString("tls_emulation = true\n")
+	}
+	if cfg.Censorship.TLSFrontDir != "" {
+		b.WriteString(fmt.Sprintf("tls_front_dir = %q\n", cfg.Censorship.TLSFrontDir))
+	}
+	b.WriteString("# Note: geo-blocking is enforced at the host firewall level (iptables/nftables),\n")
+	b.WriteString("# not via telemt config.\n\n")
+}
 
-	// [access]
+func renderAccessSection(b *strings.Builder, cfg *TelemtConfig) {
 	b.WriteString("[access]\n")
 	b.WriteString(fmt.Sprintf("replay_check_len = %d\n", cfg.Access.ReplayCheckLen))
 	b.WriteString(fmt.Sprintf("replay_window_secs = %d\n", cfg.Access.ReplayWindowSecs))
 	b.WriteString(fmt.Sprintf("ignore_time_skew = %v\n\n", cfg.Access.IgnoreTimeSkew))
 
-	// [access.users]
 	b.WriteString("[access.users]\n")
 	for _, label := range sortedKeys(cfg.Access.Users) {
 		b.WriteString(fmt.Sprintf("%s = %q\n", label, cfg.Access.Users[label]))
 	}
 	b.WriteString("\n")
 
-	// Per-user limits
 	if len(cfg.Access.UserMaxTCPConns) > 0 {
 		b.WriteString("[access.user_max_tcp_conns]\n")
 		for _, label := range sortedKeysInt(cfg.Access.UserMaxTCPConns) {
@@ -565,8 +543,9 @@ func renderTOML(cfg *TelemtConfig) string {
 		}
 		b.WriteString("\n")
 	}
+}
 
-	// Upstreams
+func renderUpstreamsSection(b *strings.Builder, cfg *TelemtConfig) {
 	for _, up := range cfg.Upstreams {
 		b.WriteString("[[upstreams]]\n")
 		b.WriteString(fmt.Sprintf("type = %q\n", up.Type))
@@ -588,23 +567,23 @@ func renderTOML(cfg *TelemtConfig) string {
 		}
 		b.WriteString("\n")
 	}
+}
 
-	// [telegram] — custom URLs for restricted regions
-	if cfg.Telegram.ProxySecretURL != "" || cfg.Telegram.ProxyConfigV4URL != "" || cfg.Telegram.ProxyConfigV6URL != "" {
-		b.WriteString("[telegram]\n")
-		if cfg.Telegram.ProxySecretURL != "" {
-			b.WriteString(fmt.Sprintf("proxy_secret_url = %q\n", cfg.Telegram.ProxySecretURL))
-		}
-		if cfg.Telegram.ProxyConfigV4URL != "" {
-			b.WriteString(fmt.Sprintf("proxy_config_v4_url = %q\n", cfg.Telegram.ProxyConfigV4URL))
-		}
-		if cfg.Telegram.ProxyConfigV6URL != "" {
-			b.WriteString(fmt.Sprintf("proxy_config_v6_url = %q\n", cfg.Telegram.ProxyConfigV6URL))
-		}
-		b.WriteString("\n")
+func renderTelegramSection(b *strings.Builder, cfg *TelemtConfig) {
+	if cfg.Telegram.ProxySecretURL == "" && cfg.Telegram.ProxyConfigV4URL == "" && cfg.Telegram.ProxyConfigV6URL == "" {
+		return
 	}
-
-	return b.String()
+	b.WriteString("[telegram]\n")
+	if cfg.Telegram.ProxySecretURL != "" {
+		b.WriteString(fmt.Sprintf("proxy_secret_url = %q\n", cfg.Telegram.ProxySecretURL))
+	}
+	if cfg.Telegram.ProxyConfigV4URL != "" {
+		b.WriteString(fmt.Sprintf("proxy_config_v4_url = %q\n", cfg.Telegram.ProxyConfigV4URL))
+	}
+	if cfg.Telegram.ProxyConfigV6URL != "" {
+		b.WriteString(fmt.Sprintf("proxy_config_v6_url = %q\n", cfg.Telegram.ProxyConfigV6URL))
+	}
+	b.WriteString("\n")
 }
 
 func formatStringArray(arr []string) string {

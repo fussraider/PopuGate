@@ -49,6 +49,7 @@ type Settings struct {
 	TelegramInterval      int    `json:"telegram_interval"`
 	TelegramAlertsEnabled bool   `json:"telegram_alerts_enabled"`
 	TelegramServerLabel   string `json:"telegram_server_label"`
+	WebURL                string `json:"web_url"`
 
 	// Auto-update
 	AutoUpdateEnabled    bool `json:"auto_update_enabled"`
@@ -218,16 +219,34 @@ func TelemtRepo() string {
 }
 
 // Version is overridden at build time via -ldflags "-X main.version=..."
+// Always stored without "v" prefix for consistent comparisons.
 var Version = "dev"
 
 // Commit is the full git SHA, overridden at build time via -ldflags "-X main.commit=..."
 var Commit = "unknown"
 
+// SetVersion normalizes and sets the version string, stripping any "v" prefix.
+func SetVersion(v string) {
+	Version = strings.TrimPrefix(v, "v")
+	if Version == "" {
+		Version = "dev"
+	}
+}
+
+// VersionTag returns the version with a "v" prefix for display (e.g. "v0.1.2").
+// Returns "dev" as-is when no real version is set.
+func VersionTag() string {
+	if Version == "dev" || Version == "" {
+		return Version
+	}
+	return "v" + Version
+}
+
 // VersionURL returns a GitHub URL for the current version: release page for tags,
 // commit page for SHAs, or the repo root as fallback.
 func VersionURL() string {
-	if strings.HasPrefix(Version, "v") {
-		return fmt.Sprintf("https://github.com/%s/releases/tag/%s", GitHubRepo, Version)
+	if Version != "dev" && Version != "" {
+		return fmt.Sprintf("https://github.com/%s/releases/tag/v%s", GitHubRepo, Version)
 	}
 	if Commit != "unknown" && Commit != "" {
 		return fmt.Sprintf("https://github.com/%s/commit/%s", GitHubRepo, Commit)

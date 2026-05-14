@@ -14,6 +14,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"encoding/hex"
 	"fmt"
 	"net/http"
@@ -72,39 +73,122 @@ func init() {
 
 func runServer(cmd *cobra.Command, args []string) {
 	printBanner()
-	// Resolve data directory
-	defaultDataDir := resolveDataDir()
-	dataDir, _ := cmd.Flags().GetString("data")
-	if dataDir == "" {
-		dataDir = defaultDataDir
-	}
-
-	port, _ := cmd.Flags().GetInt("port")
-	dbPath, _ := cmd.Flags().GetString("db")
-	if dbPath == "" {
-		dbPath = filepath.Join(dataDir, "settings.db")
-	}
+	dataDir, dbPath, port := resolveServerFlags(cmd)
 
 	model.InstallDir = dataDir
 
-	// Open database
 	db, err := database.Open(database.Config{Path: dbPath})
 	if err != nil {
 		logger.Fatalf("Failed to open database: %v", err)
 	}
 	defer database.Close()
 
-	// Initialize stores
-	settingsStore := store.NewSettingsStore(db)
-	secretStore := store.NewSecretStore(db)
-	upstreamStore := store.NewUpstreamStore(db)
-	instanceStore := store.NewInstanceStore(db)
-	slaveStore := store.NewSlaveStore(db)
-	trafficStore := store.NewTrafficStore(db)
-	blocklistStore := store.NewTokenBlocklistStore(db)
-	quotaStore := store.NewQuotaAlertStore(db)
-	geoblockCache := store.NewGeoblockCacheStore(db)
-	// Resolve backup encryption key from environment
+	stores := initStores(db, dataDir)
+	svcs := initServices(stores, dataDir)
+
+	botCtx, botCancel := context.WithCancel(context.Background())
+	defer botCancel()
+
+	botDeps := buildBotDeps(stores, svcs)
+
+	var activeBot *bot.Bot
+	var botMu sync.Mutex
+	startBotIfNeeded(botCtx, stores.settings, botDeps, &activeBot, &botMu)
+
+	notifyFn := makeNotifyFn(&activeBot, &botMu, stores.settings)
+	notifyWithBtns := makeNotifyWithButtonsFn(&activeBot, &botMu, stores.settings)
+	wireNotifyCallbacks(svcs, notifyFn, notifyWithBtns, stores.settings)
+
+	ctx := context.Background()
+	settings, err := stores.settings.Load(ctx)
+	if err != nil {
+		srvLog.Warnf("Failed to load settings: %v", err)
+	}
+	seedDefaultInstance(ctx, stores, settings)
+
+	isDebug := resolveDebugMode(settings)
+
+	auditSvc := service.NewAuditService(stores.audit)
+	service.InitResourceMonitor(notifyFn)
+
+	sched, tasks := prepareSchedulerTasks(schedulerTaskParams{
+		trafficSvc: svcs.traffic, healthSvc: svcs.health, replSvc: svcs.repl,
+		blocklist: stores.blocklist, settings: stores.settings, secrets: stores.secret,
+		backupStore: stores.backup, activeBot: &activeBot, botMu: &botMu,
+		updateSvc: svcs.update, telemtUpdateSvc: svcs.telemtUpdate, telemtCfg: svcs.telemtCfg,
+		notify: notifyFn, notifyWithBtns: notifyWithBtns, trafficStore: stores.traffic, secretSvc: svcs.secret,
+		upstreamSvc: svcs.upstream, auditSvc: auditSvc,
+	})
+
+	startScheduler(sched, tasks, stores.scheduler, botDeps, stores.scheduler)
+
+	schedulerSvc := service.NewSchedulerService(stores.scheduler, sched)
+	templateSvc := service.NewTemplateService(stores.template, stores.secret)
+
+	router := api.SetupRouter(api.RouterConfig{
+		Debug:           isDebug,
+		JWTSecret:       api.NewCachedJWTSecretProvider(stores.settings, 5*time.Minute),
+		Settings:        stores.settings,
+		Secrets:         stores.secret,
+		Upstreams:       stores.upstream,
+		Instances:       stores.instance,
+		Slaves:          stores.slave,
+		Traffic:         stores.traffic,
+		Blocklist:       stores.blocklist,
+		Backups:         stores.backup,
+		Docker:          svcs.dockerCli,
+		SecretSvc:       svcs.secret,
+		UpstreamSvc:     svcs.upstream,
+		ContainerSvc:    svcs.container,
+		DockerSvc:       svcs.docker,
+		GeoblockSvc:     svcs.geoblock,
+		BotDeps:         botDeps,
+		HealthSvc:       svcs.health,
+		TrafficSvc:      svcs.traffic,
+		ReplSvc:         svcs.repl,
+		UpdateSvc:       svcs.update,
+		TelemtUpdateSvc: svcs.telemtUpdate,
+		TelemtCfg:       svcs.telemtCfg,
+		SchedulerSvc:    schedulerSvc,
+		AuditSvc:        auditSvc,
+		TemplateSvc:     templateSvc,
+	})
+
+	runHTTPServer(port, router, botCancel, &activeBot, svcs.container)
+}
+
+func resolveServerFlags(cmd *cobra.Command) (dataDir, dbPath string, port int) {
+	defaultDataDir := resolveDataDir()
+	dataDir, _ = cmd.Flags().GetString("data")
+	if dataDir == "" {
+		dataDir = defaultDataDir
+	}
+	port, _ = cmd.Flags().GetInt("port")
+	dbPath, _ = cmd.Flags().GetString("db")
+	if dbPath == "" {
+		dbPath = filepath.Join(dataDir, "settings.db")
+	}
+	return
+}
+
+type appStores struct {
+	db        *sql.DB
+	settings  *store.SettingsStore
+	secret    *store.SecretStore
+	upstream  *store.UpstreamStore
+	instance  *store.InstanceStore
+	slave     *store.SlaveStore
+	traffic   *store.TrafficStore
+	blocklist *store.TokenBlocklistStore
+	quota     *store.QuotaAlertStore
+	geoblock  *store.GeoblockCacheStore
+	backup    *store.BackupStore
+	scheduler *store.SchedulerStore
+	audit     *store.AuditStore
+	template  *store.TemplateStore
+}
+
+func initStores(db *sql.DB, dataDir string) appStores {
 	var backupEncKey []byte
 	if keyHex := os.Getenv("BACKUP_ENCRYPTION_KEY"); keyHex != "" {
 		if len(keyHex) != 64 {
@@ -117,103 +201,121 @@ func runServer(cmd *cobra.Command, args []string) {
 		backupEncKey = key
 		srvLog.Infof("Backup encryption key loaded from environment")
 	}
-	backupStore := store.NewBackupStore(dataDir, backupEncKey)
-	schedulerStore := store.NewSchedulerStore(db)
-	auditStore := store.NewAuditStore(db)
-	templateStore := store.NewTemplateStore(db)
+	return appStores{
+		db:        db,
+		settings:  store.NewSettingsStore(db),
+		secret:    store.NewSecretStore(db),
+		upstream:  store.NewUpstreamStore(db),
+		instance:  store.NewInstanceStore(db),
+		slave:     store.NewSlaveStore(db),
+		traffic:   store.NewTrafficStore(db),
+		blocklist: store.NewTokenBlocklistStore(db),
+		quota:     store.NewQuotaAlertStore(db),
+		geoblock:  store.NewGeoblockCacheStore(db),
+		backup:    store.NewBackupStore(dataDir, backupEncKey),
+		scheduler: store.NewSchedulerStore(db),
+		audit:     store.NewAuditStore(db),
+		template:  store.NewTemplateStore(db),
+	}
+}
 
+type appServices struct {
+	dockerCli    *dockerutil.DockerClient
+	secret       *service.SecretService
+	upstream     *service.UpstreamService
+	traffic      *service.TrafficService
+	geoblock     *service.GeoblockService
+	update       *service.UpdateService
+	telemtCfg    *service.DBTelemtConfig
+	docker       *service.DockerService
+	container    *service.ContainerService
+	health       *service.HealthService
+	repl         *service.ReplicationService
+	telemtUpdate *service.TelemtUpdateService
+}
+
+func initServices(s appStores, dataDir string) appServices {
 	// Get JWT secret (auto-generated on first run)
-	jwtSecret, err := settingsStore.GetJWTSecret(context.Background())
-	_ = jwtSecret
-	if err != nil {
+	if _, err := s.settings.GetJWTSecret(context.Background()); err != nil {
 		logger.Fatalf("Failed to get JWT secret: %v", err)
 	}
 
-	// Docker client
 	dockerClient, err := dockerutil.NewDockerClient()
 	if err != nil {
 		srvLog.Warnf("Docker client unavailable: %v", err)
 	}
-	if dockerClient != nil {
-		defer dockerClient.Close()
-	}
 
-	// Initialize services
-	secretSvc := service.NewSecretService(secretStore, instanceStore, settingsStore)
-	upstreamSvc := service.NewUpstreamService(upstreamStore)
-	trafficSvc := service.NewTrafficService(trafficStore, settingsStore, dockerClient, instanceStore)
-	trafficSvc.SetSecretStore(secretStore, quotaStore)
-	geoblockSvc := service.NewGeoblockService(settingsStore, instanceStore, geoblockCache)
-	updateSvc := service.NewUpdateService(dockerClient)
-	telemtCfg := service.NewDBTelemtConfig(settingsStore)
-	var dockerSvc *service.DockerService
-	var containerSvc *service.ContainerService
-	var healthSvc *service.HealthService
-	var replSvc *service.ReplicationService
-	var telemtUpdateSvc *service.TelemtUpdateService
+	svcs := appServices{
+		dockerCli: dockerClient,
+		secret:    service.NewSecretService(s.secret, s.instance, s.settings),
+		upstream:  service.NewUpstreamService(s.upstream),
+		traffic:   service.NewTrafficService(s.traffic, s.settings, dockerClient, s.instance),
+		geoblock:  service.NewGeoblockService(s.settings, s.instance, s.geoblock),
+		update:    service.NewUpdateService(dockerClient),
+		telemtCfg: service.NewDBTelemtConfig(s.settings),
+	}
+	svcs.traffic.SetSecretStore(s.secret, s.quota)
+
 	if dockerClient != nil {
-		dockerSvc = service.NewDockerService(dockerClient, telemtCfg)
-		containerSvc = service.NewContainerService(
-			dockerClient, secretStore, upstreamStore, instanceStore, trafficStore, settingsStore, trafficSvc,
+		svcs.docker = service.NewDockerService(dockerClient, svcs.telemtCfg)
+		svcs.container = service.NewContainerService(
+			dockerClient, s.secret, s.upstream, s.instance, s.traffic, s.settings, svcs.traffic,
 		)
-		healthSvc = service.NewHealthService(dockerClient, settingsStore, instanceStore)
-		healthSvc.SetContainerSvc(containerSvc)
-		replSvc = service.NewReplicationService(settingsStore, slaveStore, instanceStore)
-		telemtUpdateSvc = service.NewTelemtUpdateService(settingsStore, dockerSvc, containerSvc, telemtCfg)
-		telemtUpdateSvc.ResetStaleUpdate(context.Background())
+		svcs.health = service.NewHealthService(dockerClient, s.settings, s.instance)
+		svcs.health.SetContainerSvc(svcs.container)
+		svcs.repl = service.NewReplicationService(s.settings, s.slave, s.instance)
+		svcs.telemtUpdate = service.NewTelemtUpdateService(s.settings, svcs.docker, svcs.container, svcs.telemtCfg)
+		svcs.telemtUpdate.ResetStaleUpdate(context.Background())
 	}
 
-	// Bot setup
-	var activeBot *bot.Bot
-	var botMu sync.Mutex
-	botCtx, botCancel := context.WithCancel(context.Background())
-	defer botCancel()
+	return svcs
+}
 
-	botDeps := &bot.Dependencies{
-		Settings:  settingsStore,
-		Secrets:   secretStore,
-		Upstreams: upstreamStore,
-		Traffic:   trafficStore,
-		Instances: instanceStore,
+func buildBotDeps(s appStores, svcs appServices) *bot.Dependencies {
+	deps := &bot.Dependencies{
+		Settings:  s.settings,
+		Secrets:   s.secret,
+		Upstreams: s.upstream,
+		Traffic:   s.traffic,
+		Instances: s.instance,
 	}
-	if containerSvc != nil {
-		botDeps.RestartProxy = func(ctx context.Context) error { return containerSvc.Restart(ctx) }
-		botDeps.IsProxyRunning = func(ctx context.Context) bool {
-			status, err := containerSvc.Status(ctx)
+	if svcs.container != nil {
+		deps.RestartProxy = func(ctx context.Context) error { return svcs.container.Restart(ctx) }
+		deps.IsProxyRunning = func(ctx context.Context) bool {
+			status, err := svcs.container.Status(ctx)
 			return err == nil && status != nil && status.Running
 		}
-		botDeps.GetUptime = func(ctx context.Context) string {
-			status, err := containerSvc.Status(ctx)
+		deps.GetUptime = func(ctx context.Context) string {
+			status, err := svcs.container.Status(ctx)
 			if err != nil || status == nil {
 				return ""
 			}
 			return status.Uptime
 		}
-		botDeps.IsInstanceRunning = func(ctx context.Context, containerName string) bool {
-			r, err := dockerClient.IsInstanceRunning(ctx, containerName)
+		deps.IsInstanceRunning = func(ctx context.Context, containerName string) bool {
+			r, err := svcs.dockerCli.IsInstanceRunning(ctx, containerName)
 			return err == nil && r
 		}
-		botDeps.StartInstance = func(ctx context.Context, id int64) error {
-			return containerSvc.StartInstance(ctx, id)
+		deps.StartInstance = func(ctx context.Context, id int64) error {
+			return svcs.container.StartInstance(ctx, id)
 		}
-		botDeps.StopInstance = func(ctx context.Context, id int64) error {
-			return containerSvc.StopInstance(ctx, id)
+		deps.StopInstance = func(ctx context.Context, id int64) error {
+			return svcs.container.StopInstance(ctx, id)
 		}
 	}
-	if dockerSvc != nil {
-		botDeps.GetEngineVersion = dockerSvc.GetInstalledVersion
+	if svcs.docker != nil {
+		deps.GetEngineVersion = svcs.docker.GetInstalledVersion
 	}
-	botDeps.GenerateQR = func(ctx context.Context, link string) ([]byte, error) {
+	deps.GenerateQR = func(ctx context.Context, link string) ([]byte, error) {
 		return qrutil.GeneratePNG(link, 256)
 	}
+	return deps
+}
 
-	startBotIfNeeded(botCtx, settingsStore, botDeps, &activeBot, &botMu)
-
-	// Notification callback — used by services and scheduler to send alerts via Telegram bot.
-	// Resolves the server label and checks TelegramAlertsEnabled in a single settings load.
-	notifyFn := func(ctx context.Context, format string, args ...any) {
+func makeNotifyFn(activeBot **bot.Bot, botMu *sync.Mutex, settingsStore *store.SettingsStore) service.NotifyFunc {
+	return func(ctx context.Context, format string, args ...any) {
 		botMu.Lock()
-		b := activeBot
+		b := *activeBot
 		botMu.Unlock()
 		if b == nil || !b.IsRunning() {
 			return
@@ -232,65 +334,90 @@ func runServer(cmd *cobra.Command, args []string) {
 			srvLog.Warnf("notify: %v", err)
 		}
 	}
+}
 
-	if containerSvc != nil {
-		containerSvc.SetNotify(notifyFn)
-	}
-	if telemtUpdateSvc != nil {
-		telemtUpdateSvc.SetNotify(notifyFn)
-	}
-	if upstreamSvc != nil {
-		upstreamSvc.SetNotify(notifyFn)
-	}
+func makeNotifyWithButtonsFn(activeBot **bot.Bot, botMu *sync.Mutex, settingsStore *store.SettingsStore) service.NotifyWithButtonsFunc {
+	return func(ctx context.Context, format string, buttons []service.KeyboardButton, args ...any) {
+		botMu.Lock()
+		b := *activeBot
+		botMu.Unlock()
+		if b == nil || !b.IsRunning() {
+			return
+		}
+		s, err := settingsStore.Load(ctx)
+		if err != nil || !s.TelegramAlertsEnabled {
+			return
+		}
+		label := s.TelegramServerLabel
+		if label == "" {
+			label = "PopuGate"
+		}
+		fullArgs := append([]any{label}, args...)
+		msg := fmt.Sprintf(format, fullArgs...)
 
-	// Get settings from DB
-	ctx := context.Background()
-	settings, err := settingsStore.Load(ctx)
-	if err != nil {
-		srvLog.Warnf("Failed to load settings: %v", err)
-	}
+		var rows [][]bot.InlineKeyboardButton
+		for _, btn := range buttons {
+			if btn.URL == "" {
+				continue
+			}
+			rows = append(rows, []bot.InlineKeyboardButton{{Text: btn.Text, URL: btn.URL}})
+		}
 
-	// Seed default instance if table is empty (migration from single-port to multi-port)
-	if settings != nil {
-		if err := instanceStore.EnsureDefaultInstance(ctx, settings.ProxyPort, settings.ProxyMetricsPort, settings.ProxyDomain, settings.MaskingHost, settings.MaskingEnabled); err != nil {
-			srvLog.Warnf("Failed to seed default instance: %v", err)
+		if len(rows) > 0 {
+			if err := b.SendMessageWithKeyboard(ctx, msg, bot.InlineKeyboardMarkup{InlineKeyboard: rows}); err != nil {
+				srvLog.Warnf("notify: %v", err)
+			}
+		} else {
+			if err := b.SendMessage(ctx, msg); err != nil {
+				srvLog.Warnf("notify: %v", err)
+			}
 		}
 	}
-	isDebug := settings.Debug
+}
 
-	// Override from environment
+func wireNotifyCallbacks(svcs appServices, notify service.NotifyFunc, notifyWithBtns service.NotifyWithButtonsFunc, settingsStore *store.SettingsStore) {
+	if svcs.container != nil {
+		svcs.container.SetNotify(notify)
+		svcs.container.SetNotifyWithButtons(notifyWithBtns)
+	}
+	if svcs.telemtUpdate != nil {
+		svcs.telemtUpdate.SetNotify(notify)
+	}
+	if svcs.upstream != nil {
+		svcs.upstream.SetNotify(notify)
+		svcs.upstream.SetNotifyWithButtons(notifyWithBtns)
+		svcs.upstream.SetSettings(settingsStore)
+	}
+}
+
+func seedDefaultInstance(ctx context.Context, s appStores, settings *model.Settings) {
+	if settings == nil {
+		return
+	}
+	if err := s.instance.EnsureDefaultInstance(ctx, settings.ProxyPort, settings.ProxyMetricsPort, settings.ProxyDomain, settings.MaskingHost, settings.MaskingEnabled); err != nil {
+		srvLog.Warnf("Failed to seed default instance: %v", err)
+	}
+}
+
+func resolveDebugMode(settings *model.Settings) bool {
+	isDebug := settings.Debug
 	if os.Getenv("DEBUG") == "true" || os.Getenv("GIN_MODE") == "debug" {
 		isDebug = true
 	} else if os.Getenv("DEBUG") == "false" || os.Getenv("GIN_MODE") == "release" {
 		isDebug = false
 	}
+	return isDebug
+}
 
-	// Setup router
-	cachedJWTProvider := api.NewCachedJWTSecretProvider(settingsStore, 5*time.Minute)
-
-	// Create services needed by scheduler
-	auditSvc := service.NewAuditService(auditStore)
-
-	// Resource monitor for WebSocket and background threshold checks
-	service.InitResourceMonitor(notifyFn)
-
-	// Prepare scheduler tasks (wire Fn callbacks)
-	sched, tasks := prepareSchedulerTasks(trafficSvc, healthSvc, replSvc, blocklistStore, settingsStore, secretStore, backupStore, &activeBot, &botMu, updateSvc, telemtUpdateSvc, telemtCfg, notifyFn, trafficStore, secretSvc, upstreamSvc, auditSvc)
-
-	// Load overrides and start scheduler with execution tracking
+func startScheduler(sched *scheduler.Scheduler, tasks []scheduler.Task, schedulerStore *store.SchedulerStore, botDeps *bot.Dependencies, storeRef *store.SchedulerStore) {
+	ctx := context.Background()
 	overrides, _ := schedulerStore.GetOverrides(ctx)
 	overrideMap := make(map[string]scheduler.TaskOverride)
 	for _, o := range overrides {
 		overrideMap[o.TaskName] = o
 	}
 	sched.StartWith(tasks, overrideMap, schedulerStore)
-	defer sched.Stop()
 
-	// Create scheduler service (needs live scheduler + store)
-	schedulerSvc := service.NewSchedulerService(schedulerStore, sched)
-	templateSvc := service.NewTemplateService(templateStore, secretStore)
-
-	// Wire scheduler status callback for bot
 	botDeps.GetSchedulerTasks = func(ctx context.Context) []string {
 		statuses := sched.GetTaskStatuses()
 		var lines []string
@@ -302,7 +429,7 @@ func runServer(cmd *cobra.Command, args []string) {
 			}
 			schedule := t.EffectiveSchedule
 			lastRun := ""
-			if rec, _ := schedulerStore.GetLatestHistory(ctx, t.Name); rec != nil {
+			if rec, _ := storeRef.GetLatestHistory(ctx, t.Name); rec != nil {
 				if rec.Status == "success" {
 					lastRun = " ✅"
 				} else {
@@ -318,43 +445,14 @@ func runServer(cmd *cobra.Command, args []string) {
 		}
 		return lines
 	}
+}
 
-	router := api.SetupRouter(api.RouterConfig{
-		Debug:           isDebug,
-		JWTSecret:       cachedJWTProvider,
-		Settings:        settingsStore,
-		Secrets:         secretStore,
-		Upstreams:       upstreamStore,
-		Instances:       instanceStore,
-		Slaves:          slaveStore,
-		Traffic:         trafficStore,
-		Blocklist:       blocklistStore,
-		Backups:         backupStore,
-		Docker:          dockerClient,
-		SecretSvc:       secretSvc,
-		UpstreamSvc:     upstreamSvc,
-		ContainerSvc:    containerSvc,
-		DockerSvc:       dockerSvc,
-		GeoblockSvc:     geoblockSvc,
-		BotDeps:         botDeps,
-		HealthSvc:       healthSvc,
-		TrafficSvc:      trafficSvc,
-		ReplSvc:         replSvc,
-		UpdateSvc:       updateSvc,
-		TelemtUpdateSvc: telemtUpdateSvc,
-		TelemtCfg:       telemtCfg,
-		SchedulerSvc:    schedulerSvc,
-		AuditSvc:        auditSvc,
-		TemplateSvc:     templateSvc,
-	})
-
-	// HTTP server
+func runHTTPServer(port int, router http.Handler, botCancel context.CancelFunc, activeBot **bot.Bot, containerSvc *service.ContainerService) {
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%d", port),
 		Handler: router,
 	}
 
-	// Graceful shutdown
 	go func() {
 		quit := make(chan os.Signal, 1)
 		signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
@@ -362,8 +460,8 @@ func runServer(cmd *cobra.Command, args []string) {
 		srvLog.Infof("Shutting down server...")
 
 		botCancel()
-		if activeBot != nil {
-			activeBot.Stop()
+		if *activeBot != nil {
+			(*activeBot).Stop()
 		}
 
 		service.GetResourceMonitor().Stop()
@@ -409,177 +507,276 @@ func startBotIfNeeded(ctx context.Context, settingsStore *store.SettingsStore, d
 	logger.WithScope("bot").Infof("started")
 }
 
-func prepareSchedulerTasks(
-	trafficSvc *service.TrafficService,
-	healthSvc *service.HealthService,
-	replSvc *service.ReplicationService,
-	blocklist *store.TokenBlocklistStore,
-	settings *store.SettingsStore,
-	secrets *store.SecretStore,
-	backupStore *store.BackupStore,
-	activeBot **bot.Bot,
-	botMu *sync.Mutex,
-	updateSvc *service.UpdateService,
-	telemtUpdateSvc *service.TelemtUpdateService,
-	telemtCfg *service.DBTelemtConfig,
-	notify service.NotifyFunc,
-	trafficStore *store.TrafficStore,
-	secretSvc *service.SecretService,
-	upstreamSvc *service.UpstreamService,
-	auditSvc *service.AuditService,
-) (*scheduler.Scheduler, []scheduler.Task) {
+// schedulerTaskParams holds dependencies for building scheduler task callbacks.
+type schedulerTaskParams struct {
+	trafficSvc      *service.TrafficService
+	healthSvc       *service.HealthService
+	replSvc         *service.ReplicationService
+	blocklist       *store.TokenBlocklistStore
+	settings        *store.SettingsStore
+	secrets         *store.SecretStore
+	backupStore     *store.BackupStore
+	activeBot       **bot.Bot
+	botMu           *sync.Mutex
+	updateSvc       *service.UpdateService
+	telemtUpdateSvc *service.TelemtUpdateService
+	telemtCfg       *service.DBTelemtConfig
+	notify          service.NotifyFunc
+	notifyWithBtns  service.NotifyWithButtonsFunc
+	trafficStore    *store.TrafficStore
+	secretSvc       *service.SecretService
+	upstreamSvc     *service.UpstreamService
+	auditSvc        *service.AuditService
+}
+
+func prepareSchedulerTasks(p schedulerTaskParams) (*scheduler.Scheduler, []scheduler.Task) {
 	sched := scheduler.New()
 	tasks := scheduler.DefaultTasks()
 
 	for i := range tasks {
-		switch tasks[i].Name {
-		case "traffic-flush":
-			if trafficSvc != nil {
-				tasks[i].Fn = func(ctx context.Context) error {
-					return trafficSvc.Flush(ctx)
-				}
-			}
-		case "quota-check":
-			if trafficSvc != nil {
-				tasks[i].Fn = func(ctx context.Context) error {
-					trafficSvc.CheckQuotas(ctx)
-					return nil
-				}
-			}
-		case "expiry-check":
-			if trafficSvc != nil {
-				tasks[i].Fn = func(ctx context.Context) error {
-					trafficSvc.CheckExpirations(ctx)
-					return nil
-				}
-			}
-		case "health-check":
-			if healthSvc != nil {
-				tasks[i].Fn = healthSvc.AutoRecover
-			}
-		case "replication-sync":
-			if replSvc != nil {
-				tasks[i].Fn = func(ctx context.Context) error {
-					results := replSvc.SyncAll(ctx)
-					for _, r := range results {
-						if r.Error != "" {
-							return fmt.Errorf("sync %s: %s", r.Host, r.Error)
-						}
-					}
-					return nil
-				}
-			}
-		case "token-cleanup":
-			if blocklist != nil {
-				tasks[i].Fn = blocklist.Cleanup
-			}
-		case "daily-backup":
-			if backupStore != nil {
-				tasks[i].Fn = func(ctx context.Context) error {
-					_, err := backupStore.Create(ctx)
-					return err
-				}
-			}
-		case "backup-cleanup":
-			if backupStore != nil {
-				tasks[i].Fn = func(ctx context.Context) error {
-					s, _ := settings.Load(ctx)
-					days := 7
-					if s != nil && s.BackupRetentionDays > 0 {
-						days = s.BackupRetentionDays
-					}
-					_, err := backupStore.CleanOld(ctx, time.Duration(days)*24*time.Hour)
-					return err
-				}
-			}
-		case "telegram-report":
-			tasks[i].Fn = func(ctx context.Context) error {
-				botMu.Lock()
-				botPtr := *activeBot
-				botMu.Unlock()
-				if botPtr == nil || !botPtr.IsRunning() {
-					return nil
-				}
-				return sendPeriodicReport(ctx, botPtr, settings, secrets, trafficSvc)
-			}
-		case "update-check":
-			if updateSvc != nil {
-				tasks[i].Fn = func(ctx context.Context) error {
-					status, err := updateSvc.Check(ctx)
-					if err != nil {
-						return err
-					}
-					if status.UpdateAvailable {
-						srvLog.Infof("update available: v%s (current: v%s)", status.Latest, status.Current)
-						notify(ctx, "🆕 *%s* New PopuGate version available: v%s\nCurrent: v%s", status.Latest, status.Current)
-					}
-					return nil
-				}
-			}
-		case "telemt-check":
-			if telemtUpdateSvc != nil {
-				tasks[i].Fn = func(ctx context.Context) error {
-					release, err := telemtUpdateSvc.CheckRemote(ctx)
-					if err != nil {
-						return err
-					}
-					if release.Version != telemtCfg.TelemtVersion() {
-						srvLog.Infof("telemt update available: %s (current: %s)", release.Version, telemtCfg.TelemtVersion())
-						notify(ctx, "🆕 *%s* New telemt engine version available: %s\nCurrent: %s", release.Version, telemtCfg.TelemtVersion())
-					}
-					return nil
-				}
-			}
-		case "history-cleanup":
-			tasks[i].Fn = func(ctx context.Context) error {
-				return trafficStore.CleanOldHistory(ctx, 30*24*time.Hour)
-			}
-		case "quota-reset":
-			if trafficSvc != nil {
-				tasks[i].Fn = func(ctx context.Context) error {
-					trafficSvc.ResetAllQuotas(ctx)
-					if auditSvc != nil {
-						auditSvc.Log(ctx, "system", "quota-reset", "monthly quota reset completed")
-					}
-					return nil
-				}
-			}
-		case "auto-rotate":
-			if secretSvc != nil {
-				tasks[i].Fn = func(ctx context.Context) error {
-					s, _ := settings.Load(ctx)
-					if s == nil || s.SecretAutoRotateDays <= 0 {
-						return nil
-					}
-					all, err := secrets.List(ctx)
-					if err != nil {
-						return err
-					}
-					cutoff := time.Now().AddDate(0, 0, -s.SecretAutoRotateDays).Unix()
-					rotated := 0
-					for _, sec := range all {
-						if sec.Enabled && sec.CreatedAt > 0 && sec.CreatedAt < cutoff {
-							if _, err := secretSvc.Rotate(ctx, sec.Label); err == nil {
-								rotated++
-							}
-						}
-					}
-					if rotated > 0 && auditSvc != nil {
-						auditSvc.Log(ctx, "system", "auto-rotate", fmt.Sprintf("rotated %d secret(s)", rotated))
-					}
-					return nil
-				}
-			}
-		case "upstream-health":
-			if upstreamSvc != nil {
-				tasks[i].Fn = func(ctx context.Context) error {
-					return upstreamSvc.CheckAllUpstreams(ctx)
-				}
-			}
-		}
+		tasks[i].Fn = buildTaskFn(tasks[i].Name, p)
 	}
 
 	return sched, tasks
+}
+
+func buildTaskFn(name string, p schedulerTaskParams) func(context.Context) error {
+	switch name {
+	case "traffic-flush":
+		return buildTrafficFlush(p)
+	case "quota-check":
+		return buildQuotaCheck(p)
+	case "expiry-check":
+		return buildExpiryCheck(p)
+	case "health-check":
+		return buildHealthCheck(p)
+	case "replication-sync":
+		return buildReplicationSync(p)
+	case "token-cleanup":
+		return buildTokenCleanup(p)
+	case "daily-backup":
+		return buildDailyBackup(p)
+	case "backup-cleanup":
+		return buildBackupCleanup(p)
+	case "telegram-report":
+		return buildTelegramReport(p)
+	case "update-check":
+		return buildUpdateCheck(p)
+	case "telemt-check":
+		return buildTelemtCheck(p)
+	case "history-cleanup":
+		return buildHistoryCleanup(p)
+	case "quota-reset":
+		return buildQuotaReset(p)
+	case "auto-rotate":
+		return buildAutoRotate(p)
+	case "upstream-health":
+		return buildUpstreamHealth(p)
+	default:
+		return nil
+	}
+}
+
+func buildTrafficFlush(p schedulerTaskParams) func(context.Context) error {
+	if p.trafficSvc == nil {
+		return nil
+	}
+	return func(ctx context.Context) error { return p.trafficSvc.Flush(ctx) }
+}
+
+func buildQuotaCheck(p schedulerTaskParams) func(context.Context) error {
+	if p.trafficSvc == nil {
+		return nil
+	}
+	return func(ctx context.Context) error {
+		p.trafficSvc.CheckQuotas(ctx)
+		return nil
+	}
+}
+
+func buildExpiryCheck(p schedulerTaskParams) func(context.Context) error {
+	if p.trafficSvc == nil {
+		return nil
+	}
+	return func(ctx context.Context) error {
+		p.trafficSvc.CheckExpirations(ctx)
+		return nil
+	}
+}
+
+func buildHealthCheck(p schedulerTaskParams) func(context.Context) error {
+	if p.healthSvc == nil {
+		return nil
+	}
+	return p.healthSvc.AutoRecover
+}
+
+func buildReplicationSync(p schedulerTaskParams) func(context.Context) error {
+	if p.replSvc == nil {
+		return nil
+	}
+	return func(ctx context.Context) error {
+		for _, r := range p.replSvc.SyncAll(ctx) {
+			if r.Error != "" {
+				return fmt.Errorf("sync %s: %s", r.Host, r.Error)
+			}
+		}
+		return nil
+	}
+}
+
+func buildTokenCleanup(p schedulerTaskParams) func(context.Context) error {
+	if p.blocklist == nil {
+		return nil
+	}
+	return p.blocklist.Cleanup
+}
+
+func buildDailyBackup(p schedulerTaskParams) func(context.Context) error {
+	if p.backupStore == nil {
+		return nil
+	}
+	return func(ctx context.Context) error {
+		_, err := p.backupStore.Create(ctx)
+		return err
+	}
+}
+
+func buildBackupCleanup(p schedulerTaskParams) func(context.Context) error {
+	if p.backupStore == nil {
+		return nil
+	}
+	return func(ctx context.Context) error {
+		s, _ := p.settings.Load(ctx)
+		days := 7
+		if s != nil && s.BackupRetentionDays > 0 {
+			days = s.BackupRetentionDays
+		}
+		_, err := p.backupStore.CleanOld(ctx, time.Duration(days)*24*time.Hour)
+		return err
+	}
+}
+
+func buildTelegramReport(p schedulerTaskParams) func(context.Context) error {
+	return func(ctx context.Context) error {
+		p.botMu.Lock()
+		botPtr := *p.activeBot
+		p.botMu.Unlock()
+		if botPtr == nil || !botPtr.IsRunning() {
+			return nil
+		}
+		return sendPeriodicReport(ctx, botPtr, p.settings, p.secrets, p.trafficSvc)
+	}
+}
+
+func buildUpdateCheck(p schedulerTaskParams) func(context.Context) error {
+	if p.updateSvc == nil {
+		return nil
+	}
+	return func(ctx context.Context) error {
+		status, err := p.updateSvc.Check(ctx)
+		if err != nil {
+			return err
+		}
+		if status.UpdateAvailable {
+			srvLog.Infof("update available: v%s (current: v%s)", status.Latest, status.Current)
+			s, _ := p.settings.Load(ctx)
+			webURL := ""
+			if s != nil {
+				webURL = s.WebURL
+			}
+			var buttons []service.KeyboardButton
+			if status.HTMLURL != "" {
+				buttons = append(buttons, service.KeyboardButton{Text: "Release Notes", URL: status.HTMLURL})
+			}
+			if webURL != "" {
+				buttons = append(buttons, service.KeyboardButton{Text: "Updates", URL: webURL + "/updates"})
+			}
+			p.notifyWithBtns(ctx, "🆕 *%s* New PopuGate version available: v%s\nCurrent: v%s", buttons, status.Latest, status.Current)
+		}
+		return nil
+	}
+}
+
+func buildTelemtCheck(p schedulerTaskParams) func(context.Context) error {
+	if p.telemtUpdateSvc == nil {
+		return nil
+	}
+	return func(ctx context.Context) error {
+		release, err := p.telemtUpdateSvc.CheckRemote(ctx)
+		if err != nil {
+			return err
+		}
+		if release.Version != p.telemtCfg.TelemtVersion() {
+			srvLog.Infof("telemt update available: %s (current: %s)", release.Version, p.telemtCfg.TelemtVersion())
+			s, _ := p.settings.Load(ctx)
+			webURL := ""
+			if s != nil {
+				webURL = s.WebURL
+			}
+			var buttons []service.KeyboardButton
+			if webURL != "" {
+				buttons = append(buttons, service.KeyboardButton{Text: "Engine Updates", URL: webURL + "/docker"})
+			}
+			p.notifyWithBtns(ctx, "🆕 *%s* New telemt engine version available: %s\nCurrent: %s", buttons, release.Version, p.telemtCfg.TelemtVersion())
+		}
+		return nil
+	}
+}
+
+func buildHistoryCleanup(p schedulerTaskParams) func(context.Context) error {
+	return func(ctx context.Context) error {
+		return p.trafficStore.CleanOldHistory(ctx, 30*24*time.Hour)
+	}
+}
+
+func buildQuotaReset(p schedulerTaskParams) func(context.Context) error {
+	if p.trafficSvc == nil {
+		return nil
+	}
+	return func(ctx context.Context) error {
+		p.trafficSvc.ResetAllQuotas(ctx)
+		if p.auditSvc != nil {
+			p.auditSvc.Log(ctx, "system", "quota-reset", "monthly quota reset completed")
+		}
+		return nil
+	}
+}
+
+func buildAutoRotate(p schedulerTaskParams) func(context.Context) error {
+	if p.secretSvc == nil {
+		return nil
+	}
+	return func(ctx context.Context) error {
+		s, _ := p.settings.Load(ctx)
+		if s == nil || s.SecretAutoRotateDays <= 0 {
+			return nil
+		}
+		all, err := p.secrets.List(ctx)
+		if err != nil {
+			return err
+		}
+		cutoff := time.Now().AddDate(0, 0, -s.SecretAutoRotateDays).Unix()
+		rotated := 0
+		for _, sec := range all {
+			if sec.Enabled && sec.CreatedAt > 0 && sec.CreatedAt < cutoff {
+				if _, err := p.secretSvc.Rotate(ctx, sec.Label); err == nil {
+					rotated++
+				}
+			}
+		}
+		if rotated > 0 && p.auditSvc != nil {
+			p.auditSvc.Log(ctx, "system", "auto-rotate", fmt.Sprintf("rotated %d secret(s)", rotated))
+		}
+		return nil
+	}
+}
+
+func buildUpstreamHealth(p schedulerTaskParams) func(context.Context) error {
+	if p.upstreamSvc == nil {
+		return nil
+	}
+	return func(ctx context.Context) error { return p.upstreamSvc.CheckAllUpstreams(ctx) }
 }
 
 func sendPeriodicReport(ctx context.Context, b *bot.Bot, settings *store.SettingsStore, secrets *store.SecretStore, trafficSvc *service.TrafficService) error {
@@ -633,7 +830,7 @@ func printBanner() {
             |_|                              
 `
 	fmt.Print(banner)
-	fmt.Printf(" PopuGate Server %s\n", model.Version)
+	fmt.Printf(" PopuGate Server %s\n", model.VersionTag())
 	fmt.Printf(" %s\n", model.VersionURL())
 	fmt.Println(" -------------------------------------------")
 	fmt.Println()

@@ -44,13 +44,14 @@ type Dependencies struct {
 
 // Bot represents the Telegram bot.
 type Bot struct {
-	token   string
-	chatID  string
-	label   string
-	client  *http.Client
-	running atomic.Bool
-	cancel  context.CancelFunc
-	deps    *Dependencies
+	token    string
+	chatID   string
+	label    string
+	client   *http.Client
+	running  atomic.Bool
+	cancel   context.CancelFunc
+	deps     *Dependencies
+	dispatch map[string]commandEntry
 }
 
 // telegramAPIURL builds a Telegram Bot API URL with the bot token.
@@ -140,13 +141,15 @@ func setCommandsForTokenWithClient(ctx context.Context, client *http.Client, tok
 
 // New creates a new Telegram bot.
 func New(token, chatID, label string, deps *Dependencies) *Bot {
-	return &Bot{
+	bot := &Bot{
 		token:  token,
 		chatID: chatID,
 		label:  label,
 		client: &http.Client{Timeout: 35 * time.Second},
 		deps:   deps,
 	}
+	bot.dispatch = bot.buildCommandDispatch()
+	return bot
 }
 
 // Start begins the long-polling loop with exponential backoff on errors.
@@ -222,6 +225,54 @@ func (b *Bot) SendMessage(ctx context.Context, text string) error {
 		return err
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resp, err := b.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("telegram API returned %d", resp.StatusCode)
+	}
+	return nil
+}
+
+// InlineKeyboardButton is a Telegram Bot API InlineKeyboardButton.
+type InlineKeyboardButton struct {
+	Text string `json:"text"`
+	URL  string `json:"url,omitempty"`
+}
+
+// InlineKeyboardMarkup is a Telegram Bot API reply markup for inline keyboards.
+type InlineKeyboardMarkup struct {
+	InlineKeyboard [][]InlineKeyboardButton `json:"inline_keyboard"`
+}
+
+// SendMessageWithKeyboard sends a Markdown message with an inline keyboard.
+func (b *Bot) SendMessageWithKeyboard(ctx context.Context, text string, keyboard InlineKeyboardMarkup) error {
+	apiURL := b.telegramAPIURL("sendMessage")
+	payload := struct {
+		ChatID      string               `json:"chat_id"`
+		Text        string               `json:"text"`
+		ParseMode   string               `json:"parse_mode"`
+		ReplyMarkup InlineKeyboardMarkup `json:"reply_markup"`
+	}{
+		ChatID:      b.chatID,
+		Text:        text,
+		ParseMode:   "Markdown",
+		ReplyMarkup: keyboard,
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", apiURL, bytes.NewReader(data))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := b.client.Do(req)
 	if err != nil {
@@ -320,12 +371,64 @@ func (b *Bot) getUpdates(ctx context.Context, offset int64) ([]TelegramUpdate, e
 	return result.Result, nil
 }
 
+type commandHandler func(ctx context.Context, text string) string
+
+type commandEntry struct {
+	exact   bool
+	handler commandHandler
+}
+
+func (b *Bot) buildCommandDispatch() map[string]commandEntry {
+	return map[string]commandEntry{
+		"/status":    {exact: true, handler: func(ctx context.Context, _ string) string { return b.cmdStatus(ctx) }},
+		"/secrets":   {exact: true, handler: func(ctx context.Context, _ string) string { return b.cmdSecrets(ctx) }},
+		"/link":      {exact: false, handler: b.cmdLink},
+		"/add":       {exact: false, handler: b.cmdAdd},
+		"/remove":    {exact: false, handler: b.cmdRemove},
+		"/rotate":    {exact: false, handler: b.cmdRotate},
+		"/restart":   {exact: true, handler: func(ctx context.Context, _ string) string { return b.cmdRestart(ctx) }},
+		"/enable":    {exact: false, handler: b.cmdEnable},
+		"/disable":   {exact: false, handler: b.cmdDisable},
+		"/start":     {exact: false, handler: b.dispatchStart},
+		"/stop":      {exact: false, handler: b.cmdStopInstance},
+		"/health":    {exact: true, handler: func(ctx context.Context, _ string) string { return b.cmdHealth(ctx) }},
+		"/traffic":   {exact: true, handler: func(ctx context.Context, _ string) string { return b.cmdTraffic(ctx) }},
+		"/update":    {exact: true, handler: func(ctx context.Context, _ string) string { return b.cmdUpdate(ctx) }},
+		"/limits":    {exact: true, handler: func(ctx context.Context, _ string) string { return b.cmdLimits(ctx) }},
+		"/setlimit":  {exact: false, handler: b.cmdSetLimit},
+		"/upstreams": {exact: true, handler: func(ctx context.Context, _ string) string { return b.cmdUpstreams(ctx) }},
+		"/tasks":     {exact: true, handler: func(ctx context.Context, _ string) string { return b.cmdTasks(ctx) }},
+		"/help":      {exact: true, handler: func(_ context.Context, _ string) string { return b.cmdHelp() }},
+	}
+}
+
+func (b *Bot) dispatchStart(ctx context.Context, text string) string {
+	if text == "/start" {
+		return b.cmdWelcome()
+	}
+	return b.cmdStartInstance(ctx, text)
+}
+
+func (b *Bot) resolveCommand(text string) (commandHandler, string) {
+	for cmd, entry := range b.dispatch {
+		if entry.exact {
+			if text == cmd {
+				return entry.handler, cmd
+			}
+			continue
+		}
+		if text == cmd || strings.HasPrefix(text, cmd+" ") || strings.HasPrefix(text, cmd+"@") {
+			return entry.handler, cmd
+		}
+	}
+	return nil, ""
+}
+
 func (b *Bot) handleUpdate(ctx context.Context, update TelegramUpdate) {
 	if update.Message == nil {
 		return
 	}
 
-	// Only allow commands from the authorized chat user
 	if fmt.Sprintf("%d", update.Message.From.ID) != b.chatID {
 		log.Debugf("unauthorized command from user %d (%s), expected chatID %s",
 			update.Message.From.ID, update.Message.From.Username, b.chatID)
@@ -338,7 +441,11 @@ func (b *Bot) handleUpdate(ctx context.Context, update TelegramUpdate) {
 		return
 	}
 
-	// Ignore commands from other bots/groups (e.g. /start, /help from general bots)
+	// Strip @botname suffix before validation so /status@mybot is recognized
+	if idx := strings.Index(text, "@"); idx > 0 {
+		text = text[:idx]
+	}
+
 	cmd := strings.SplitN(text, " ", 2)[0]
 	if !isKnownCommand(cmd) {
 		return
@@ -346,54 +453,11 @@ func (b *Bot) handleUpdate(ctx context.Context, update TelegramUpdate) {
 
 	log.Debugf("command from %s: %s", update.Message.From.Username, text)
 
-	// Strip @botname suffix from commands
-	if idx := strings.Index(text, "@"); idx > 0 && strings.HasPrefix(text, "/") {
-		text = text[:idx]
-	}
-
+	handler, _ := b.resolveCommand(text)
 	var response string
-	switch {
-	case text == "/status":
-		response = b.cmdStatus(ctx)
-	case text == "/secrets":
-		response = b.cmdSecrets(ctx)
-	case strings.HasPrefix(text, "/link"):
-		response = b.cmdLink(ctx, text)
-	case strings.HasPrefix(text, "/add"):
-		response = b.cmdAdd(ctx, text)
-	case strings.HasPrefix(text, "/remove"):
-		response = b.cmdRemove(ctx, text)
-	case strings.HasPrefix(text, "/rotate"):
-		response = b.cmdRotate(ctx, text)
-	case text == "/restart":
-		response = b.cmdRestart(ctx)
-	case strings.HasPrefix(text, "/enable"):
-		response = b.cmdEnable(ctx, text)
-	case strings.HasPrefix(text, "/disable"):
-		response = b.cmdDisable(ctx, text)
-	case text == "/start":
-		response = b.cmdWelcome()
-	case strings.HasPrefix(text, "/start "):
-		response = b.cmdStartInstance(ctx, text)
-	case strings.HasPrefix(text, "/stop"):
-		response = b.cmdStopInstance(ctx, text)
-	case text == "/health":
-		response = b.cmdHealth(ctx)
-	case text == "/traffic":
-		response = b.cmdTraffic(ctx)
-	case text == "/update":
-		response = b.cmdUpdate(ctx)
-	case text == "/limits":
-		response = b.cmdLimits(ctx)
-	case strings.HasPrefix(text, "/setlimit"):
-		response = b.cmdSetLimit(ctx, text)
-	case text == "/upstreams":
-		response = b.cmdUpstreams(ctx)
-	case text == "/tasks":
-		response = b.cmdTasks(ctx)
-	case text == "/help":
-		response = b.cmdHelp()
-	default:
+	if handler != nil {
+		response = handler(ctx, text)
+	} else {
 		response = "Unknown command. Send /help for available commands."
 	}
 

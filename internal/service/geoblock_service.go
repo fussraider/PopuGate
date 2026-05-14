@@ -39,6 +39,45 @@ func NewGeoblockService(settings *store.SettingsStore, instances *store.Instance
 	}
 }
 
+func (s *GeoblockService) collectPorts(ctx context.Context, primaryPort int) []string {
+	ports := []string{fmt.Sprintf("%d", primaryPort)}
+	insts, _ := s.instances.List(ctx)
+	for _, inst := range insts {
+		if inst.Enabled {
+			ports = append(ports, fmt.Sprintf("%d", inst.Port))
+		}
+	}
+	return ports
+}
+
+func (s *GeoblockService) applyCountryIPSet(ctx context.Context, code string, cidrs []string, ports []string, action string) error {
+	setName := netutil.SetNameForCountry(code)
+	if err := s.iptables.CreateIPSet(setName, 131072); err != nil {
+		return fmt.Errorf("create ipset %s: %w", setName, err)
+	}
+	if err := s.iptables.FlushIPSet(setName); err != nil {
+		return fmt.Errorf("flush ipset %s: %w", setName, err)
+	}
+	if err := s.iptables.RestoreIPSet(setName, cidrs); err != nil {
+		return fmt.Errorf("restore ipset %s: %w", setName, err)
+	}
+	for _, port := range ports {
+		if err := s.iptables.SetRule(setName, port, action); err != nil {
+			return fmt.Errorf("set rule for %s port %s: %w", code, port, err)
+		}
+	}
+	return nil
+}
+
+func applyDefaultDeny(iptables *netutil.IptablesManager, ports []string) error {
+	for _, port := range ports {
+		if err := iptables.SetDefaultDeny(port); err != nil {
+			return fmt.Errorf("set default deny port %s: %w", port, err)
+		}
+	}
+	return nil
+}
+
 // Apply downloads CIDRs for all configured countries and applies iptables rules.
 func (s *GeoblockService) Apply(ctx context.Context) error {
 	settings, err := s.settings.Load(ctx)
@@ -50,28 +89,19 @@ func (s *GeoblockService) Apply(ctx context.Context) error {
 		return s.Clear(ctx)
 	}
 
-	countries := strings.Split(settings.BlocklistCountries, ",")
 	action := "DROP"
 	if settings.GeoblockMode == "whitelist" {
 		action = "ACCEPT"
 	}
 
-	// Remove existing rules first
 	if err := s.iptables.RemoveGeoBlockRules(); err != nil {
 		logger.WithScope("geoblock").Warnf("remove existing rules: %v", err)
 	}
 
-	// Collect all ports: primary + instances
-	ports := []string{fmt.Sprintf("%d", settings.ProxyPort)}
-	insts, _ := s.instances.List(ctx)
-	for _, inst := range insts {
-		if inst.Enabled {
-			ports = append(ports, fmt.Sprintf("%d", inst.Port))
-		}
-	}
+	ports := s.collectPorts(ctx, settings.ProxyPort)
 
-	for _, code := range countries {
-		code = strings.TrimSpace(strings.ToLower(code))
+	for _, raw := range strings.Split(settings.BlocklistCountries, ",") {
+		code := strings.TrimSpace(strings.ToLower(raw))
 		if code == "" {
 			continue
 		}
@@ -84,32 +114,13 @@ func (s *GeoblockService) Apply(ctx context.Context) error {
 			return fmt.Errorf("get CIDRs for %s: %w", code, err)
 		}
 
-		setName := netutil.SetNameForCountry(code)
-		if err := s.iptables.CreateIPSet(setName, 131072); err != nil {
-			return fmt.Errorf("create ipset %s: %w", setName, err)
-		}
-		if err := s.iptables.FlushIPSet(setName); err != nil {
-			return fmt.Errorf("flush ipset %s: %w", setName, err)
-		}
-		if err := s.iptables.RestoreIPSet(setName, cidrs); err != nil {
-			return fmt.Errorf("restore ipset %s: %w", setName, err)
-		}
-
-		// Apply rules to all ports
-		for _, port := range ports {
-			if err := s.iptables.SetRule(setName, port, action); err != nil {
-				return fmt.Errorf("set rule for %s port %s: %w", code, port, err)
-			}
+		if err := s.applyCountryIPSet(ctx, code, cidrs, ports, action); err != nil {
+			return err
 		}
 	}
 
-	// Default deny for whitelist mode
 	if settings.GeoblockMode == "whitelist" {
-		for _, port := range ports {
-			if err := s.iptables.SetDefaultDeny(port); err != nil {
-				return fmt.Errorf("set default deny port %s: %w", port, err)
-			}
-		}
+		return applyDefaultDeny(s.iptables, ports)
 	}
 
 	return nil

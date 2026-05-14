@@ -165,101 +165,168 @@ func (s *TrafficService) Flush(ctx context.Context) error {
 		return err
 	}
 
-	// Read global snapshot once before iterating instances
 	globalSnap, _ := s.traffic.GetGlobal(ctx)
-
-	var totalGlobalIn, totalGlobalOut int64
-	var totalHistUsers = make(map[string][2]int64)
-	var accSnapIn, accSnapOut int64
+	var acc flushAccumulator
 
 	for _, inst := range instances {
 		if !inst.Enabled {
 			continue
 		}
-
-		url := fmt.Sprintf("http://%s:%d/metrics", s.dockerAddr, inst.MetricsPort)
-		resp, err := s.client.Get(url)
-		if err != nil {
-			continue
-		}
-		live, err := promutil.FetchAndParse(resp.Body)
-		resp.Body.Close()
-		if err != nil {
-			continue
-		}
-
-		userSnapshots, _ := s.traffic.GetAllUserSnapshots(ctx, inst.ID)
-
-		var instTotalFrom, instTotalTo float64
-		userDeltas := make(map[string]model.TrafficSnapshot)
-		for user, um := range live.UserMetrics {
-			instTotalFrom += um.OctetsFromClient
-			instTotalTo += um.OctetsToClient
-
-			prev := userSnapshots[user]
-			deltaIn := int64(um.OctetsFromClient) - prev[0]
-			deltaOut := int64(um.OctetsToClient) - prev[1]
-
-			if deltaIn < 0 {
-				deltaIn = int64(um.OctetsFromClient)
-			}
-			if deltaOut < 0 {
-				deltaOut = int64(um.OctetsToClient)
-			}
-
-			if deltaIn > 0 || deltaOut > 0 {
-				userDeltas[user] = model.TrafficSnapshot{
-					BytesIn:  deltaIn,
-					BytesOut: deltaOut,
-					SnapIn:   int64(um.OctetsFromClient),
-					SnapOut:  int64(um.OctetsToClient),
-				}
-			}
-		}
-
-		// Accumulate instance totals for global snapshot comparison regardless of deltas.
-		accSnapIn += int64(instTotalFrom)
-		accSnapOut += int64(instTotalTo)
-
-		if len(userDeltas) > 0 {
-			if err := s.traffic.FlushInstanceTraffic(ctx, userDeltas, inst.ID); err != nil {
-				trafficLog.Warnf("flush instance %d: %v", inst.ID, err)
-				continue
-			}
-
-			for label, snap := range userDeltas {
-				totalGlobalIn += snap.BytesIn
-				totalGlobalOut += snap.BytesOut
-				existing := totalHistUsers[label]
-				totalHistUsers[label] = [2]int64{existing[0] + snap.BytesIn, existing[1] + snap.BytesOut}
-			}
-		}
+		s.flushInstance(ctx, inst, &acc)
 	}
 
-	// Update global once with accumulated totals
-	if totalGlobalIn > 0 || totalGlobalOut > 0 || accSnapIn > 0 || accSnapOut > 0 {
-		globalDeltaIn := accSnapIn - globalSnap.SnapIn
-		globalDeltaOut := accSnapOut - globalSnap.SnapOut
-		if globalDeltaIn < 0 {
-			globalDeltaIn = accSnapIn
-		}
-		if globalDeltaOut < 0 {
-			globalDeltaOut = accSnapOut
-		}
+	acc.flushGlobal(ctx, *globalSnap, s.traffic)
 
-		if err := s.traffic.UpdateGlobal(ctx, globalDeltaIn, globalDeltaOut, accSnapIn, accSnapOut); err != nil {
-			trafficLog.Warnf("flush global: %v", err)
-		}
+	trafficLog.Debugf("flush ok: global ↓%d ↑%d", acc.totalIn, acc.totalOut)
+	return nil
+}
+
+type flushAccumulator struct {
+	totalIn    int64
+	totalOut   int64
+	histUsers  map[string][2]int64
+	accSnapIn  int64
+	accSnapOut int64
+}
+
+func (a *flushAccumulator) addUserDeltas(deltas map[string]model.TrafficSnapshot) {
+	for label, snap := range deltas {
+		a.totalIn += snap.BytesIn
+		a.totalOut += snap.BytesOut
+		existing := a.histUsers[label]
+		a.histUsers[label] = [2]int64{existing[0] + snap.BytesIn, existing[1] + snap.BytesOut}
 	}
+}
 
-	if totalGlobalIn > 0 || totalGlobalOut > 0 {
-		if err := s.traffic.InsertHistoryBatch(ctx, time.Now().Unix(), totalGlobalIn, totalGlobalOut, totalHistUsers); err != nil {
+func (a *flushAccumulator) flushGlobal(ctx context.Context, globalSnap model.TrafficSnapshot, store *store.TrafficStore) {
+	if a.totalIn == 0 && a.totalOut == 0 && a.accSnapIn == 0 && a.accSnapOut == 0 {
+		return
+	}
+	globalDeltaIn := nonNegativeDelta(a.accSnapIn, globalSnap.SnapIn)
+	globalDeltaOut := nonNegativeDelta(a.accSnapOut, globalSnap.SnapOut)
+	if err := store.UpdateGlobal(ctx, globalDeltaIn, globalDeltaOut, a.accSnapIn, a.accSnapOut); err != nil {
+		trafficLog.Warnf("flush global: %v", err)
+	}
+	if a.totalIn > 0 || a.totalOut > 0 {
+		if err := store.InsertHistoryBatch(ctx, time.Now().Unix(), a.totalIn, a.totalOut, a.histUsers); err != nil {
 			trafficLog.Warnf("failed to record traffic history: %v", err)
 		}
 	}
+}
 
-	trafficLog.Debugf("flush ok: global ↓%d ↑%d", totalGlobalIn, totalGlobalOut)
-	return nil
+func nonNegativeDelta(current, previous int64) int64 {
+	d := current - previous
+	if d < 0 {
+		return current
+	}
+	return d
+}
+
+func (s *TrafficService) flushInstance(ctx context.Context, inst model.Instance, acc *flushAccumulator) {
+	url := fmt.Sprintf("http://%s:%d/metrics", s.dockerAddr, inst.MetricsPort)
+	resp, err := s.client.Get(url)
+	if err != nil {
+		return
+	}
+	live, err := promutil.FetchAndParse(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		return
+	}
+
+	userSnapshots, _ := s.traffic.GetAllUserSnapshots(ctx, inst.ID)
+	userDeltas := computeUserDeltas(live.UserMetrics, userSnapshots)
+
+	var instTotalFrom, instTotalTo float64
+	for _, um := range live.UserMetrics {
+		instTotalFrom += um.OctetsFromClient
+		instTotalTo += um.OctetsToClient
+	}
+	acc.accSnapIn += int64(instTotalFrom)
+	acc.accSnapOut += int64(instTotalTo)
+
+	if len(userDeltas) == 0 {
+		return
+	}
+	if err := s.traffic.FlushInstanceTraffic(ctx, userDeltas, inst.ID); err != nil {
+		trafficLog.Warnf("flush instance %d: %v", inst.ID, err)
+		return
+	}
+	acc.addUserDeltas(userDeltas)
+}
+
+func computeUserDeltas(live map[string]*model.UserLiveMetrics, snapshots map[string][2]int64) map[string]model.TrafficSnapshot {
+	deltas := make(map[string]model.TrafficSnapshot)
+	for user, um := range live {
+		prev := snapshots[user]
+		deltaIn := nonNegativeDelta(int64(um.OctetsFromClient), prev[0])
+		deltaOut := nonNegativeDelta(int64(um.OctetsToClient), prev[1])
+		if deltaIn > 0 || deltaOut > 0 {
+			deltas[user] = model.TrafficSnapshot{
+				BytesIn:  deltaIn,
+				BytesOut: deltaOut,
+				SnapIn:   int64(um.OctetsFromClient),
+				SnapOut:  int64(um.OctetsToClient),
+			}
+		}
+	}
+	return deltas
+}
+
+func (s *TrafficService) checkQuotaExceeded(ctx context.Context, sec *model.Secret, pct int) {
+	alerted, _ := s.quota.WasAlerted(ctx, sec.Label, 100)
+	if alerted {
+		return
+	}
+	enabled, _ := s.secrets.CountEnabled(ctx)
+	if enabled > 1 {
+		sec.Enabled = false
+		if err := s.secrets.Update(ctx, sec); err != nil {
+			quotaLog.Warnf("failed to disable secret %s: %v", sec.Label, err)
+		} else {
+			quotaLog.Warnf("auto-disabled secret %s (quota exceeded: %d%%)", sec.Label, pct)
+		}
+	} else {
+		quotaLog.Warnf("cannot auto-disable %s (last active secret), quota exceeded %d%%", sec.Label, pct)
+	}
+	if err := s.quota.MarkAlerted(ctx, sec.Label, 100); err != nil {
+		quotaLog.Warnf("mark alert for %s: %v", sec.Label, err)
+	}
+}
+
+func (s *TrafficService) checkQuotaWarning(ctx context.Context, label string, pct int) {
+	alerted, _ := s.quota.WasAlerted(ctx, label, 80)
+	if alerted {
+		return
+	}
+	quotaLog.Warnf("warning: secret %s at %d%% of quota", label, pct)
+	if err := s.quota.MarkAlerted(ctx, label, 80); err != nil {
+		quotaLog.Warnf("mark alert for %s: %v", label, err)
+	}
+}
+
+func (s *TrafficService) checkSecretQuota(ctx context.Context, sec *model.Secret) {
+	if !sec.Enabled || sec.QuotaBytes <= 0 {
+		return
+	}
+
+	userTraffic, err := s.traffic.GetUserTraffic(ctx, sec.Label)
+	if err != nil {
+		return
+	}
+
+	totalBytes := userTraffic.BytesIn + userTraffic.BytesOut
+	if totalBytes <= 0 {
+		return
+	}
+
+	pct := int(totalBytes * 100 / sec.QuotaBytes)
+
+	if pct >= 100 {
+		s.checkQuotaExceeded(ctx, sec, pct)
+	} else if pct >= 80 {
+		s.checkQuotaWarning(ctx, sec.Label, pct)
+	}
 }
 
 // CheckQuotas auto-disables secrets that exceeded their quota and sends warnings at 80%.
@@ -274,49 +341,7 @@ func (s *TrafficService) CheckQuotas(ctx context.Context) {
 	}
 
 	for _, sec := range secrets {
-		if !sec.Enabled || sec.QuotaBytes <= 0 {
-			continue
-		}
-
-		userTraffic, err := s.traffic.GetUserTraffic(ctx, sec.Label)
-		if err != nil {
-			continue
-		}
-
-		totalBytes := userTraffic.BytesIn + userTraffic.BytesOut
-		if totalBytes <= 0 {
-			continue
-		}
-
-		pct := int(totalBytes * 100 / sec.QuotaBytes)
-
-		if pct >= 100 {
-			alerted, _ := s.quota.WasAlerted(ctx, sec.Label, 100)
-			if !alerted {
-				enabled, _ := s.secrets.CountEnabled(ctx)
-				if enabled > 1 {
-					sec.Enabled = false
-					if err := s.secrets.Update(ctx, &sec); err != nil {
-						quotaLog.Warnf("failed to disable secret %s: %v", sec.Label, err)
-					} else {
-						quotaLog.Warnf("auto-disabled secret %s (quota exceeded: %d%%)", sec.Label, pct)
-					}
-				} else {
-					quotaLog.Warnf("cannot auto-disable %s (last active secret), quota exceeded %d%%", sec.Label, pct)
-				}
-				if err := s.quota.MarkAlerted(ctx, sec.Label, 100); err != nil {
-					quotaLog.Warnf("mark alert for %s: %v", sec.Label, err)
-				}
-			}
-		} else if pct >= 80 {
-			alerted, _ := s.quota.WasAlerted(ctx, sec.Label, 80)
-			if !alerted {
-				quotaLog.Warnf("warning: secret %s at %d%% of quota", sec.Label, pct)
-				if err := s.quota.MarkAlerted(ctx, sec.Label, 80); err != nil {
-					quotaLog.Warnf("mark alert for %s: %v", sec.Label, err)
-				}
-			}
-		}
+		s.checkSecretQuota(ctx, &sec)
 	}
 }
 

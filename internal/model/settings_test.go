@@ -329,7 +329,7 @@ func TestVersionURL_Tag(t *testing.T) {
 	origCommit := Commit
 	defer func() { Version = origVersion; Commit = origCommit }()
 
-	Version = "v1.2.3"
+	Version = "1.2.3"
 	Commit = "abc"
 	got := VersionURL()
 	if !strings.Contains(got, "releases/tag/v1.2.3") {

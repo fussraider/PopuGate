@@ -6,11 +6,9 @@ import (
 	"time"
 
 	"github.com/fussraider/PopuGate/internal/model"
-	"github.com/fussraider/PopuGate/pkg/logger"
 )
 
 var (
-	resLog    = logger.WithScope("resource-monitor")
 	monitor   *ResourceMonitor
 	monitorMu sync.Mutex
 )

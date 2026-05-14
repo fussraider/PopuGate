@@ -7,9 +7,9 @@ import (
 
 func TestUpstreamValidate(t *testing.T) {
 	tests := []struct {
-		name    string
+		name     string
 		upstream Upstream
-		wantErr bool
+		wantErr  bool
 	}{
 		{
 			name: "valid direct upstream",

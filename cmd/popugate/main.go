@@ -12,7 +12,7 @@ func init() {
 	// Propagate build-time values to model package as early as possible,
 	// so all subcommands (version, server, …) see the correct values.
 	if version != "" {
-		model.Version = version
+		model.SetVersion(version)
 	}
 	if commit != "" {
 		model.Commit = commit

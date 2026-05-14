@@ -72,6 +72,7 @@ func (s *SettingsStore) Load(ctx context.Context) (*model.Settings, error) {
 	settings.TelegramInterval = getInt(kv, "telegram_interval", 6)
 	settings.TelegramAlertsEnabled = getBool(kv, "telegram_alerts_enabled")
 	settings.TelegramServerLabel = getString(kv, "telegram_server_label", "PopuGate")
+	settings.WebURL = getString(kv, "web_url", "")
 	// Auto-update
 	settings.AutoUpdateEnabled = getBool(kv, "auto_update_enabled")
 	settings.SecretAutoRotateDays = getInt(kv, "secret_auto_rotate_days", 0)

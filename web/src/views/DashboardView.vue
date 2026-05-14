@@ -1,5 +1,14 @@
 <template>
   <div class="dashboard">
+    <!-- Update Banner -->
+    <div v-if="updateStore.status?.update_available" class="update-banner mb-lg">
+      <Package :size="16" class="update-banner-icon" />
+      <span>{{ t('dashboard.update_banner', { current: updateStore.status.current, latest: updateStore.status.latest }) }}</span>
+      <router-link :to="{ name: 'Updates' }" class="btn btn-sm btn-warning" style="margin-left: auto;">
+        {{ t('updates.check') }} <ArrowUpRight :size="12" />
+      </router-link>
+    </div>
+
     <!-- Status Cards -->
     <div class="stats-grid">
       <div class="stat-card stat-card-proxy">
@@ -306,6 +315,7 @@ import {
   HardDrive,
   KeyRound,
   Loader2,
+  Package,
   Play,
   RefreshCw,
   RotateCw,
@@ -313,6 +323,7 @@ import {
   TrendingUp,
   Users
 } from '@lucide/vue'
+import {useUpdateStore} from '@/stores/update'
 
 const { t } = useI18n()
 const secretsStore = useSecretsStore()
@@ -323,6 +334,7 @@ const systemStore = useSystemStore()
 const trafficStore = useTrafficStore()
 const schedulerStore = useSchedulerStore()
 const toast = useToastStore()
+const updateStore = useUpdateStore()
 
 const sparklineCanvas = ref<HTMLCanvasElement | null>(null)
 
@@ -539,6 +551,19 @@ onUnmounted(() => {
 
 <style scoped lang="scss">
 @use '@/assets/scss/variables' as *;
+
+.update-banner {
+  display: flex;
+  align-items: center;
+  gap: $spacing-sm;
+  padding: $spacing-sm $spacing-lg;
+  background: var(--alert-warning-bg);
+  border: 1px solid var(--alert-warning-border);
+  border-radius: $border-radius-lg;
+  font-size: $font-size-sm;
+  color: var(--text-primary);
+  flex-wrap: wrap;
+}
 
 .stats-grid {
   display: grid;

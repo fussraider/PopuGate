@@ -62,6 +62,7 @@ func (h *UpdateHandler) Apply(c *gin.Context) {
 
 	result, err := h.updateSvc.Apply(ctx)
 	if err != nil {
+		logger.WithScope("update").Errorf("apply failed: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

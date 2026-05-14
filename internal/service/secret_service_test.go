@@ -942,7 +942,7 @@ func TestSecretService_ImportSecrets(t *testing.T) {
 
 	sec, _ := svc.Get(ctx, "imported1")
 	if sec == nil {
-		t.Error("imported1 should exist")
+		t.Fatal("imported1 should exist")
 	}
 	if sec.SecretKey != "aa000000000000000000000000000000" {
 		t.Error("imported secret should preserve provided key")
@@ -950,7 +950,7 @@ func TestSecretService_ImportSecrets(t *testing.T) {
 
 	sec2, _ := svc.Get(ctx, "imported2")
 	if sec2 == nil {
-		t.Error("imported2 should exist")
+		t.Fatal("imported2 should exist")
 	}
 	if sec2.SecretKey == "" {
 		t.Error("imported2 should have auto-generated key")

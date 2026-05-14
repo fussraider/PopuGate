@@ -35,6 +35,7 @@ var allowedConfigKeys = map[string]bool{
 	// Telegram
 	"telegram_enabled": true, "telegram_bot_token": true, "telegram_chat_id": true,
 	"telegram_interval": true, "telegram_alerts_enabled": true, "telegram_server_label": true,
+	"web_url": true,
 	// Auto-update
 	"auto_update_enabled":     true,
 	"secret_auto_rotate_days": true,

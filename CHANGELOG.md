@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.3] - 2026-05-14
+
+### Changed
+- Decompose monolithic `runServer` into `appStores`/`appServices` structs with dedicated wiring functions
+- Centralize version handling via `SetVersion`/`VersionTag`/`VersionURL` with consistent "v" prefix normalization
+- Extract traffic flush logic into `flushAccumulator`, `computeUserDeltas`, `nonNegativeDelta` helpers
+- Extract upstream health check into `resolveTestResult`, `handleFailover`, `checkUpstream` helpers
+- Refactor instance handler into `getInstanceForUpdate`, `applyInstanceUpdates`, `validateAndSaveInstance`
+- Extract geoblock service into `collectPorts`, `applyCountryIPSet`, `applyDefaultDeny` helpers
+- Cache bot command dispatch map instead of reallocating on every incoming message
+- Migrate Docker SDK types from `types.ContainerJSON` to `container.InspectResponse`
+
+### Added
+- Telegram inline keyboard buttons in notifications (upstream failover, instance revalidation, update checks)
+- `NotifyWithButtonsFunc` callback type and `dashboardButton` helper for notification buttons
+- `web_url` setting field for Telegram bot inline keyboard links
+- Update availability banner on dashboard with navigation badge dots
+- Release notes and changelog links in the updates view
+
+### Fixed
+- Escape port bindings in Docker sidecar scripts to prevent potential shell injection
+- Fix `/command@botname` being silently ignored due to incorrect stripping order
+- Propagate caller context through `dashboardButton` instead of using `context.Background()`
+- Log error in upstream failover when database read fails
+- Fix `gofmt` alignment in `ContainerService` struct and `SendMessageWithKeyboard` payload
+
 ## [0.1.2] - 2026-05-13
 
 ### Fixed
@@ -148,6 +174,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - SQLite storage with WAL mode
 - JWT authentication
 
+[0.1.3]: https://github.com/fussraider/PopuGate/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/fussraider/PopuGate/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/fussraider/PopuGate/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/fussraider/PopuGate/compare/v0.0.13...v0.1.0

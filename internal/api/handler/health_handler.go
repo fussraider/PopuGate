@@ -12,9 +12,6 @@ import (
 // HealthHandler handles health check endpoint.
 type HealthHandler struct {
 	healthSvc *service.HealthService
-	docker    interface {
-		IsInstalled(ctx interface{}) bool
-	}
 }
 
 // NewHealthHandler creates a new HealthHandler.

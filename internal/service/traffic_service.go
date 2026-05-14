@@ -166,7 +166,9 @@ func (s *TrafficService) Flush(ctx context.Context) error {
 	}
 
 	globalSnap, _ := s.traffic.GetGlobal(ctx)
-	var acc flushAccumulator
+	acc := flushAccumulator{
+		histUsers: make(map[string][2]int64),
+	}
 
 	for _, inst := range instances {
 		if !inst.Enabled {

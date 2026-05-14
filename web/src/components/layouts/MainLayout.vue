@@ -26,7 +26,7 @@
           >
             <component :is="item.icon" class="nav-icon" :size="18" />
             <span class="nav-label">{{ item.label }}</span>
-            <span v-if="showBadge(item.path)" class="nav-badge-dot"></span>
+            <span v-if="showBadge(item.path)" class="nav-badge-dot" :title="badgeTooltip(item.path)"></span>
           </router-link>
         </template>
       </nav>
@@ -164,10 +164,22 @@ const showBadge = computed(() => (path: string) => {
   if (path === '/updates') return !!updateStore.status?.update_available
   if (path === '/docker') return !!dockerStore.telemtUpdateStatus?.update_available
   if (path === '/scheduler') return schedulerStore.tasks.some(t => t.last_run?.status === 'error')
-  if (path === '/secrets') return secretsStore.secrets.some(s => s.enabled && s.expires_at && new Date(s.expires_at) < new Date())
+  if (path === '/secrets') return secretsStore.secrets.some(s => {
+    if (!s.enabled || !s.expires_at || s.expires_at === '0') return false
+    return new Date(s.expires_at) < new Date()
+  })
   if (path === '/upstreams') return upstreamsStore.upstreams.some(u => u.enabled && u.last_check_ok === false)
   return false
 })
+
+const badgeTooltip = (path: string): string => {
+  if (path === '/updates') return t('nav.badge.updates')
+  if (path === '/docker') return t('nav.badge.docker')
+  if (path === '/scheduler') return t('nav.badge.scheduler')
+  if (path === '/secrets') return t('nav.badge.secrets')
+  if (path === '/upstreams') return t('nav.badge.upstreams')
+  return ''
+}
 
 const pageTitle = computed(() => {
   const allItems = navItems.value
@@ -295,6 +307,7 @@ async function handleLogout() {
   border-radius: 50%;
   flex-shrink: 0;
   margin-left: auto;
+  cursor: help;
 }
 
 .nav-group-label {

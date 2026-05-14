@@ -7,6 +7,13 @@
       "monitoring": "Monitoring",
       "integrations": "Integrations",
       "system": "System"
+    },
+    "badge": {
+      "updates": "PopuGate update available",
+      "docker": "Engine update available",
+      "scheduler": "Task execution errors",
+      "secrets": "Expired secrets found",
+      "upstreams": "Unhealthy upstreams detected"
     }
   },
   "common": {

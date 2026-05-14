@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.4] - 2026-05-14
+
+### Changed
+- Clear hardcoded Swagger host so API docs work behind reverse proxies
+- Fix `/setlimit` help text in Telegram bot — `quota_mb` → `quota-MB`
+- Stream updater sidecar logs into main container output for better visibility during self-update
+- Add pre-pull delay in compose recreate script to ensure HTTP response is delivered before container restart
+
+### Fixed
+- Fix navigation badge showing false positives for secrets with `expires_at = '0'`
+- Add tooltip and `cursor: help` to navigation badge dots
+- Add i18n translations for badge tooltips (en/ru)
+
 ## [0.1.3] - 2026-05-14
 
 ### Changed
@@ -174,6 +187,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - SQLite storage with WAL mode
 - JWT authentication
 
+[0.1.4]: https://github.com/fussraider/PopuGate/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/fussraider/PopuGate/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/fussraider/PopuGate/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/fussraider/PopuGate/compare/v0.1.0...v0.1.1

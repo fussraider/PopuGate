@@ -629,7 +629,7 @@ func (b *Bot) cmdHelp() string {
 		"",
 		"*Limits & Traffic:*",
 		"/limits — Show all user limits",
-		"/setlimit <label> <conns> <ips> <quota_mb> [date] — Set limits",
+		"/setlimit <label> <conns> <ips> <quota-MB> [date] — Set limits",
 		"/traffic — Traffic report",
 		"",
 		"*System:*",

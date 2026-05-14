@@ -10,7 +10,7 @@
 [![Build](https://github.com/fussraider/PopuGate/actions/workflows/build.yml/badge.svg)](https://github.com/fussraider/PopuGate/actions/workflows/build.yml)
 [![Release](https://github.com/fussraider/PopuGate/actions/workflows/release.yml/badge.svg)](https://github.com/fussraider/PopuGate/actions/workflows/release.yml)
 [![GitHub release](https://img.shields.io/github/v/release/fussraider/PopuGate?include_prereleases)](https://github.com/fussraider/PopuGate/releases)
-[![Go Report Card](https://goreportcard.com/badge/github.com/fussraider/PopuGate)](https://goreportcard.com/report/github.com/fussraider/PopuGate)
+[![Go Report Card](https://goreportcard.com/badge/github.com/fussraider/PopuGate?v=0.1.4)](https://goreportcard.com/report/github.com/fussraider/PopuGate?v=0.1.4)
 [![Go Version](https://img.shields.io/badge/Go-1.26-blue)](https://go.dev/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Swagger](https://img.shields.io/badge/API-Swagger-green)](https://petstore.swagger.io/?url=https://raw.githubusercontent.com/fussraider/PopuGate/master/docs/swagger.json)

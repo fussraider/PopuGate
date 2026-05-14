@@ -2,6 +2,7 @@ package service
 
 import (
 	"archive/tar"
+	"bufio"
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
@@ -403,7 +404,39 @@ func (s *UpdateService) RestartSelfDocker(newImage string) error {
 	}
 
 	log.Infof("updater sidecar started (ID: %s)", resp.ID[:12])
+
+	// Stream sidecar logs so failures are visible in the main container's output
+	go s.streamSidecarLogs(ctx, resp.ID)
+
 	return nil
+}
+
+func (s *UpdateService) streamSidecarLogs(ctx context.Context, containerID string) {
+	log := logger.WithScope("updater")
+	opts := container.LogsOptions{
+		Follow:     true,
+		ShowStdout: true,
+		ShowStderr: true,
+		Tail:       "0",
+	}
+	reader, err := s.dockerCli.Cli().ContainerLogs(ctx, containerID, opts)
+	if err != nil {
+		log.Warnf("sidecar logs: %v", err)
+		return
+	}
+	defer reader.Close()
+
+	scanner := bufio.NewScanner(reader)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if len(line) > 8 {
+			line = line[8:]
+		}
+		line = strings.TrimSpace(line)
+		if line != "" {
+			log.Infof("[sidecar] %s", line)
+		}
+	}
 }
 
 // getComposeInfo extracts docker-compose project metadata from container labels.
@@ -443,6 +476,8 @@ func (s *UpdateService) buildComposeRecreateScript(ci *composeInfo, currentImage
 
 	var script strings.Builder
 	fmt.Fprintf(&script, "set -e\n")
+	fmt.Fprintf(&script, "echo '[popugate-updater] Waiting for HTTP response to be delivered...'\n")
+	fmt.Fprintf(&script, "sleep 3\n")
 	fmt.Fprintf(&script, "echo '[popugate-updater] Pulling backend image...'\n")
 	fmt.Fprintf(&script, "docker pull %s\n", shellescape(newImage))
 	fmt.Fprintf(&script, "docker tag %s %s\n", shellescape(newImage), shellescape(currentImage))

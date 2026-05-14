@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.6] - 2026-05-14
+
+### Fixed
+- Fix updater sidecar failing with `unknown command "sh"` — sidecar now overrides entrypoint to `/bin/sh` instead of inheriting `docker-entrypoint.sh` which wraps commands through `popugate`
+
 ## [0.1.5] - 2026-05-14
 
 ### Fixed
@@ -192,6 +197,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - SQLite storage with WAL mode
 - JWT authentication
 
+[0.1.6]: https://github.com/fussraider/PopuGate/compare/v0.1.5...v0.1.6
+[0.1.5]: https://github.com/fussraider/PopuGate/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/fussraider/PopuGate/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/fussraider/PopuGate/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/fussraider/PopuGate/compare/v0.1.1...v0.1.2

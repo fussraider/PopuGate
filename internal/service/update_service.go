@@ -354,7 +354,8 @@ func (s *UpdateService) RestartSelfDocker(newImage string) error {
 	_ = s.dockerCli.Cli().ContainerRemove(ctx, sidecarName, container.RemoveOptions{Force: true})
 
 	sidecarConfig := &container.Config{
-		Image: currentImage,
+		Image:      currentImage,
+		Entrypoint: []string{"/bin/sh"},
 	}
 	sidecarHostConfig := &container.HostConfig{
 		Binds:      []string{"/var/run/docker.sock:/var/run/docker.sock"},

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -457,10 +458,14 @@ func IsDockerEnv() bool {
 }
 
 // DockerHostAddr returns the address to reach the host from inside a container,
-// or localhost when not running in Docker.
+// or localhost when not running in Docker. In host network mode the container
+// shares the host's network namespace, so 127.0.0.1 is used directly.
 func DockerHostAddr() string {
 	if IsDockerEnv() {
-		return "host.docker.internal"
+		if _, err := net.LookupHost("host.docker.internal"); err == nil {
+			return "host.docker.internal"
+		}
+		return "127.0.0.1"
 	}
 	return "127.0.0.1"
 }

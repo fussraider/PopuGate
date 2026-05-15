@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.9] - 2026-05-15
+
+### Fixed
+- **NET_ADMIN capability**: Add `cap_add: NET_ADMIN` to backend container — iptables nf_tables backend requires this capability even with `network_mode: host`
+- **Host address resolution**: `DockerHostAddr` now resolves `host.docker.internal` at runtime and falls back to `127.0.0.1` in host network mode where the hostname is unresolvable
+
 ## [0.1.8] - 2026-05-15
 
 ### Changed
@@ -224,6 +230,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - SQLite storage with WAL mode
 - JWT authentication
 
+[0.1.9]: https://github.com/fussraider/PopuGate/compare/v0.1.8...v0.1.9
 [0.1.8]: https://github.com/fussraider/PopuGate/compare/v0.1.7...v0.1.8
 [0.1.7]: https://github.com/fussraider/PopuGate/compare/v0.1.6...v0.1.7
 [0.1.6]: https://github.com/fussraider/PopuGate/compare/v0.1.5...v0.1.6

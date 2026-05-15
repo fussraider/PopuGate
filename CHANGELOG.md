@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.7] - 2026-05-15
+
+### Added
+- **TCPMSS Fragmentation** (per-instance): Fragment ClientHello packets via iptables TCPMSS clamping to defeat DPI reassembly. Configurable MSS value (1-1460, default 88). Requires iptables on the host
+- **TLS Fronting Content** (per-instance): Auto-download and serve the TLS domain's website content for active probing defense. Includes manual refresh endpoint (`POST /instances/:id/refresh-fronting`)
+- **`passwd` CLI command**: Change admin password from the terminal (interactive prompt or direct argument)
+- **Change password in Settings UI**: Change admin password directly from the web interface
+- **Anti-blocking section in instance form**: Grouped TCPMSS and TLS fronting controls under a dedicated "Anti-Blocking" card
+- **Form card layout**: Reorganized instance, secrets, templates, and upstreams modal forms into labeled sections with visual card grouping
+
+### Changed
+- **Memory usage accuracy**: Read `/proc/meminfo` MemAvailable instead of sysinfo Freeram for accurate used memory on Linux
+- **Changelog link**: Fix branch reference from `main` to `master` in updates view
+
 ## [0.1.6] - 2026-05-14
 
 ### Fixed
@@ -197,6 +211,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - SQLite storage with WAL mode
 - JWT authentication
 
+[0.1.7]: https://github.com/fussraider/PopuGate/compare/v0.1.6...v0.1.7
 [0.1.6]: https://github.com/fussraider/PopuGate/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/fussraider/PopuGate/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/fussraider/PopuGate/compare/v0.1.3...v0.1.4

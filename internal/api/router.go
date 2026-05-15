@@ -175,6 +175,7 @@ func SetupRouter(cfg RouterConfig) *gin.Engine {
 		protected.POST("/instances/:id/start", instanceHandler.StartInstance)
 		protected.POST("/instances/:id/stop", instanceHandler.StopInstance)
 		protected.POST("/instances/:id/reload", instanceHandler.ReloadInstance)
+		protected.POST("/instances/:id/refresh-fronting", instanceHandler.RefreshFronting)
 		protected.GET("/instances/:id/status", instanceHandler.InstanceStatus)
 		protected.GET("/instances/:id/logs", instanceHandler.InstanceLogs)
 

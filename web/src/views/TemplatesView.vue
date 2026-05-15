@@ -39,37 +39,46 @@
     <!-- Add Template Modal -->
     <FormModal v-model="addModal.isOpen.value" :title="t('templates.add_title')" :submitting="addModal.submitting.value"
                @submit="handleAdd()">
-      <div class="form-group mb-sm">
-        <label class="form-label">{{ t('templates.name_label') }}</label>
-        <input v-model="addModal.form.value.name" class="input" required />
-      </div>
-      <div class="form-row mb-sm">
+      <!-- General -->
+      <div class="form-card">
+        <h4 class="form-card-title">{{ t('templates.section_basic') }}</h4>
         <div class="form-group">
-          <label class="form-label">{{ t('templates.max_conns') }}</label>
-          <input v-model.number="addModal.form.value.max_conns" class="input" type="number" min="0" />
-        </div>
-        <div class="form-group">
-          <label class="form-label">{{ t('templates.max_ips') }}</label>
-          <input v-model.number="addModal.form.value.max_ips" class="input" type="number" min="0" />
+          <label class="form-label">{{ t('templates.name_label') }}</label>
+          <input v-model="addModal.form.value.name" class="input" required />
         </div>
       </div>
-      <div class="form-row mb-sm">
-        <div class="form-group">
-          <label class="form-label">{{ t('templates.quota_mb') }}</label>
-          <input v-model.number="addModal.form.value.quota_mb" class="input" type="number" min="0" />
+
+      <!-- Limits -->
+      <div class="form-card">
+        <h4 class="form-card-title">{{ t('templates.section_limits') }}</h4>
+        <div class="form-row mb-sm">
+          <div class="form-group">
+            <label class="form-label">{{ t('templates.max_conns') }}</label>
+            <input v-model.number="addModal.form.value.max_conns" class="input" type="number" min="0" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">{{ t('templates.max_ips') }}</label>
+            <input v-model.number="addModal.form.value.max_ips" class="input" type="number" min="0" />
+          </div>
+        </div>
+        <div class="form-row mb-sm">
+          <div class="form-group">
+            <label class="form-label">{{ t('templates.quota_mb') }}</label>
+            <input v-model.number="addModal.form.value.quota_mb" class="input" type="number" min="0" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">{{ t('templates.expires_days') }}</label>
+            <input v-model.number="addModal.form.value.expires_days" class="input" type="number" min="0" />
+          </div>
+        </div>
+        <div class="form-group mb-sm">
+          <label class="form-label">{{ t('templates.tags_label') }}</label>
+          <TagInput v-model="addModal.form.value.tags" :placeholder="t('secrets.tags_placeholder')" />
         </div>
         <div class="form-group">
-          <label class="form-label">{{ t('templates.expires_days') }}</label>
-          <input v-model.number="addModal.form.value.expires_days" class="input" type="number" min="0" />
+          <label class="form-label">{{ t('templates.notes_label') }}</label>
+          <input v-model="addModal.form.value.notes" class="input" />
         </div>
-      </div>
-      <div class="form-group mb-sm">
-        <label class="form-label">{{ t('templates.tags_label') }}</label>
-        <TagInput v-model="addModal.form.value.tags" :placeholder="t('secrets.tags_placeholder')" />
-      </div>
-      <div class="form-group">
-        <label class="form-label">{{ t('templates.notes_label') }}</label>
-        <input v-model="addModal.form.value.notes" class="input" />
       </div>
     </FormModal>
 

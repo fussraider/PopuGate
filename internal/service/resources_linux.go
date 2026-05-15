@@ -13,17 +13,49 @@ import (
 )
 
 func readSysinfo(r *model.SystemResources) {
+	// Use /proc/meminfo for memory — MemAvailable correctly excludes reclaimable cache/buffers.
+	readMeminfo(r)
+
 	var info syscall.Sysinfo_t
 	if err := syscall.Sysinfo(&info); err != nil {
 		return
 	}
-	r.MemoryTotal = info.Totalram * uint64(info.Unit)
-	r.MemoryUsed = (info.Totalram - info.Freeram) * uint64(info.Unit)
+	if r.MemoryTotal == 0 {
+		r.MemoryTotal = info.Totalram * uint64(info.Unit)
+	}
+	if r.MemoryUsed == 0 {
+		r.MemoryUsed = (info.Totalram - info.Freeram) * uint64(info.Unit)
+	}
 	r.Uptime = uint64(info.Uptime)
 	// Sysinfo loads are scaled by 65536
 	r.Load1 = float64(info.Loads[0]) / 65536.0
 	r.Load5 = float64(info.Loads[1]) / 65536.0
 	r.Load15 = float64(info.Loads[2]) / 65536.0
+}
+
+func readMeminfo(r *model.SystemResources) {
+	data, err := os.ReadFile("/proc/meminfo")
+	if err != nil {
+		return
+	}
+	var total, available uint64
+	for _, line := range strings.Split(string(data), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		val, _ := strconv.ParseUint(fields[1], 10, 64)
+		switch fields[0] {
+		case "MemTotal:":
+			total = val * 1024 // kB to bytes
+		case "MemAvailable:":
+			available = val * 1024
+		}
+	}
+	if total > 0 {
+		r.MemoryTotal = total
+		r.MemoryUsed = total - available
+	}
 }
 
 func readDiskUsage(r *model.SystemResources, path string) {

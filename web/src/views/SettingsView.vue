@@ -136,6 +136,34 @@
         </div>
       </div>
 
+      <!-- Change Password -->
+      <div class="card mb-lg">
+        <h3 class="mb-md">{{ t('auth.change_password') }}</h3>
+        <div class="settings-grid">
+          <div class="form-group">
+            <label class="form-label">{{ t('auth.current_password') }}</label>
+            <input v-model="pwd.current" class="input" type="password" autocomplete="current-password" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">{{ t('auth.new_password') }}</label>
+            <input v-model="pwd.newPassword" class="input" type="password" autocomplete="new-password" :placeholder="t('auth.password_min')" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">{{ t('auth.confirm_new_password') }}</label>
+            <input v-model="pwd.confirm" class="input" type="password" autocomplete="new-password" />
+          </div>
+        </div>
+        <div class="flex items-center gap-md mt-md">
+          <button class="btn btn-primary" :disabled="changingPwd" @click="handleChangePassword">
+            <Loader2 v-if="changingPwd" :size="16" class="animate-spin" />
+            {{ changingPwd ? t('auth.changing') : t('auth.change_password') }}
+          </button>
+        </div>
+        <div v-if="pwdMessage" class="alert mt-md" :class="pwdError ? 'alert-danger' : 'alert-success'">
+          {{ pwdMessage }}
+        </div>
+      </div>
+
       <!-- Resources -->
     <div class="card mb-lg">
       <div class="flex items-center gap-md">
@@ -167,9 +195,10 @@
 </template>
 
 <script setup lang="ts">
-import {onMounted, ref} from 'vue'
+import {onMounted, reactive, ref} from 'vue'
 import {useI18n} from 'vue-i18n'
 import {useConfigStore} from '@/stores/config'
+import {authApi} from '@/api/endpoints'
 import {BookOpen, Loader2} from '@lucide/vue'
 import type {Settings} from '@/types/models'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
@@ -181,6 +210,11 @@ const form = ref<Partial<Settings>>({})
 const saving = ref(false)
 const saveMessage = ref('')
 const saveError = ref(false)
+
+const pwd = reactive({ current: '', newPassword: '', confirm: '' })
+const changingPwd = ref(false)
+const pwdMessage = ref('')
+const pwdError = ref(false)
 
 function resetForm() {
   if (configStore.settings) {
@@ -200,6 +234,33 @@ async function handleSave() {
     saveError.value = true
   } finally {
     saving.value = false
+  }
+}
+
+async function handleChangePassword() {
+  pwdMessage.value = ''
+  pwdError.value = false
+
+  if (!pwd.current || !pwd.newPassword || !pwd.confirm) return
+  if (pwd.newPassword !== pwd.confirm) {
+    pwdMessage.value = t('auth.password_mismatch')
+    pwdError.value = true
+    return
+  }
+
+  changingPwd.value = true
+  try {
+    await authApi.changePassword(pwd.current, pwd.newPassword)
+    pwdMessage.value = t('auth.password_changed')
+    pwd.current = ''
+    pwd.newPassword = ''
+    pwd.confirm = ''
+  } catch (e: any) {
+    const data = e.response?.data
+    pwdMessage.value = data?.error || t('auth.password_change_failed')
+    pwdError.value = true
+  } finally {
+    changingPwd.value = false
   }
 }
 

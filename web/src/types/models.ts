@@ -113,6 +113,9 @@ export interface Instance {
   mask_host: string
   mask_port: number
   tags: string
+  tcp_mss_enabled: boolean
+  tcp_mss: number
+  tls_fronting: boolean
 }
 
 export interface Slave {

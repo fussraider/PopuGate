@@ -16,6 +16,7 @@ Usage:
 Available Commands:
   server      Start the HTTP API server and web UI
   setup       Set the initial admin password (first run only)
+  passwd      Change the admin password
   help        Help about any command`,
 }
 

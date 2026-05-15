@@ -30,6 +30,7 @@ func setupInstanceTestRouter(t *testing.T) (*gin.Engine, *InstanceHandler) {
 	r.POST("/api/v1/instances/:id/start", handler.StartInstance)
 	r.POST("/api/v1/instances/:id/stop", handler.StopInstance)
 	r.POST("/api/v1/instances/:id/reload", handler.ReloadInstance)
+	r.POST("/api/v1/instances/:id/refresh-fronting", handler.RefreshFronting)
 	r.GET("/api/v1/instances/:id/status", handler.InstanceStatus)
 	r.GET("/api/v1/instances/:id/logs", handler.InstanceLogs)
 
@@ -689,5 +690,103 @@ func TestInstanceHandler_Add_InvalidTagFormat(t *testing.T) {
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestInstanceHandler_Add_WithTCPMSS(t *testing.T) {
+	r, _ := setupInstanceTestRouter(t)
+
+	body, _ := json.Marshal(map[string]interface{}{
+		"port":            443,
+		"metrics_port":    9091,
+		"label":           "TCPMSS",
+		"tls_domain":      "example.com",
+		"tcp_mss_enabled": true,
+		"tcp_mss":         120,
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/instances", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp["tcp_mss_enabled"] != true {
+		t.Errorf("expected tcp_mss_enabled=true, got %v", resp["tcp_mss_enabled"])
+	}
+	if int(resp["tcp_mss"].(float64)) != 120 {
+		t.Errorf("expected tcp_mss=120, got %v", resp["tcp_mss"])
+	}
+}
+
+func TestInstanceHandler_Add_WithTLSFronting(t *testing.T) {
+	r, _ := setupInstanceTestRouter(t)
+
+	body, _ := json.Marshal(map[string]interface{}{
+		"port":         443,
+		"metrics_port": 9091,
+		"label":        "Fronting",
+		"tls_domain":   "example.com",
+		"tls_fronting": true,
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/instances", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp["tls_fronting"] != true {
+		t.Errorf("expected tls_fronting=true, got %v", resp["tls_fronting"])
+	}
+}
+
+func TestInstanceHandler_Update_TCPMSS(t *testing.T) {
+	r, _ := setupInstanceTestRouter(t)
+
+	var inst map[string]interface{}
+	code := addInstanceFull(t, r, 443, 9091, "Test", &inst)
+	if code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", code)
+	}
+	id := int(inst["id"].(float64))
+
+	body, _ := json.Marshal(map[string]interface{}{
+		"tcp_mss_enabled": true,
+		"tcp_mss":         200,
+	})
+	req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/api/v1/instances/%d", id), bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp["tcp_mss_enabled"] != true {
+		t.Errorf("expected tcp_mss_enabled=true, got %v", resp["tcp_mss_enabled"])
+	}
+}
+
+func TestInstanceHandler_RefreshFronting_NoSvc(t *testing.T) {
+	r, _ := setupInstanceTestRouter(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/instances/1/refresh-fronting", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d", w.Code)
 	}
 }

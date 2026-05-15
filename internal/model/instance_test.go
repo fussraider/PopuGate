@@ -2,6 +2,7 @@ package model
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -189,5 +190,74 @@ func TestInstanceConfigPathCustomInstallDir(t *testing.T) {
 	want := "/custom/data/mtproxy/config-443.toml"
 	if got != want {
 		t.Errorf("ConfigPath() with custom InstallDir = %q, want %q", got, want)
+	}
+}
+
+func TestInstanceValidate_TCPMSSDefault(t *testing.T) {
+	inst := &Instance{Port: 443, MetricsPort: 9091, TLSDomain: "example.com"}
+	if err := inst.Validate(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if inst.TCPMSS != 88 {
+		t.Fatalf("expected default TCPMSS=88, got %d", inst.TCPMSS)
+	}
+}
+
+func TestInstanceValidate_TCPMSSEnabledValid(t *testing.T) {
+	inst := &Instance{Port: 443, MetricsPort: 9091, TLSDomain: "example.com", TCPMSSEnabled: true, TCPMSS: 120}
+	if err := inst.Validate(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestInstanceValidate_TCPMSSOutOfRange(t *testing.T) {
+	tests := []struct {
+		name string
+		mss  int
+	}{
+		{"zero", 0},
+		{"negative", -1},
+		{"too_high", 1461},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			inst := &Instance{Port: 443, MetricsPort: 9091, TLSDomain: "example.com", TCPMSSEnabled: true, TCPMSS: tt.mss}
+			// Zero should be replaced by default before the range check
+			if tt.mss == 0 {
+				if err := inst.Validate(); err != nil {
+					t.Fatalf("zero MSS should get default, got error: %v", err)
+				}
+				return
+			}
+			if err := inst.Validate(); err == nil {
+				t.Errorf("expected error for MSS=%d", tt.mss)
+			}
+		})
+	}
+}
+
+func TestInstanceTLSFrontDirPath(t *testing.T) {
+	origDir := InstallDir
+	InstallDir = "/opt/popugate"
+	defer func() { InstallDir = origDir }()
+
+	inst := &Instance{Port: 443}
+	expected := filepath.Join(InstallDir, "mtproxy/tlsfront-443")
+	if got := inst.TLSFrontDirPath(); got != expected {
+		t.Fatalf("expected %s, got %s", expected, got)
+	}
+}
+
+func TestInstanceValidate_TLSFrontingRequiresFakeTLS(t *testing.T) {
+	inst := &Instance{Port: 443, MetricsPort: 9091, TLSDomain: "example.com", TLSFronting: true, FakeTLS: false}
+	if err := inst.Validate(); err == nil {
+		t.Fatal("expected error when tls_fronting=true but fake_tls=false")
+	}
+}
+
+func TestInstanceValidate_TLSFrontingWithFakeTLS(t *testing.T) {
+	inst := &Instance{Port: 443, MetricsPort: 9091, TLSDomain: "example.com", TLSFronting: true, FakeTLS: true}
+	if err := inst.Validate(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }

@@ -91,53 +91,62 @@
     <FormModal v-model="modalOpen" :title="isEdit ? t('upstreams.edit_title') : t('upstreams.add_title')"
                :submitting="false" :submit-text="isEdit ? t('common.save') : t('common.add')"
                @submit="handleSubmit">
-      <div class="form-group mb-md">
-        <label class="form-label">{{ isEdit ? t('upstreams.name_label') : t('upstreams.table.name') }}</label>
-        <input v-model="form.name" class="input" :disabled="isEdit" required placeholder="upstream1" />
-        <small class="text-muted">{{ t('upstreams.hint_name') }}</small>
-      </div>
-      <div class="form-group mb-md">
-        <label class="form-label">{{ t('upstreams.table.type') }}</label>
-        <select v-model="form.type" class="select">
-          <option value="direct">{{ t('upstreams.direct') }}</option>
-          <option value="socks5">SOCKS5</option>
-          <option value="socks4">SOCKS4</option>
-        </select>
-        <small class="text-muted">{{ t('upstreams.hint_type') }}</small>
-      </div>
-      <div v-if="form.type !== 'direct'" class="form-group mb-md">
-        <label class="form-label">{{ t('upstreams.address_label') }}</label>
-        <input v-model="form.address" class="input" required placeholder="127.0.0.1:1080" />
-        <small class="text-muted">{{ t('upstreams.hint_address') }}</small>
-      </div>
-      <template v-if="form.type === 'socks5'">
-        <div class="form-row mb-sm">
-          <div class="form-group">
-            <label class="form-label">{{ t('upstreams.username') }}</label>
-            <input v-model="form.username" class="input" />
-          </div>
-          <div class="form-group">
-            <label class="form-label">{{ t('upstreams.password') }}</label>
-            <input v-model="form.password" class="input" type="password" />
-          </div>
+      <!-- Connection -->
+      <div class="form-card">
+        <h4 class="form-card-title">{{ t('upstreams.section_connection') }}</h4>
+        <div class="form-group mb-md">
+          <label class="form-label">{{ isEdit ? t('upstreams.name_label') : t('upstreams.table.name') }}</label>
+          <input v-model="form.name" class="input" :disabled="isEdit" required placeholder="upstream1" />
+          <small class="text-muted">{{ t('upstreams.hint_name') }}</small>
         </div>
-        <small class="text-muted">{{ t('upstreams.hint_credentials') }}</small>
-      </template>
-      <div class="form-row mb-sm">
-        <div class="form-group">
-          <label class="form-label">{{ t('upstreams.table.weight') }}</label>
-          <input v-model.number="form.weight" class="input" type="number" min="1" value="1" />
-          <small class="text-muted">{{ t('upstreams.hint_weight') }}</small>
-        </div>
-        <div class="form-group">
-          <label class="form-label">{{ t('upstreams.table.interface') }}</label>
-          <select v-model="form.iface" class="select">
-            <option value="">Auto</option>
-            <option v-for="nic in store.interfaces" :key="nic.name" :value="nic.name">
-              {{ nic.name }} <template v-if="nic.addresses.length">( {{ nic.addresses[0] }} )</template>
-            </option>
+        <div class="form-group mb-md">
+          <label class="form-label">{{ t('upstreams.table.type') }}</label>
+          <select v-model="form.type" class="select">
+            <option value="direct">{{ t('upstreams.direct') }}</option>
+            <option value="socks5">SOCKS5</option>
+            <option value="socks4">SOCKS4</option>
           </select>
-          <small class="text-muted">{{ t('upstreams.hint_interface') }}</small>
+          <small class="text-muted">{{ t('upstreams.hint_type') }}</small>
+        </div>
+        <div v-if="form.type !== 'direct'" class="form-group mb-md">
+          <label class="form-label">{{ t('upstreams.address_label') }}</label>
+          <input v-model="form.address" class="input" required placeholder="127.0.0.1:1080" />
+          <small class="text-muted">{{ t('upstreams.hint_address') }}</small>
+        </div>
+        <template v-if="form.type === 'socks5'">
+          <div class="form-row mb-sm">
+            <div class="form-group">
+              <label class="form-label">{{ t('upstreams.username') }}</label>
+              <input v-model="form.username" class="input" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">{{ t('upstreams.password') }}</label>
+              <input v-model="form.password" class="input" type="password" />
+            </div>
+          </div>
+          <small class="text-muted">{{ t('upstreams.hint_credentials') }}</small>
+        </template>
+      </div>
+
+      <!-- Advanced -->
+      <div class="form-card">
+        <h4 class="form-card-title">{{ t('upstreams.section_advanced') }}</h4>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">{{ t('upstreams.table.weight') }}</label>
+            <input v-model.number="form.weight" class="input" type="number" min="1" value="1" />
+            <small class="text-muted">{{ t('upstreams.hint_weight') }}</small>
+          </div>
+          <div class="form-group">
+            <label class="form-label">{{ t('upstreams.table.interface') }}</label>
+            <select v-model="form.iface" class="select">
+              <option value="">Auto</option>
+              <option v-for="nic in store.interfaces" :key="nic.name" :value="nic.name">
+                {{ nic.name }} <template v-if="nic.addresses.length">( {{ nic.addresses[0] }} )</template>
+              </option>
+            </select>
+            <small class="text-muted">{{ t('upstreams.hint_interface') }}</small>
+          </div>
         </div>
       </div>
       <template #footer>

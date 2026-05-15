@@ -2055,6 +2055,61 @@ const docTemplate = `{
                 }
             }
         },
+        "/instances/{id}/refresh-fronting": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Re-download TLS fronting content for an instance",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "instances"
+                ],
+                "summary": "Refresh TLS fronting content",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Instance ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/instances/{id}/reload": {
             "post": {
                 "security": [
@@ -5864,12 +5919,23 @@ const docTemplate = `{
                     "description": "JSON array",
                     "type": "string"
                 },
+                "tcp_mss": {
+                    "type": "integer",
+                    "maximum": 1460,
+                    "minimum": 1
+                },
+                "tcp_mss_enabled": {
+                    "type": "boolean"
+                },
                 "tls_domain": {
                     "type": "string"
                 },
                 "tls_domains": {
                     "description": "JSON array",
                     "type": "string"
+                },
+                "tls_fronting": {
+                    "type": "boolean"
                 }
             }
         },
@@ -6304,11 +6370,22 @@ const docTemplate = `{
                 "tags": {
                     "type": "string"
                 },
+                "tcp_mss": {
+                    "type": "integer",
+                    "maximum": 1460,
+                    "minimum": 1
+                },
+                "tcp_mss_enabled": {
+                    "type": "boolean"
+                },
                 "tls_domain": {
                     "type": "string"
                 },
                 "tls_domains": {
                     "type": "string"
+                },
+                "tls_fronting": {
+                    "type": "boolean"
                 }
             }
         },

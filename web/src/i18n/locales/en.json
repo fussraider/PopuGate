@@ -219,7 +219,9 @@
     "links_copied": "All links copied",
     "disable_expired": "Disable Expired",
     "disable_expired_confirm": "Disable all secrets with expired dates?",
-    "disabled_expired": "{count} expired secrets disabled"
+    "disabled_expired": "{count} expired secrets disabled",
+    "section_info": "Info",
+    "section_limits": "Limits"
   },
   "audit": {
     "title": "Audit Log",
@@ -262,7 +264,9 @@
     "quota_mb": "Quota (MB)",
     "expires_days": "Expiry (days, 0 = never)",
     "tags_label": "Tags",
-    "notes_label": "Notes"
+    "notes_label": "Notes",
+    "section_basic": "General",
+    "section_limits": "Limits"
   },
   "backups": {
     "create": "Create Backup",
@@ -393,6 +397,8 @@
     "tags": "Tags",
     "tags_hint": "Comma-separated access tags. Empty = accessible to all secrets.",
     "enabled": "Enabled",
+    "section_basic": "General",
+    "section_tls": "TLS & Masking",
     "disabled": "Disabled",
     "no_matching_secrets": "No matching secrets",
     "add_title": "Add Instance",
@@ -417,6 +423,15 @@
     "started": "Instance \"{label}\" started",
     "stopped": "Instance \"{label}\" stopped",
     "reloaded": "Instance \"{label}\" reloaded",
+    "antiblock_section": "Anti-Blocking",
+    "tcp_mss_enabled": "TCPMSS Fragmentation",
+    "tcp_mss_enabled_hint": "Fragment ClientHello packets to defeat DPI reassembly. Requires iptables on the host.",
+    "tcp_mss": "MSS Value",
+    "tcp_mss_hint": "Maximum Segment Size (1-1460). Lower = more fragmentation. Default: 88.",
+    "tls_fronting": "TLS Fronting Content",
+    "tls_fronting_hint": "Auto-download and serve the TLS domain's website to defend against active probing. Requires FakeTLS.",
+    "refresh_fronting": "Refresh Content",
+    "fronting_refreshed": "Fronting content refreshed for \"{label}\"",
     "global_controls": "Global Controls",
     "start_all": "Start All",
     "stop_all": "Stop All",
@@ -570,7 +585,9 @@
     "hint_address": "Server address (IP or domain)",
     "hint_credentials": "Authentication credentials",
     "hint_interface": "Network interface to bind",
-    "hint_weight": "Load balancing weight"
+    "hint_weight": "Load balancing weight",
+    "section_connection": "Connection",
+    "section_advanced": "Advanced"
   },
   "system": {
     "title": "Operating System",
@@ -724,7 +741,16 @@
     "submit": "Sign In",
     "welcome": "Welcome back",
     "signing_in": "Signing in...",
-    "login_failed": "Login failed"
+    "login_failed": "Login failed",
+    "change_password": "Change Password",
+    "current_password": "Current Password",
+    "new_password": "New Password",
+    "confirm_new_password": "Confirm New Password",
+    "password_min": "Min. 8 characters",
+    "password_mismatch": "Passwords do not match",
+    "password_changed": "Password changed successfully",
+    "password_change_failed": "Failed to change password",
+    "changing": "Changing..."
   },
   "scheduler": {
     "title": "Scheduled Tasks",

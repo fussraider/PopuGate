@@ -25,11 +25,19 @@ definitions:
       tags:
         description: JSON array
         type: string
+      tcp_mss:
+        maximum: 1460
+        minimum: 1
+        type: integer
+      tcp_mss_enabled:
+        type: boolean
       tls_domain:
         type: string
       tls_domains:
         description: JSON array
         type: string
+      tls_fronting:
+        type: boolean
     required:
     - port
     - tls_domain
@@ -326,10 +334,18 @@ definitions:
         type: integer
       tags:
         type: string
+      tcp_mss:
+        maximum: 1460
+        minimum: 1
+        type: integer
+      tcp_mss_enabled:
+        type: boolean
       tls_domain:
         type: string
       tls_domains:
         type: string
+      tls_fronting:
+        type: boolean
     type: object
   handler.updateNotesRequest:
     properties:
@@ -1688,6 +1704,41 @@ paths:
       security:
       - BearerAuth: []
       summary: Instance logs
+      tags:
+      - instances
+  /instances/{id}/refresh-fronting:
+    post:
+      description: Re-download TLS fronting content for an instance
+      parameters:
+      - description: Instance ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Refresh TLS fronting content
       tags:
       - instances
   /instances/{id}/reload:

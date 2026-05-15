@@ -112,3 +112,42 @@ func TestSetNameForCountry(t *testing.T) {
 		}
 	}
 }
+
+func TestSetTCPMSSRule_InvalidPort(t *testing.T) {
+	m := NewIptablesManager()
+	tests := []struct {
+		name string
+		port int
+		mss  int
+	}{
+		{"zero port", 0, 88},
+		{"negative port", -1, 88},
+		{"too high port", 70000, 88},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := m.SetTCPMSSRule(tt.port, tt.mss); err == nil {
+				t.Errorf("expected error for port=%d", tt.port)
+			}
+		})
+	}
+}
+
+func TestSetTCPMSSRule_InvalidMSS(t *testing.T) {
+	m := NewIptablesManager()
+	tests := []struct {
+		name string
+		mss  int
+	}{
+		{"zero", 0},
+		{"negative", -1},
+		{"too high", 1461},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := m.SetTCPMSSRule(443, tt.mss); err == nil {
+				t.Errorf("expected error for mss=%d", tt.mss)
+			}
+		})
+	}
+}

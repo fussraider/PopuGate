@@ -219,7 +219,9 @@
     "links_copied": "Все ссылки скопированы",
     "disable_expired": "Отключить истёкшие",
     "disable_expired_confirm": "Отключить все секреты с истёкшим сроком?",
-    "disabled_expired": "{count} истёкших секретов отключено"
+    "disabled_expired": "{count} истёкших секретов отключено",
+    "section_info": "Информация",
+    "section_limits": "Лимиты"
   },
   "audit": {
     "title": "Аудит лог",
@@ -262,7 +264,9 @@
     "quota_mb": "Квота (МБ)",
     "expires_days": "Срок (дней, 0 = бессрочно)",
     "tags_label": "Теги",
-    "notes_label": "Заметки"
+    "notes_label": "Заметки",
+    "section_basic": "Общие",
+    "section_limits": "Лимиты"
   },
   "backups": {
     "create": "Создать бэкап",
@@ -393,6 +397,8 @@
     "tags": "Теги",
     "tags_hint": "Теги доступа через запятую. Пусто = доступен всем секретам.",
     "enabled": "Включен",
+    "section_basic": "Общие",
+    "section_tls": "TLS и маскировка",
     "disabled": "Отключен",
     "no_matching_secrets": "Нет подходящих секретов",
     "add_title": "Добавить инстанс",
@@ -417,6 +423,15 @@
     "started": "Инстанс \"{label}\" запущен",
     "stopped": "Инстанс \"{label}\" остановлен",
     "reloaded": "Инстанс \"{label}\" перезагружен",
+    "antiblock_section": "Антиблокировка",
+    "tcp_mss_enabled": "Фрагментация TCPMSS",
+    "tcp_mss_enabled_hint": "Фрагментировать пакеты ClientHello для обхода реассемблера DPI. Требует iptables на хосте.",
+    "tcp_mss": "Значение MSS",
+    "tcp_mss_hint": "Maximum Segment Size (1-1460). Ниже значение — больше фрагментация. По умолчанию: 88.",
+    "tls_fronting": "Содержимое TLS-фронтинга",
+    "tls_fronting_hint": "Автоматически скачать и отдавать содержимое сайта TLS-домена для защиты от активного зондирования. Требует FakeTLS.",
+    "refresh_fronting": "Обновить содержимое",
+    "fronting_refreshed": "Содержимое фронтинга обновлено для \"{label}\"",
     "global_controls": "Глобальное управление",
     "start_all": "Запустить все",
     "stop_all": "Остановить все",
@@ -570,7 +585,9 @@
     "hint_address": "Адрес сервера (IP или домен)",
     "hint_credentials": "Учётные данные для аутентификации",
     "hint_interface": "Сетевой интерфейс для привязки",
-    "hint_weight": "Вес для балансировки нагрузки"
+    "hint_weight": "Вес для балансировки нагрузки",
+    "section_connection": "Подключение",
+    "section_advanced": "Дополнительно"
   },
   "system": {
     "title": "Операционная система",
@@ -724,7 +741,16 @@
     "submit": "Войти",
     "welcome": "С возвращением",
     "signing_in": "Вход...",
-    "login_failed": "Ошибка входа"
+    "login_failed": "Ошибка входа",
+    "change_password": "Смена пароля",
+    "current_password": "Текущий пароль",
+    "new_password": "Новый пароль",
+    "confirm_new_password": "Подтвердите новый пароль",
+    "password_min": "Мин. 8 символов",
+    "password_mismatch": "Пароли не совпадают",
+    "password_changed": "Пароль успешно изменён",
+    "password_change_failed": "Не удалось изменить пароль",
+    "changing": "Изменение..."
   },
   "scheduler": {
     "title": "Запланированные задачи",

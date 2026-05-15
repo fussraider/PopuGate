@@ -196,3 +196,126 @@ func TestInstanceStore_GetByPortNonexistent(t *testing.T) {
 		t.Fatal("expected nil for nonexistent port")
 	}
 }
+
+func TestInstanceStore_CreateWithTCPMSS(t *testing.T) {
+	db := testutil.OpenTestDB(t)
+	s := NewInstanceStore(db)
+	ctx := context.Background()
+
+	inst := &model.Instance{
+		Port:          8443,
+		MetricsPort:   9091,
+		Enabled:       true,
+		Label:         "tcpmss",
+		TLSDomain:     "example.com",
+		TCPMSSEnabled: true,
+		TCPMSS:        120,
+	}
+	if err := s.Create(ctx, inst); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	got, err := s.GetByPort(ctx, 8443)
+	if err != nil {
+		t.Fatalf("GetByPort: %v", err)
+	}
+	if !got.TCPMSSEnabled {
+		t.Error("expected tcp_mss_enabled=true")
+	}
+	if got.TCPMSS != 120 {
+		t.Errorf("expected tcp_mss=120, got %d", got.TCPMSS)
+	}
+}
+
+func TestInstanceStore_CreateWithTLSFronting(t *testing.T) {
+	db := testutil.OpenTestDB(t)
+	s := NewInstanceStore(db)
+	ctx := context.Background()
+
+	inst := &model.Instance{
+		Port:        8443,
+		MetricsPort: 9091,
+		Enabled:     true,
+		Label:       "fronting",
+		TLSDomain:   "example.com",
+		FakeTLS:     true,
+		TLSFronting: true,
+	}
+	if err := s.Create(ctx, inst); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	got, err := s.GetByPort(ctx, 8443)
+	if err != nil {
+		t.Fatalf("GetByPort: %v", err)
+	}
+	if !got.TLSFronting {
+		t.Error("expected tls_fronting=true")
+	}
+}
+
+func TestInstanceStore_UpdateTCPMSS(t *testing.T) {
+	db := testutil.OpenTestDB(t)
+	s := NewInstanceStore(db)
+	ctx := context.Background()
+
+	inst := &model.Instance{
+		Port:        8443,
+		MetricsPort: 9091,
+		Enabled:     true,
+		Label:       "test",
+		TLSDomain:   "example.com",
+	}
+	if err := s.Create(ctx, inst); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	inst.TCPMSSEnabled = true
+	inst.TCPMSS = 200
+	if err := s.Update(ctx, inst); err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+
+	got, err := s.GetByID(ctx, inst.ID)
+	if err != nil {
+		t.Fatalf("GetByID: %v", err)
+	}
+	if !got.TCPMSSEnabled {
+		t.Error("expected tcp_mss_enabled=true after update")
+	}
+	if got.TCPMSS != 200 {
+		t.Errorf("expected tcp_mss=200 after update, got %d", got.TCPMSS)
+	}
+}
+
+func TestInstanceStore_DefaultAntiBlock(t *testing.T) {
+	db := testutil.OpenTestDB(t)
+	s := NewInstanceStore(db)
+	ctx := context.Background()
+
+	inst := &model.Instance{
+		Port:        8443,
+		MetricsPort: 9091,
+		Enabled:     true,
+		Label:       "defaults",
+		TLSDomain:   "example.com",
+	}
+	inst.Validate()
+	if err := s.Create(ctx, inst); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	got, err := s.GetByID(ctx, inst.ID)
+	if err != nil {
+		t.Fatalf("GetByID: %v", err)
+	}
+	if got.TCPMSSEnabled {
+		t.Error("expected tcp_mss_enabled=false by default")
+	}
+	if got.TCPMSS != 88 {
+		t.Errorf("expected tcp_mss=88 by default, got %d", got.TCPMSS)
+	}
+	if got.TLSFronting {
+		t.Error("expected tls_fronting=false by default")
+	}
+}

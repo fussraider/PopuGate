@@ -57,15 +57,18 @@ func (h *InstanceHandler) List(c *gin.Context) {
 }
 
 type addInstanceRequest struct {
-	Port        int    `json:"port" binding:"required,min=1,max=65535"`
-	MetricsPort int    `json:"metrics_port" binding:"omitempty,min=1,max=65535"`
-	Label       string `json:"label" binding:"omitempty,alphanumdash,max=32"`
-	TLSDomain   string `json:"tls_domain" binding:"required"`
-	TLSDomains  string `json:"tls_domains"` // JSON array
-	FakeTLS     *bool  `json:"fake_tls"`    // pointer to distinguish unset from false
-	MaskHost    string `json:"mask_host"`
-	MaskPort    int    `json:"mask_port" binding:"omitempty,min=1,max=65535"`
-	Tags        string `json:"tags"` // JSON array
+	Port          int    `json:"port" binding:"required,min=1,max=65535"`
+	MetricsPort   int    `json:"metrics_port" binding:"omitempty,min=1,max=65535"`
+	Label         string `json:"label" binding:"omitempty,alphanumdash,max=32"`
+	TLSDomain     string `json:"tls_domain" binding:"required"`
+	TLSDomains    string `json:"tls_domains"` // JSON array
+	FakeTLS       *bool  `json:"fake_tls"`    // pointer to distinguish unset from false
+	MaskHost      string `json:"mask_host"`
+	MaskPort      int    `json:"mask_port" binding:"omitempty,min=1,max=65535"`
+	Tags          string `json:"tags"` // JSON array
+	TCPMSSEnabled *bool  `json:"tcp_mss_enabled"`
+	TCPMSS        int    `json:"tcp_mss" binding:"omitempty,min=1,max=1460"`
+	TLSFronting   *bool  `json:"tls_fronting"`
 }
 
 // Add handles POST /api/v1/instances
@@ -107,18 +110,33 @@ func (h *InstanceHandler) Add(c *gin.Context) {
 	if req.FakeTLS != nil {
 		fakeTLS = *req.FakeTLS
 	}
+	tcpMSSEnabled := false
+	if req.TCPMSSEnabled != nil {
+		tcpMSSEnabled = *req.TCPMSSEnabled
+	}
+	tcpMSS := 88
+	if req.TCPMSS > 0 {
+		tcpMSS = req.TCPMSS
+	}
+	tlsFronting := false
+	if req.TLSFronting != nil {
+		tlsFronting = *req.TLSFronting
+	}
 
 	inst := &model.Instance{
-		Port:        req.Port,
-		MetricsPort: req.MetricsPort,
-		Enabled:     true,
-		Label:       req.Label,
-		TLSDomain:   req.TLSDomain,
-		TLSDomains:  req.TLSDomains,
-		FakeTLS:     fakeTLS,
-		MaskHost:    req.MaskHost,
-		MaskPort:    req.MaskPort,
-		Tags:        req.Tags,
+		Port:          req.Port,
+		MetricsPort:   req.MetricsPort,
+		Enabled:       true,
+		Label:         req.Label,
+		TLSDomain:     req.TLSDomain,
+		TLSDomains:    req.TLSDomains,
+		FakeTLS:       fakeTLS,
+		MaskHost:      req.MaskHost,
+		MaskPort:      req.MaskPort,
+		Tags:          req.Tags,
+		TCPMSSEnabled: tcpMSSEnabled,
+		TCPMSS:        tcpMSS,
+		TLSFronting:   tlsFronting,
 	}
 
 	if inst.MetricsPort == 0 {
@@ -144,16 +162,19 @@ func (h *InstanceHandler) Add(c *gin.Context) {
 }
 
 type updateInstanceRequest struct {
-	Port        *int    `json:"port" binding:"omitempty,min=1,max=65535"`
-	MetricsPort *int    `json:"metrics_port" binding:"omitempty,max=65535"`
-	Label       *string `json:"label" binding:"omitempty,alphanumdash,max=32"`
-	Enabled     *bool   `json:"enabled"`
-	TLSDomain   *string `json:"tls_domain"`
-	TLSDomains  *string `json:"tls_domains"`
-	FakeTLS     *bool   `json:"fake_tls"`
-	MaskHost    *string `json:"mask_host"`
-	MaskPort    *int    `json:"mask_port" binding:"omitempty,min=1,max=65535"`
-	Tags        *string `json:"tags"`
+	Port          *int    `json:"port" binding:"omitempty,min=1,max=65535"`
+	MetricsPort   *int    `json:"metrics_port" binding:"omitempty,max=65535"`
+	Label         *string `json:"label" binding:"omitempty,alphanumdash,max=32"`
+	Enabled       *bool   `json:"enabled"`
+	TLSDomain     *string `json:"tls_domain"`
+	TLSDomains    *string `json:"tls_domains"`
+	FakeTLS       *bool   `json:"fake_tls"`
+	MaskHost      *string `json:"mask_host"`
+	MaskPort      *int    `json:"mask_port" binding:"omitempty,min=1,max=65535"`
+	Tags          *string `json:"tags"`
+	TCPMSSEnabled *bool   `json:"tcp_mss_enabled"`
+	TCPMSS        *int    `json:"tcp_mss" binding:"omitempty,min=1,max=1460"`
+	TLSFronting   *bool   `json:"tls_fronting"`
 }
 
 // Update handles PUT /api/v1/instances/:id
@@ -247,6 +268,15 @@ func (h *InstanceHandler) applyInstanceUpdates(c *gin.Context, inst *model.Insta
 		}
 		inst.Tags = *req.Tags
 	}
+	if req.TCPMSSEnabled != nil {
+		inst.TCPMSSEnabled = *req.TCPMSSEnabled
+	}
+	if req.TCPMSS != nil {
+		inst.TCPMSS = *req.TCPMSS
+	}
+	if req.TLSFronting != nil {
+		inst.TLSFronting = *req.TLSFronting
+	}
 	return true
 }
 
@@ -269,6 +299,7 @@ func (h *InstanceHandler) validateAndSaveInstance(c *gin.Context, id int64, inst
 	auditLog(c, "instance.update", fmt.Sprintf("id=%d label=%s port=%d", id, inst.Label, inst.Port))
 	if h.containerSvc != nil {
 		h.containerSvc.RevalidateInstance(c.Request.Context(), id)
+		h.containerSvc.ReconcileInstanceRules(c.Request.Context(), id)
 	}
 	c.JSON(http.StatusOK, inst)
 	return true
@@ -421,6 +452,34 @@ func (h *InstanceHandler) ReloadInstance(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to reload instance: %v", err)})
 		return
 	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+// RefreshFronting handles POST /api/v1/instances/:id/refresh-fronting
+// @Summary      Refresh TLS fronting content
+// @Description  Re-download TLS fronting content for an instance
+// @Tags         instances
+// @Produce      json
+// @Param        id  path  int  true  "Instance ID"
+// @Success      200  {object}  map[string]string
+// @Failure      400  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /instances/{id}/refresh-fronting [post]
+func (h *InstanceHandler) RefreshFronting(c *gin.Context) {
+	if h.containerSvc == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "proxy service unavailable"})
+		return
+	}
+	id, ok := h.parseInstanceID(c)
+	if !ok {
+		return
+	}
+	if err := h.containerSvc.RefreshFrontingContent(c.Request.Context(), id); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to refresh fronting: %v", err)})
+		return
+	}
+	h.auditInstanceAction(c, "instance.refresh_fronting", id)
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 

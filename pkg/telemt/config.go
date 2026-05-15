@@ -310,7 +310,7 @@ func instanceCensorship(inst *model.Instance, fakeCertLen int) CensorshipConfig 
 	if !inst.FakeTLS {
 		return CensorshipConfig{}
 	}
-	return CensorshipConfig{
+	cfg := CensorshipConfig{
 		TLSDomain:        inst.TLSDomain,
 		TLSDomains:       inst.GetTLSDomains(),
 		UnknownSNIAction: "mask",
@@ -319,8 +319,11 @@ func instanceCensorship(inst *model.Instance, fakeCertLen int) CensorshipConfig 
 		MaskPort:         inst.MaskPort,
 		FakeCertLen:      fakeCertLen,
 		TLSEmulation:     true,
-		TLSFrontDir:      "tlsfront",
 	}
+	if inst.TLSFronting {
+		cfg.TLSFrontDir = "/tlsfront"
+	}
+	return cfg
 }
 
 // BuildInstanceConfig constructs a telemt TOML config for a specific instance.

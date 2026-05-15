@@ -20,7 +20,7 @@
         <a v-if="updateStore.status.url" :href="updateStore.status.url" target="_blank" rel="noopener" class="update-link">
           <ExternalLink :size="14" /> {{ t('updates.release_notes') }}
         </a>
-        <a href="https://github.com/fussraider/PopuGate/blob/main/CHANGELOG.md" target="_blank" rel="noopener" class="update-link">
+        <a href="https://github.com/fussraider/PopuGate/blob/master/CHANGELOG.md" target="_blank" rel="noopener" class="update-link">
           <FileText :size="14" /> {{ t('updates.changelog') }}
         </a>
       </div>

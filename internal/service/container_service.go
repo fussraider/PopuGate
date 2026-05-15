@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -15,6 +17,7 @@ import (
 	"github.com/fussraider/PopuGate/internal/store"
 	"github.com/fussraider/PopuGate/pkg/dockerutil"
 	"github.com/fussraider/PopuGate/pkg/logger"
+	"github.com/fussraider/PopuGate/pkg/netutil"
 	"github.com/fussraider/PopuGate/pkg/telemt"
 )
 
@@ -34,9 +37,11 @@ type ContainerService struct {
 	traffic        *store.TrafficStore
 	settings       *store.SettingsStore
 	trafficSvc     *TrafficService
+	iptables       *netutil.IptablesManager
 	notify         NotifyFunc
 	notifyWithBtns NotifyWithButtonsFunc
 	client         *http.Client
+	frontClient    *http.Client
 }
 
 // NewContainerService creates a new ContainerService.
@@ -50,14 +55,16 @@ func NewContainerService(
 	trafficSvc *TrafficService,
 ) *ContainerService {
 	return &ContainerService{
-		docker:     docker,
-		secrets:    secrets,
-		upstreams:  upstreams,
-		instances:  instances,
-		traffic:    traffic,
-		settings:   settings,
-		trafficSvc: trafficSvc,
-		client:     &http.Client{Timeout: 2 * time.Second},
+		docker:      docker,
+		secrets:     secrets,
+		upstreams:   upstreams,
+		instances:   instances,
+		traffic:     traffic,
+		settings:    settings,
+		trafficSvc:  trafficSvc,
+		iptables:    netutil.NewIptablesManager(),
+		client:      &http.Client{Timeout: 2 * time.Second},
+		frontClient: &http.Client{Timeout: 15 * time.Second},
 	}
 }
 
@@ -109,14 +116,15 @@ func (s *ContainerService) Stop(ctx context.Context) error {
 	for _, inst := range insts {
 		if inst.Enabled {
 			wg.Add(1)
-			go func(name string) {
+			go func(inst model.Instance) {
 				defer wg.Done()
 				stopCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 				defer cancel()
-				if err := s.docker.StopInstance(stopCtx, name, 10); err != nil {
-					statusLog.Warnf("stop instance %s: %v", name, err)
+				if err := s.docker.StopInstance(stopCtx, inst.ContainerName(), 10); err != nil {
+					statusLog.Warnf("stop instance %s: %v", inst.ContainerName(), err)
 				}
-			}(inst.ContainerName())
+				s.cleanupInstanceRuntimeRules(&inst)
+			}(inst)
 		}
 	}
 	wg.Wait()
@@ -136,7 +144,9 @@ func (s *ContainerService) StopInstance(ctx context.Context, id int64) error {
 	}
 	stopCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	return s.docker.StopInstance(stopCtx, inst.ContainerName(), 10)
+	err = s.docker.StopInstance(stopCtx, inst.ContainerName(), 10)
+	s.cleanupInstanceRuntimeRules(inst)
+	return err
 }
 
 // StartInstance starts a specific instance by ID.
@@ -162,6 +172,11 @@ func (s *ContainerService) StartInstance(ctx context.Context, id int64) error {
 		return ErrNoMatchingSecrets
 	}
 
+	tlsFrontDir, err := s.applyInstanceRuntimeRules(ctx, inst)
+	if err != nil {
+		return err
+	}
+
 	if err := s.generateInstanceConfig(ctx, settings, inst); err != nil {
 		return fmt.Errorf("generate config: %w", err)
 	}
@@ -173,8 +188,9 @@ func (s *ContainerService) StartInstance(ctx context.Context, id int64) error {
 			CPUs:       settings.ProxyCPUs,
 			Memory:     settings.ProxyMemory,
 		},
-		Name: inst.ContainerName(),
-		Port: inst.Port,
+		Name:        inst.ContainerName(),
+		Port:        inst.Port,
+		TLSFrontDir: tlsFrontDir,
 	})
 	return err
 }
@@ -529,6 +545,7 @@ func (s *ContainerService) startInstances(ctx context.Context, settings *model.S
 	}
 
 	// Generate configs sequentially, skipping instances without matching secrets
+	frontingOK := make(map[int]bool)
 	for i := range insts {
 		inst := &insts[i]
 		if !inst.Enabled {
@@ -541,6 +558,13 @@ func (s *ContainerService) startInstances(ctx context.Context, settings *model.S
 		if count == 0 {
 			statusLog.Warnf("skipping instance %d (%s): no matching secrets", inst.Port, inst.Label)
 			continue
+		}
+		if inst.TLSFronting && inst.FakeTLS {
+			if err := s.downloadFrontingContent(ctx, inst.TLSDomain, inst.TLSFrontDirPath()); err != nil {
+				statusLog.Warnf("download fronting content for port %d: %v", inst.Port, err)
+			} else {
+				frontingOK[inst.Port] = true
+			}
 		}
 		if err := s.generateInstanceConfig(ctx, settings, inst); err != nil {
 			return fmt.Errorf("generate config for instance %d: %w", inst.Port, err)
@@ -567,6 +591,13 @@ func (s *ContainerService) startInstances(ctx context.Context, settings *model.S
 		go func(inst model.Instance) {
 			defer wg.Done()
 
+			s.applyTCPMSSRules(&inst)
+
+			var tlsFrontDir string
+			if inst.TLSFronting && inst.FakeTLS && frontingOK[inst.Port] {
+				tlsFrontDir = inst.TLSFrontDirPath()
+			}
+
 			_, err := s.docker.RunInstance(ctx, dockerutil.InstanceRunOptions{
 				RunOptions: dockerutil.RunOptions{
 					Image:      model.DockerImageBase + ":latest",
@@ -574,8 +605,9 @@ func (s *ContainerService) startInstances(ctx context.Context, settings *model.S
 					CPUs:       settings.ProxyCPUs,
 					Memory:     settings.ProxyMemory,
 				},
-				Name: inst.ContainerName(),
-				Port: inst.Port,
+				Name:        inst.ContainerName(),
+				Port:        inst.Port,
+				TLSFrontDir: tlsFrontDir,
 			})
 			if err != nil {
 				mu.Lock()
@@ -669,4 +701,100 @@ func dockerExtraMetricsIPs() []string {
 	}
 
 	return ips
+}
+
+func (s *ContainerService) applyInstanceRuntimeRules(ctx context.Context, inst *model.Instance) (string, error) {
+	s.applyTCPMSSRules(inst)
+
+	var tlsFrontDir string
+	if inst.TLSFronting && inst.FakeTLS {
+		dir := inst.TLSFrontDirPath()
+		if err := s.downloadFrontingContent(ctx, inst.TLSDomain, dir); err != nil {
+			statusLog.Warnf("download fronting content for port %d: %v", inst.Port, err)
+		} else {
+			tlsFrontDir = dir
+		}
+	}
+	return tlsFrontDir, nil
+}
+
+func (s *ContainerService) cleanupInstanceRuntimeRules(inst *model.Instance) {
+	if inst.TCPMSSEnabled {
+		_ = s.iptables.RemoveTCPMSSRules(inst.Port)
+	}
+}
+
+func (s *ContainerService) applyTCPMSSRules(inst *model.Instance) {
+	if !inst.TCPMSSEnabled {
+		return
+	}
+	_ = s.iptables.RemoveTCPMSSRules(inst.Port)
+	if err := s.iptables.SetTCPMSSRule(inst.Port, inst.TCPMSS); err != nil {
+		statusLog.Warnf("set TCPMSS rule for port %d: %v", inst.Port, err)
+	}
+}
+
+// ReconcileInstanceRules ensures iptables rules match the instance's desired state.
+func (s *ContainerService) ReconcileInstanceRules(ctx context.Context, id int64) {
+	inst, err := s.instances.GetByID(ctx, id)
+	if err != nil || inst == nil {
+		return
+	}
+	running, _ := s.docker.IsInstanceRunning(ctx, inst.ContainerName())
+	if !running {
+		_ = s.iptables.RemoveTCPMSSRules(inst.Port)
+		return
+	}
+	if inst.TCPMSSEnabled {
+		s.applyTCPMSSRules(inst)
+	} else {
+		_ = s.iptables.RemoveTCPMSSRules(inst.Port)
+	}
+}
+
+func (s *ContainerService) downloadFrontingContent(ctx context.Context, domain, dir string) error {
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("create fronting dir: %w", err)
+	}
+
+	frontURL := fmt.Sprintf("https://%s/", domain)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, frontURL, nil)
+	if err != nil {
+		return fmt.Errorf("create request: %w", err)
+	}
+	resp, err := s.frontClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("fetch %s: %w", frontURL, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("fetch %s: HTTP %d", frontURL, resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 10*1024*1024))
+	if err != nil {
+		return err
+	}
+
+	tmpPath := filepath.Join(dir, "index.html.tmp")
+	if err := os.WriteFile(tmpPath, body, 0644); err != nil {
+		return fmt.Errorf("write temp fronting: %w", err)
+	}
+	return os.Rename(tmpPath, filepath.Join(dir, "index.html"))
+}
+
+// RefreshFrontingContent re-downloads TLS fronting content for a specific instance.
+func (s *ContainerService) RefreshFrontingContent(ctx context.Context, id int64) error {
+	inst, err := s.instances.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if inst == nil {
+		return fmt.Errorf("instance %d not found", id)
+	}
+	if !inst.TLSFronting || !inst.FakeTLS {
+		return fmt.Errorf("TLS fronting is not enabled for instance %d", id)
+	}
+	return s.downloadFrontingContent(ctx, inst.TLSDomain, inst.TLSFrontDirPath())
 }

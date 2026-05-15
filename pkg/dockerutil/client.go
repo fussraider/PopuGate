@@ -225,8 +225,9 @@ type RunOptions struct {
 // InstanceRunOptions for multi-port instances.
 type InstanceRunOptions struct {
 	RunOptions
-	Name string
-	Port int
+	Name        string
+	Port        int
+	TLSFrontDir string // Host-side directory for TLS fronting content (empty = skip mount)
 }
 
 // RunInstance creates and starts an instance container.
@@ -239,6 +240,12 @@ func (d *DockerClient) RunInstance(ctx context.Context, opts InstanceRunOptions)
 	}
 
 	ulimitHard := int64(65535)
+	binds := []string{
+		d.ResolveHostPath(opts.ConfigPath) + ":/etc/telemt.toml:ro",
+	}
+	if opts.TLSFrontDir != "" {
+		binds = append(binds, d.ResolveHostPath(opts.TLSFrontDir)+":/tlsfront:ro")
+	}
 	hostConfig := &container.HostConfig{
 		NetworkMode: "host",
 		RestartPolicy: container.RestartPolicy{
@@ -250,9 +257,7 @@ func (d *DockerClient) RunInstance(ctx context.Context, opts InstanceRunOptions)
 				"max-file": "3",
 			},
 		},
-		Binds: []string{
-			d.ResolveHostPath(opts.ConfigPath) + ":/etc/telemt.toml:ro",
-		},
+		Binds: binds,
 		Resources: container.Resources{
 			Ulimits: []*container.Ulimit{
 				{Name: "nofile", Hard: ulimitHard, Soft: ulimitHard},

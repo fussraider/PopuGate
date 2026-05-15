@@ -18,7 +18,7 @@ func NewInstanceStore(db *sql.DB) *InstanceStore {
 	return &InstanceStore{db: db}
 }
 
-const instanceColumns = `id, port, metrics_port, enabled, label, tls_domain, tls_domains, fake_tls, mask_host, mask_port, tags`
+const instanceColumns = `id, port, metrics_port, enabled, label, tls_domain, tls_domains, fake_tls, mask_host, mask_port, tags, tcp_mss_enabled, tcp_mss, tls_fronting`
 
 type scanner interface {
 	Scan(dest ...interface{}) error
@@ -26,13 +26,16 @@ type scanner interface {
 
 func scanInstance(row scanner) (*model.Instance, error) {
 	var inst model.Instance
-	var enabled, fakeTLS int
+	var enabled, fakeTLS, tcpMSSEnabled, tlsFronting int
 	if err := row.Scan(&inst.ID, &inst.Port, &inst.MetricsPort, &enabled, &inst.Label,
-		&inst.TLSDomain, &inst.TLSDomains, &fakeTLS, &inst.MaskHost, &inst.MaskPort, &inst.Tags); err != nil {
+		&inst.TLSDomain, &inst.TLSDomains, &fakeTLS, &inst.MaskHost, &inst.MaskPort, &inst.Tags,
+		&tcpMSSEnabled, &inst.TCPMSS, &tlsFronting); err != nil {
 		return nil, err
 	}
 	inst.Enabled = intToBool(enabled)
 	inst.FakeTLS = intToBool(fakeTLS)
+	inst.TCPMSSEnabled = intToBool(tcpMSSEnabled)
+	inst.TLSFronting = intToBool(tlsFronting)
 	return &inst, nil
 }
 
@@ -111,8 +114,8 @@ func (s *InstanceStore) EnsureDefaultInstance(ctx context.Context, proxyPort, me
 			fakeTLS = 1
 		}
 		_, err = s.db.ExecContext(ctx, `
-			INSERT INTO instances (port, metrics_port, enabled, label, tls_domain, fake_tls, mask_host, mask_port)
-			VALUES (?, ?, 1, 'Default', ?, ?, ?, 443)
+			INSERT INTO instances (port, metrics_port, enabled, label, tls_domain, fake_tls, mask_host, mask_port, tcp_mss_enabled, tcp_mss, tls_fronting)
+			VALUES (?, ?, 1, 'Default', ?, ?, ?, 443, 0, 88, 0)
 		`, proxyPort, metricsPort, proxyDomain, fakeTLS, maskingHost)
 		if err != nil {
 			return fmt.Errorf("seed default instance: %w", err)
@@ -125,11 +128,14 @@ func (s *InstanceStore) EnsureDefaultInstance(ctx context.Context, proxyPort, me
 func (s *InstanceStore) Create(ctx context.Context, inst *model.Instance) error {
 	enabled := boolToInt(inst.Enabled)
 	fakeTLS := boolToInt(inst.FakeTLS)
+	tcpMSSEnabled := boolToInt(inst.TCPMSSEnabled)
+	tlsFronting := boolToInt(inst.TLSFronting)
 	result, err := s.db.ExecContext(ctx, `
-		INSERT INTO instances (port, metrics_port, enabled, label, tls_domain, tls_domains, fake_tls, mask_host, mask_port, tags)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO instances (port, metrics_port, enabled, label, tls_domain, tls_domains, fake_tls, mask_host, mask_port, tags, tcp_mss_enabled, tcp_mss, tls_fronting)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, inst.Port, inst.MetricsPort, enabled, inst.Label,
-		inst.TLSDomain, inst.TLSDomains, fakeTLS, inst.MaskHost, inst.MaskPort, inst.Tags)
+		inst.TLSDomain, inst.TLSDomains, fakeTLS, inst.MaskHost, inst.MaskPort, inst.Tags,
+		tcpMSSEnabled, inst.TCPMSS, tlsFronting)
 	if err != nil {
 		return fmt.Errorf("create instance: %w", err)
 	}
@@ -141,12 +147,16 @@ func (s *InstanceStore) Create(ctx context.Context, inst *model.Instance) error 
 func (s *InstanceStore) Update(ctx context.Context, inst *model.Instance) error {
 	enabled := boolToInt(inst.Enabled)
 	fakeTLS := boolToInt(inst.FakeTLS)
+	tcpMSSEnabled := boolToInt(inst.TCPMSSEnabled)
+	tlsFronting := boolToInt(inst.TLSFronting)
 	_, err := s.db.ExecContext(ctx, `
 		UPDATE instances SET port=?, metrics_port=?, enabled=?, label=?,
-		                     tls_domain=?, tls_domains=?, fake_tls=?, mask_host=?, mask_port=?, tags=?
+		                     tls_domain=?, tls_domains=?, fake_tls=?, mask_host=?, mask_port=?, tags=?,
+		                     tcp_mss_enabled=?, tcp_mss=?, tls_fronting=?
 		WHERE id = ?
 	`, inst.Port, inst.MetricsPort, enabled, inst.Label,
 		inst.TLSDomain, inst.TLSDomains, fakeTLS, inst.MaskHost, inst.MaskPort, inst.Tags,
+		tcpMSSEnabled, inst.TCPMSS, tlsFronting,
 		inst.ID)
 	if err != nil {
 		return fmt.Errorf("update instance %d: %w", inst.ID, err)

@@ -172,24 +172,27 @@
     <!-- Limits Modal -->
     <FormModal v-model="limitsModal.isOpen.value" :title="t('secrets.set_limits_title')" :submitting="limitsModal.submitting.value"
                @submit="handleSetLimits()">
-      <div class="form-row mb-sm">
-        <div class="form-group">
-          <label class="form-label">{{ t('secrets.max_conns') }}</label>
-          <input v-model.number="limitsModal.form.value.maxConns" class="input" type="number" min="0" :placeholder="t('secrets.unlimited_placeholder')" />
+      <div class="form-card">
+        <h4 class="form-card-title">{{ t('secrets.section_limits') }}</h4>
+        <div class="form-row mb-sm">
+          <div class="form-group">
+            <label class="form-label">{{ t('secrets.max_conns') }}</label>
+            <input v-model.number="limitsModal.form.value.maxConns" class="input" type="number" min="0" :placeholder="t('secrets.unlimited_placeholder')" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">{{ t('secrets.max_ips') }}</label>
+            <input v-model.number="limitsModal.form.value.maxIPs" class="input" type="number" min="0" :placeholder="t('secrets.unlimited_placeholder')" />
+          </div>
         </div>
-        <div class="form-group">
-          <label class="form-label">{{ t('secrets.max_ips') }}</label>
-          <input v-model.number="limitsModal.form.value.maxIPs" class="input" type="number" min="0" :placeholder="t('secrets.unlimited_placeholder')" />
-        </div>
-      </div>
-      <div class="form-row mb-sm">
-        <div class="form-group">
-          <label class="form-label">{{ t('secrets.quota_mb') }}</label>
-          <input v-model.number="limitsModal.form.value.quotaMB" class="input" type="number" min="0" :placeholder="t('secrets.unlimited_placeholder')" />
-        </div>
-        <div class="form-group">
-          <label class="form-label">{{ t('secrets.table.expires') }}</label>
-          <input v-model="limitsModal.form.value.expiresAt" class="input" type="date" />
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">{{ t('secrets.quota_mb') }}</label>
+            <input v-model.number="limitsModal.form.value.quotaMB" class="input" type="number" min="0" :placeholder="t('secrets.unlimited_placeholder')" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">{{ t('secrets.table.expires') }}</label>
+            <input v-model="limitsModal.form.value.expiresAt" class="input" type="date" />
+          </div>
         </div>
       </div>
     </FormModal>
@@ -206,22 +209,28 @@
     <!-- Edit Secret Modal -->
     <FormModal v-model="editModal.isOpen.value" :title="t('secrets.edit_title', { label: editTarget })" :submitting="editModal.submitting.value"
                @submit="handleEdit()">
-      <div class="form-group mb-md">
-        <label class="form-label">{{ t('secrets.rename_new_label') }}</label>
-        <input v-model="editModal.form.value.label" class="input" required />
+      <div class="form-card">
+        <h4 class="form-card-title">{{ t('secrets.section_info') }}</h4>
+        <div class="form-group mb-md">
+          <label class="form-label">{{ t('secrets.rename_new_label') }}</label>
+          <input v-model="editModal.form.value.label" class="input" required />
+        </div>
+        <div class="form-group mb-md">
+          <label class="form-label">{{ t('secrets.edit_tags') }}</label>
+          <TagInput v-model="editModal.form.value.tags" :available-tags="secretsStore.allTags" :placeholder="t('secrets.tags_placeholder')" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">{{ t('secrets.edit_notes') }}</label>
+          <textarea v-model="editModal.form.value.notes" class="input" rows="3"></textarea>
+        </div>
       </div>
-      <div class="form-group mb-md">
-        <label class="form-label">{{ t('secrets.edit_tags') }}</label>
-        <TagInput v-model="editModal.form.value.tags" :available-tags="secretsStore.allTags" :placeholder="t('secrets.tags_placeholder')" />
-      </div>
-      <div class="form-group mb-md">
-        <label class="form-label">{{ t('secrets.edit_notes') }}</label>
-        <textarea v-model="editModal.form.value.notes" class="input" rows="3"></textarea>
-      </div>
-      <div class="form-group mb-md">
-        <label class="form-label">{{ t('secrets.extend_days') }}</label>
-        <input v-model.number="editModal.form.value.extendDays" class="input" type="number" min="0" />
-        <small class="text-muted">{{ t('secrets.extend_edit_hint') }}</small>
+      <div class="form-card">
+        <h4 class="form-card-title">{{ t('secrets.section_limits') }}</h4>
+        <div class="form-group">
+          <label class="form-label">{{ t('secrets.extend_days') }}</label>
+          <input v-model.number="editModal.form.value.extendDays" class="input" type="number" min="0" />
+          <small class="text-muted">{{ t('secrets.extend_edit_hint') }}</small>
+        </div>
       </div>
     </FormModal>
 
@@ -264,24 +273,27 @@
     <FormModal v-model="bulkLimitsModal.isOpen.value" :title="t('secrets.bulk_set_limits')" :submitting="bulkLimitsModal.submitting.value"
                @submit="handleBulkSetLimits()">
       <p class="text-muted mb-md">{{ selectedLabels.size }} {{ t('secrets.selected') }}</p>
-      <div class="form-row mb-sm">
-        <div class="form-group">
-          <label class="form-label">{{ t('secrets.max_conns') }}</label>
-          <input v-model.number="bulkLimitsModal.form.value.maxConns" class="input" type="number" min="0" :placeholder="t('secrets.unlimited_placeholder')" />
+      <div class="form-card">
+        <h4 class="form-card-title">{{ t('secrets.section_limits') }}</h4>
+        <div class="form-row mb-sm">
+          <div class="form-group">
+            <label class="form-label">{{ t('secrets.max_conns') }}</label>
+            <input v-model.number="bulkLimitsModal.form.value.maxConns" class="input" type="number" min="0" :placeholder="t('secrets.unlimited_placeholder')" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">{{ t('secrets.max_ips') }}</label>
+            <input v-model.number="bulkLimitsModal.form.value.maxIPs" class="input" type="number" min="0" :placeholder="t('secrets.unlimited_placeholder')" />
+          </div>
         </div>
-        <div class="form-group">
-          <label class="form-label">{{ t('secrets.max_ips') }}</label>
-          <input v-model.number="bulkLimitsModal.form.value.maxIPs" class="input" type="number" min="0" :placeholder="t('secrets.unlimited_placeholder')" />
-        </div>
-      </div>
-      <div class="form-row mb-sm">
-        <div class="form-group">
-          <label class="form-label">{{ t('secrets.quota_mb') }}</label>
-          <input v-model.number="bulkLimitsModal.form.value.quotaMB" class="input" type="number" min="0" :placeholder="t('secrets.unlimited_placeholder')" />
-        </div>
-        <div class="form-group">
-          <label class="form-label">{{ t('secrets.table.expires') }}</label>
-          <input v-model="bulkLimitsModal.form.value.expiresAt" class="input" type="date" />
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">{{ t('secrets.quota_mb') }}</label>
+            <input v-model.number="bulkLimitsModal.form.value.quotaMB" class="input" type="number" min="0" :placeholder="t('secrets.unlimited_placeholder')" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">{{ t('secrets.table.expires') }}</label>
+            <input v-model="bulkLimitsModal.form.value.expiresAt" class="input" type="date" />
+          </div>
         </div>
       </div>
     </FormModal>

@@ -124,6 +124,12 @@
             <Loader2 v-if="store.actionLoading.get(item.id) === 'reload'" :size="16" class="animate-spin" />
             <RefreshCw v-else :size="16" />
           </button>
+          <button v-if="item.tls_fronting && item.fake_tls" class="btn btn-ghost btn-sm"
+                  @click="handleRefreshFronting(item)" :title="t('instances.refresh_fronting')"
+                  :disabled="store.actionLoading.has(item.id)">
+            <Loader2 v-if="store.actionLoading.get(item.id) === 'refresh_fronting'" :size="16" class="animate-spin" />
+            <Globe v-else :size="16" />
+          </button>
           <button class="btn btn-ghost btn-sm" @click="openLogModal(item)" :title="t('instances.logs')"
                   :disabled="!isInstanceRunning(item)">
             <FileText :size="16" />
@@ -146,69 +152,108 @@
       :submit-text="t('common.save')"
       @submit="handleSubmit"
     >
-      <div class="form-group mb-md">
-        <label class="form-label">{{ t('instances.table.label') }}</label>
-        <input v-model="form.label" class="input" :placeholder="t('instances.instance_placeholder')" />
-        <small class="text-muted">{{ t('instances.label_hint') }}</small>
-      </div>
-      <div class="form-group mb-md">
-        <label class="form-label">{{ t('instances.table.port') }} *</label>
-        <div class="input-with-icon">
-          <input :value="form.port || ''" class="input" :class="{ 'pr-lg': portChecks.port }" inputmode="numeric" required :disabled="!!editingInstance" @input="sanitizePort($event, 'port')" @blur="checkPort('port')" />
-          <Tooltip v-if="portChecks.port" :text="portChecks.port.available ? t('instances.port_available') : portChecks.port.reason!" class="port-icon-wrapper">
-            <CircleCheck v-if="portChecks.port.available" :size="16" class="text-success" />
-            <CircleX v-else :size="16" class="text-danger" />
-          </Tooltip>
+      <!-- General -->
+      <div class="form-card">
+        <h4 class="form-card-title">{{ t('instances.section_basic') }}</h4>
+        <div class="form-group mb-md">
+          <label class="form-label">{{ t('instances.table.label') }}</label>
+          <input v-model="form.label" class="input" :placeholder="t('instances.instance_placeholder')" />
+          <small class="text-muted">{{ t('instances.label_hint') }}</small>
         </div>
-        <small class="text-muted">{{ t('instances.port_hint') }}</small>
-      </div>
-      <div class="form-group mb-md">
-        <label class="form-label">{{ t('instances.table.metrics_port') }}</label>
-        <div class="input-with-icon">
-          <input :value="form.metrics_port || ''" class="input" :class="{ 'pr-lg': portChecks.metrics_port }" inputmode="numeric" @input="sanitizePort($event, 'metrics_port')" @blur="checkPort('metrics_port')" />
-          <Tooltip v-if="portChecks.metrics_port" :text="portChecks.metrics_port.available ? t('instances.port_available') : portChecks.metrics_port.reason!" class="port-icon-wrapper">
-            <CircleCheck v-if="portChecks.metrics_port.available" :size="16" class="text-success" />
-            <CircleX v-else :size="16" class="text-danger" />
-          </Tooltip>
+        <div class="form-row mb-md">
+          <div class="form-group">
+            <label class="form-label">{{ t('instances.table.port') }} *</label>
+            <div class="input-with-icon">
+              <input :value="form.port || ''" class="input" :class="{ 'pr-lg': portChecks.port }" inputmode="numeric" required :disabled="!!editingInstance" @input="sanitizePort($event, 'port')" @blur="checkPort('port')" />
+              <Tooltip v-if="portChecks.port" :text="portChecks.port.available ? t('instances.port_available') : portChecks.port.reason!" class="port-icon-wrapper">
+                <CircleCheck v-if="portChecks.port.available" :size="16" class="text-success" />
+                <CircleX v-else :size="16" class="text-danger" />
+              </Tooltip>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">{{ t('instances.table.metrics_port') }}</label>
+            <div class="input-with-icon">
+              <input :value="form.metrics_port || ''" class="input" :class="{ 'pr-lg': portChecks.metrics_port }" inputmode="numeric" @input="sanitizePort($event, 'metrics_port')" @blur="checkPort('metrics_port')" />
+              <Tooltip v-if="portChecks.metrics_port" :text="portChecks.metrics_port.available ? t('instances.port_available') : portChecks.metrics_port.reason!" class="port-icon-wrapper">
+                <CircleCheck v-if="portChecks.metrics_port.available" :size="16" class="text-success" />
+                <CircleX v-else :size="16" class="text-danger" />
+              </Tooltip>
+            </div>
+          </div>
         </div>
-        <small class="text-muted">{{ t('instances.metrics_port_hint') }}</small>
+        <div class="form-group mb-md">
+          <label class="form-label">{{ t('instances.tags') }}</label>
+          <TagInput v-model="form.tags" :available-tags="allInstanceTags" :placeholder="t('instances.tags_hint')" />
+        </div>
+        <div class="form-group">
+          <label class="checkbox-label">
+            <input v-model="form.enabled" type="checkbox" />
+            <span>{{ t('instances.enabled') }}</span>
+          </label>
+        </div>
       </div>
-      <div class="form-group mb-md">
-        <label class="form-label">{{ t('instances.tls_domain') }} *</label>
-        <input v-model="form.tls_domain" class="input" placeholder="cloudflare.com" required />
-        <small class="text-muted">{{ t('instances.tls_domain_hint') }}</small>
+
+      <!-- TLS & Masking -->
+      <div class="form-card">
+        <h4 class="form-card-title">{{ t('instances.section_tls') }}</h4>
+        <div class="form-group mb-md">
+          <label class="form-label">{{ t('instances.tls_domain') }} *</label>
+          <input v-model="form.tls_domain" class="input" placeholder="cloudflare.com" required />
+          <small class="text-muted">{{ t('instances.tls_domain_hint') }}</small>
+        </div>
+        <div class="form-group mb-md">
+          <label class="form-label">{{ t('instances.tls_domains') }}</label>
+          <input v-model="form.tls_domains_text" class="input" placeholder="vk.com, mail.ru" />
+          <small class="text-muted">{{ t('instances.tls_domains_hint') }}</small>
+        </div>
+        <div class="form-group mb-md">
+          <label class="checkbox-label">
+            <input v-model="form.fake_tls" type="checkbox" />
+            <span>FakeTLS</span>
+            <Tooltip :text="t('instances.fake_tls_hint')">
+              <Info :size="14" class="text-muted" />
+            </Tooltip>
+          </label>
+        </div>
+        <div class="form-row mb-md">
+          <div class="form-group">
+            <label class="form-label">{{ t('instances.mask_host') }}</label>
+            <input v-model="form.mask_host" class="input" :placeholder="form.tls_domain || 'cloudflare.com'" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">{{ t('instances.mask_port') }}</label>
+            <input v-model.number="form.mask_port" class="input" type="number" min="1" max="65535" />
+          </div>
+        </div>
       </div>
-      <div class="form-group mb-md">
-        <label class="form-label">{{ t('instances.tls_domains') }}</label>
-        <input v-model="form.tls_domains_text" class="input" placeholder="vk.com, mail.ru" />
-        <small class="text-muted">{{ t('instances.tls_domains_hint') }}</small>
-      </div>
-      <div class="form-group mb-md">
-        <label class="flex items-center gap-sm">
-          <input v-model="form.fake_tls" type="checkbox" />
-          <span>FakeTLS</span>
-        </label>
-        <small class="text-muted">{{ t('instances.fake_tls_hint') }}</small>
-      </div>
-      <div class="form-group mb-md">
-        <label class="form-label">{{ t('instances.mask_host') }}</label>
-        <input v-model="form.mask_host" class="input" :placeholder="form.tls_domain || 'cloudflare.com'" />
-        <small class="text-muted">{{ t('instances.mask_host_hint') }}</small>
-      </div>
-      <div class="form-group mb-md">
-        <label class="form-label">{{ t('instances.mask_port') }}</label>
-        <input v-model.number="form.mask_port" class="input" type="number" min="1" max="65535" />
-        <small class="text-muted">{{ t('instances.mask_port_hint') }}</small>
-      </div>
-      <div class="form-group mb-md">
-        <label class="form-label">{{ t('instances.tags') }}</label>
-        <TagInput v-model="form.tags" :available-tags="allInstanceTags" :placeholder="t('instances.tags_hint')" />
-      </div>
-      <div class="form-group mb-md">
-        <label class="flex items-center gap-sm">
-          <input v-model="form.enabled" type="checkbox" />
-          <span>{{ t('instances.enabled') }}</span>
-        </label>
+
+      <!-- Anti-Blocking -->
+      <div class="form-card">
+        <h4 class="form-card-title">{{ t('instances.antiblock_section') }}</h4>
+        <div class="form-group mb-md">
+          <label class="checkbox-label">
+            <input v-model="form.tcp_mss_enabled" type="checkbox" />
+            <span>{{ t('instances.tcp_mss_enabled') }}</span>
+            <Tooltip :text="t('instances.tcp_mss_enabled_hint')">
+              <Info :size="14" class="text-muted" />
+            </Tooltip>
+          </label>
+        </div>
+        <div v-if="form.tcp_mss_enabled" class="form-group mb-md">
+          <label class="form-label">{{ t('instances.tcp_mss') }}</label>
+          <input v-model.number="form.tcp_mss" class="input" type="number" min="1" max="1460" />
+          <small class="text-muted">{{ t('instances.tcp_mss_hint') }}</small>
+        </div>
+        <div class="form-group">
+          <label class="checkbox-label">
+            <input v-model="form.tls_fronting" type="checkbox" :disabled="!form.fake_tls" />
+            <span>{{ t('instances.tls_fronting') }}</span>
+            <Tooltip :text="t('instances.tls_fronting_hint')">
+              <Info :size="14" class="text-muted" />
+            </Tooltip>
+          </label>
+        </div>
       </div>
     </FormModal>
 
@@ -235,6 +280,13 @@
         <Loader2 v-if="store.actionLoading.get(instanceActions.activeItem.value?.id ?? 0) === 'reload'" :size="16" class="animate-spin" />
         <RefreshCw v-else :size="16" /> {{ t('instances.reload') }}
       </button>
+      <button v-if="instanceActions.activeItem.value?.tls_fronting && instanceActions.activeItem.value?.fake_tls"
+              class="action-sheet-item"
+              :disabled="store.actionLoading.has(instanceActions.activeItem.value?.id ?? 0)"
+              @click="handleRefreshFronting(instanceActions.activeItem.value!); instanceActions.close()">
+        <Loader2 v-if="store.actionLoading.get(instanceActions.activeItem.value?.id ?? 0) === 'refresh_fronting'" :size="16" class="animate-spin" />
+        <Globe v-else :size="16" /> {{ t('instances.refresh_fronting') }}
+      </button>
       <button class="action-sheet-item" :disabled="!isInstanceRunning(instanceActions.activeItem.value!)"
               @click="openLogModal(instanceActions.activeItem.value!); instanceActions.close()">
         <FileText :size="16" /> {{ t('instances.logs') }}
@@ -253,7 +305,7 @@
 </template>
 
 <script setup lang="ts">
-import {computed, onMounted, reactive, ref} from 'vue'
+import {computed, onMounted, reactive, ref, watch} from 'vue'
 import {useI18n} from 'vue-i18n'
 import {useInstancesStore} from '@/stores/instances'
 import {useProxyStore} from '@/stores/proxy'
@@ -275,6 +327,8 @@ import {
   CircleCheck,
   CircleX,
   FileText,
+  Globe,
+  Info,
   Loader2,
   MoreVertical,
   Pencil,
@@ -433,6 +487,13 @@ const form = reactive({
   mask_port: 443,
   tags: '[]',
   enabled: true,
+  tcp_mss_enabled: false,
+  tcp_mss: 88,
+  tls_fronting: false,
+})
+
+watch(() => form.fake_tls, (val) => {
+  if (!val) form.tls_fronting = false
 })
 
 function commaListToJSON(text: string): string {
@@ -448,7 +509,7 @@ function openAddModal() {
   editingInstance.value = null
   portChecks.port = null
   portChecks.metrics_port = null
-  Object.assign(form, { port: 443, metrics_port: 0, label: '', tls_domain: '', tls_domains_text: '', fake_tls: true, mask_host: '', mask_port: 443, tags: '[]', enabled: true })
+  Object.assign(form, { port: 443, metrics_port: 0, label: '', tls_domain: '', tls_domains_text: '', fake_tls: true, mask_host: '', mask_port: 443, tags: '[]', enabled: true, tcp_mss_enabled: false, tcp_mss: 88, tls_fronting: false })
   modalOpen.value = true
 }
 
@@ -467,6 +528,9 @@ function openEditModal(item: Instance) {
     mask_port: item.mask_port || 443,
     tags: item.tags || '[]',
     enabled: item.enabled,
+    tcp_mss_enabled: item.tcp_mss_enabled || false,
+    tcp_mss: item.tcp_mss || 88,
+    tls_fronting: item.tls_fronting || false,
   })
   modalOpen.value = true
 }
@@ -490,6 +554,9 @@ async function handleSubmit() {
       mask_port: form.mask_port,
       tags: form.tags,
       enabled: form.enabled,
+      tcp_mss_enabled: form.tcp_mss_enabled,
+      tcp_mss: form.tcp_mss_enabled ? form.tcp_mss : undefined,
+      tls_fronting: form.tls_fronting,
     }
 
     if (editingInstance.value) {
@@ -529,6 +596,18 @@ async function handleInstanceAction(item: Instance, action: 'start' | 'stop' | '
     }
     toast.success(messages[action])
     await proxyStore.loadStatus()
+  } catch (e: any) {
+    toast.error(e.response?.data?.error || t('common.error'))
+  } finally {
+    store.setActionLoading(item.id, null)
+  }
+}
+
+async function handleRefreshFronting(item: Instance) {
+  store.setActionLoading(item.id, 'refresh_fronting')
+  try {
+    await instancesApi.refreshFronting(item.id)
+    toast.success(t('instances.fronting_refreshed', { label: item.label }))
   } catch (e: any) {
     toast.error(e.response?.data?.error || t('common.error'))
   } finally {

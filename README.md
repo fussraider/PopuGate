@@ -183,6 +183,8 @@ Pre-configured limit presets (connections, IPs, quota, expiration, tags) for qui
 ### 🖥️ Instances
 Independent proxies with their own port, masking domains, FakeTLS, and access tags. Multi-domain support, hot reload, logs (SSE), bulk operations.
 
+- **Anti-Blocking**: Per-instance TCPMSS fragmentation to defeat DPI ClientHello reassembly, and TLS fronting content serving for active probing defense
+
 ### 🔀 Upstreams
 Proxy chains (SOCKS4/SOCKS5) with weight-based balancing and network interface binding.
 

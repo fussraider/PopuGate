@@ -14,12 +14,15 @@ type Instance struct {
 	Enabled     bool   `json:"enabled" db:"enabled"`
 	Label       string `json:"label" db:"label"`
 	// Per-instance proxy configuration
-	TLSDomain  string `json:"tls_domain" db:"tls_domain"`   // Primary masking domain (required)
-	TLSDomains string `json:"tls_domains" db:"tls_domains"` // Additional domains (JSON array)
-	FakeTLS    bool   `json:"fake_tls" db:"fake_tls"`       // Enable FakeTLS masking
-	MaskHost   string `json:"mask_host" db:"mask_host"`     // Where to proxy non-MTProto traffic
-	MaskPort   int    `json:"mask_port" db:"mask_port"`     // Port for mask_host
-	Tags       string `json:"tags" db:"tags"`               // Access tags (JSON array)
+	TLSDomain     string `json:"tls_domain" db:"tls_domain"`           // Primary masking domain (required)
+	TLSDomains    string `json:"tls_domains" db:"tls_domains"`         // Additional domains (JSON array)
+	FakeTLS       bool   `json:"fake_tls" db:"fake_tls"`               // Enable FakeTLS masking
+	MaskHost      string `json:"mask_host" db:"mask_host"`             // Where to proxy non-MTProto traffic
+	MaskPort      int    `json:"mask_port" db:"mask_port"`             // Port for mask_host
+	Tags          string `json:"tags" db:"tags"`                       // Access tags (JSON array)
+	TCPMSSEnabled bool   `json:"tcp_mss_enabled" db:"tcp_mss_enabled"` // Enable TCPMSS clamping
+	TCPMSS        int    `json:"tcp_mss" db:"tcp_mss"`                 // MSS value (1-1460, default 88)
+	TLSFronting   bool   `json:"tls_fronting" db:"tls_fronting"`       // Enable TLS fronting content serving
 }
 
 // Validate checks instance fields.
@@ -38,6 +41,17 @@ func (i *Instance) Validate() error {
 	}
 	if i.MaskPort < 1 || i.MaskPort > 65535 {
 		return fmt.Errorf("mask_port must be 1-65535")
+	}
+	if i.TCPMSS == 0 {
+		i.TCPMSS = 88
+	}
+	if i.TCPMSSEnabled {
+		if i.TCPMSS < 1 || i.TCPMSS > 1460 {
+			return fmt.Errorf("tcp_mss must be 1-1460")
+		}
+	}
+	if i.TLSFronting && !i.FakeTLS {
+		return fmt.Errorf("tls_fronting requires fake_tls to be enabled")
 	}
 	return nil
 }
@@ -87,6 +101,11 @@ func (i *Instance) GetMaskHost() string {
 		return i.MaskHost
 	}
 	return i.TLSDomain
+}
+
+// TLSFrontDirPath returns the host-side directory for TLS fronting content.
+func (i *Instance) TLSFrontDirPath() string {
+	return filepath.Join(InstallDir, fmt.Sprintf("mtproxy/tlsfront-%d", i.Port))
 }
 
 // TagsMatch checks if an instance is accessible by a secret based on tag matching.

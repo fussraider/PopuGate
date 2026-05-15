@@ -50,8 +50,8 @@ export const authApi = {
 
   logout: () => api.post('/auth/logout'),
 
-  changePassword: (oldPassword: string, newPassword: string) =>
-    api.put('/auth/password', { old_password: oldPassword, new_password: newPassword }),
+  changePassword: (currentPassword: string, newPassword: string) =>
+    api.put('/auth/password', { current: currentPassword, new: newPassword }),
 }
 
 // ─── Config / Settings ─────────────────────────────────────────
@@ -208,6 +208,9 @@ export const instancesApi = {
     mask_port?: number
     tags?: string
     metrics_port?: number
+    tcp_mss_enabled?: boolean
+    tcp_mss?: number
+    tls_fronting?: boolean
   }) => api.post<Instance>('/instances', data).then((r) => r.data),
 
   update: (id: number, data: Partial<Instance>) =>
@@ -234,6 +237,9 @@ export const instancesApi = {
     api.get<{ available: boolean; reason?: string }>('/instances/check-port', {
       params: { port, exclude: excludeId || undefined },
     }).then((r) => r.data),
+
+  refreshFronting: (id: number) =>
+    api.post(`/instances/${id}/refresh-fronting`).then((r) => r.data),
 }
 
 // ─── Proxy Control ─────────────────────────────────────────────

@@ -178,3 +178,62 @@ func (m *IptablesManager) RemoveGeoBlockRules() error {
 func SetNameForCountry(code string) string {
 	return fmt.Sprintf("mtpmax_%s", strings.ToLower(code))
 }
+
+// SetTCPMSSRule applies a TCPMSS clamping rule in the mangle table for a given port.
+func (m *IptablesManager) SetTCPMSSRule(port int, mss int) error {
+	if err := ValidatePort(strconv.Itoa(port)); err != nil {
+		return err
+	}
+	if mss < 1 || mss > 1460 {
+		return fmt.Errorf("mss out of range: %d (must be 1-1460)", mss)
+	}
+
+	comment := fmt.Sprintf("popugate-tcpmss-%d", port)
+	portStr := strconv.Itoa(port)
+	mssStr := strconv.Itoa(mss)
+
+	check := exec.Command("iptables", "-t", "mangle", "-C", "POSTROUTING",
+		"-p", "tcp", "--sport", portStr,
+		"--tcp-flags", "SYN,RST", "SYN",
+		"-j", "TCPMSS", "--set-mss", mssStr,
+		"-m", "comment", "--comment", comment)
+	if check.Run() == nil {
+		return nil
+	}
+
+	return exec.Command("iptables", "-t", "mangle", "-A", "POSTROUTING",
+		"-p", "tcp", "--sport", portStr,
+		"--tcp-flags", "SYN,RST", "SYN",
+		"-j", "TCPMSS", "--set-mss", mssStr,
+		"-m", "comment", "--comment", comment).Run()
+}
+
+// RemoveTCPMSSRules removes TCPMSS rules from the mangle table.
+// If port is 0, removes all popugate TCPMSS rules.
+func (m *IptablesManager) RemoveTCPMSSRules(port int) error {
+	out, err := exec.Command("iptables-save", "-t", "mangle").Output()
+	if err != nil {
+		return fmt.Errorf("iptables-save mangle: %w", err)
+	}
+
+	prefix := "popugate-tcpmss"
+	if port > 0 {
+		prefix = fmt.Sprintf("popugate-tcpmss-%d", port)
+	}
+
+	for _, line := range strings.Split(string(out), "\n") {
+		if !strings.Contains(line, prefix) {
+			continue
+		}
+		if !strings.HasPrefix(strings.TrimSpace(line), "-A ") {
+			continue
+		}
+		rule := strings.Replace(line, "-A ", "-D ", 1)
+		parts := strings.Fields(rule)
+		if len(parts) > 1 && parts[0] == "-D" {
+			args := append([]string{"-t", "mangle"}, parts[1:]...)
+			_ = exec.Command("iptables", args...).Run()
+		}
+	}
+	return nil
+}

@@ -1,6 +1,6 @@
-import axios, { type AxiosInstance, type AxiosRequestConfig } from 'axios'
-import { useAuthStore } from '@/stores/auth'
-import { useToastStore } from '@/stores/toast'
+import axios, {type AxiosInstance, type AxiosRequestConfig} from 'axios'
+import {useAuthStore} from '@/stores/auth'
+import {useToastStore} from '@/stores/toast'
 
 const apiClient: AxiosInstance = axios.create({
   baseURL: '/api/v1',
@@ -28,9 +28,16 @@ apiClient.interceptors.request.use((config) => {
   return config
 })
 
-// Response interceptor: handle 401 → refresh, 403 → setup redirect
+// Response interceptor: handle 401 → refresh, 403 → setup redirect, show X-Warning toasts
 apiClient.interceptors.response.use(
-  (res) => res,
+  (res) => {
+    const warning = res.headers['x-warning']
+    if (warning) {
+      const toastStore = useToastStore()
+      toastStore.warning(decodeURIComponent(warning))
+    }
+    return res
+  },
   async (error) => {
     const original = error.config as AxiosRequestConfig & { _retry?: boolean; _silent?: boolean }
     const status = error.response?.status

@@ -331,27 +331,73 @@ func (d *DockerClient) ResolveHostPath(path string) string {
 }
 
 func (d *DockerClient) detectHostPath(ctx context.Context) {
-	hostname, _ := os.Hostname()
-	if hostname == "" {
-		return
-	}
-
-	containerInfo, err := d.cli.ContainerInspect(ctx, hostname)
-	if err != nil {
-		return
-	}
-
 	dataDir := os.Getenv("POPUGATE_DATA_DIR")
 	if dataDir == "" {
 		dataDir = "/data"
 	}
 
-	for _, m := range containerInfo.Mounts {
-		if m.Destination == dataDir {
-			d.hostPath = m.Source
-			return
+	for _, nameOrID := range detectSelfContainerIDs() {
+		containerInfo, err := d.cli.ContainerInspect(ctx, nameOrID)
+		if err != nil {
+			continue
+		}
+		for _, m := range containerInfo.Mounts {
+			if m.Destination == dataDir {
+				d.hostPath = m.Source
+				return
+			}
 		}
 	}
+}
+
+// detectSelfContainerIDs returns candidate identifiers for the current container:
+// the system hostname (works for default bridge networking), the container ID
+// from /proc/self/cgroup, and the container ID from /proc/self/mountinfo.
+func detectSelfContainerIDs() []string {
+	var ids []string
+	if h, err := os.Hostname(); h != "" && err == nil {
+		ids = append(ids, h)
+	}
+	if cid := containerIDFromCgroup(); cid != "" {
+		ids = append(ids, cid)
+	}
+	if cid := containerIDFromMountinfo(); cid != "" {
+		ids = append(ids, cid)
+	}
+	return ids
+}
+
+func containerIDFromCgroup() string {
+	data, err := os.ReadFile("/proc/self/cgroup")
+	if err != nil {
+		return ""
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		if idx := strings.LastIndex(line, "/"); idx >= 0 {
+			id := strings.TrimSpace(line[idx+1:])
+			if len(id) >= 12 {
+				return id
+			}
+		}
+	}
+	return ""
+}
+
+func containerIDFromMountinfo() string {
+	data, err := os.ReadFile("/proc/self/mountinfo")
+	if err != nil {
+		return ""
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		const prefix = "/docker/containers/"
+		if idx := strings.Index(line, prefix); idx >= 0 {
+			rest := line[idx+len(prefix):]
+			if slashIdx := strings.Index(rest, "/"); slashIdx >= 12 {
+				return rest[:slashIdx]
+			}
+		}
+	}
+	return ""
 }
 
 func parseCPUs(s string) int64 {

@@ -4,7 +4,7 @@ FROM alpine:latest
 # Install runtime dependencies
 # ca-certificates for HTTPS
 # docker-cli to interact with mounted docker.sock
-RUN apk add --no-cache ca-certificates docker-cli docker-cli-compose docker-cli-buildx tzdata
+RUN apk add --no-cache ca-certificates docker-cli docker-cli-compose docker-cli-buildx tzdata iptables ipset
 
 WORKDIR /app
 

@@ -591,7 +591,11 @@ func (s *ContainerService) startInstances(ctx context.Context, settings *model.S
 		go func(inst model.Instance) {
 			defer wg.Done()
 
-			s.applyTCPMSSRules(&inst)
+			if err := s.applyTCPMSSRules(&inst); err != nil {
+				mu.Lock()
+				errs = append(errs, err)
+				mu.Unlock()
+			}
 
 			var tlsFrontDir string
 			if inst.TLSFronting && inst.FakeTLS && frontingOK[inst.Port] {
@@ -704,7 +708,9 @@ func dockerExtraMetricsIPs() []string {
 }
 
 func (s *ContainerService) applyInstanceRuntimeRules(ctx context.Context, inst *model.Instance) (string, error) {
-	s.applyTCPMSSRules(inst)
+	if err := s.applyTCPMSSRules(inst); err != nil {
+		return "", fmt.Errorf("apply runtime rules: %w", err)
+	}
 
 	var tlsFrontDir string
 	if inst.TLSFronting && inst.FakeTLS {
@@ -720,36 +726,48 @@ func (s *ContainerService) applyInstanceRuntimeRules(ctx context.Context, inst *
 
 func (s *ContainerService) cleanupInstanceRuntimeRules(inst *model.Instance) {
 	if inst.TCPMSSEnabled {
-		_ = s.iptables.RemoveTCPMSSRules(inst.Port)
+		if err := s.iptables.RemoveTCPMSSRules(inst.Port); err != nil {
+			statusLog.Warnf("cleanup tcpmss rules for port %d: %v", inst.Port, err)
+		}
 	}
 }
 
-func (s *ContainerService) applyTCPMSSRules(inst *model.Instance) {
+func (s *ContainerService) applyTCPMSSRules(inst *model.Instance) error {
 	if !inst.TCPMSSEnabled {
-		return
+		return nil
 	}
-	_ = s.iptables.RemoveTCPMSSRules(inst.Port)
+	if err := s.iptables.RemoveTCPMSSRules(inst.Port); err != nil {
+		statusLog.Warnf("remove old tcpmss rules for port %d: %v", inst.Port, err)
+	}
 	if err := s.iptables.SetTCPMSSRule(inst.Port, inst.TCPMSS); err != nil {
-		statusLog.Warnf("set TCPMSS rule for port %d: %v", inst.Port, err)
+		return fmt.Errorf("tcpmss port %d mss %d: %w", inst.Port, inst.TCPMSS, err)
 	}
+	return nil
 }
 
 // ReconcileInstanceRules ensures iptables rules match the instance's desired state.
-func (s *ContainerService) ReconcileInstanceRules(ctx context.Context, id int64) {
+func (s *ContainerService) ReconcileInstanceRules(ctx context.Context, id int64) error {
 	inst, err := s.instances.GetByID(ctx, id)
-	if err != nil || inst == nil {
-		return
+	if err != nil {
+		return fmt.Errorf("get instance %d: %w", id, err)
+	}
+	if inst == nil {
+		return fmt.Errorf("instance %d not found", id)
 	}
 	running, _ := s.docker.IsInstanceRunning(ctx, inst.ContainerName())
 	if !running {
-		_ = s.iptables.RemoveTCPMSSRules(inst.Port)
-		return
+		if err := s.iptables.RemoveTCPMSSRules(inst.Port); err != nil {
+			return fmt.Errorf("remove tcpmss rules port %d: %w", inst.Port, err)
+		}
+		return nil
 	}
 	if inst.TCPMSSEnabled {
-		s.applyTCPMSSRules(inst)
-	} else {
-		_ = s.iptables.RemoveTCPMSSRules(inst.Port)
+		return s.applyTCPMSSRules(inst)
 	}
+	if err := s.iptables.RemoveTCPMSSRules(inst.Port); err != nil {
+		return fmt.Errorf("remove tcpmss rules port %d: %w", inst.Port, err)
+	}
+	return nil
 }
 
 func (s *ContainerService) downloadFrontingContent(ctx context.Context, domain, dir string) error {

@@ -7,7 +7,11 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/fussraider/PopuGate/pkg/logger"
 )
+
+var iptablesLog = logger.WithScope("iptables")
 
 // ipsetNameRe validates ipset names: alphanumeric, underscores, hyphens only.
 var ipsetNameRe = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
@@ -21,6 +25,32 @@ type IptablesManager struct{}
 // NewIptablesManager creates a new IptablesManager.
 func NewIptablesManager() *IptablesManager {
 	return &IptablesManager{}
+}
+
+// runCmd executes a command, captures stderr, and logs errors.
+func runCmd(name string, args ...string) error {
+	cmd := exec.Command(name, args...)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		iptablesLog.Errorf("%s %s: %v: %s", name, strings.Join(args, " "), err, strings.TrimSpace(string(out)))
+		return fmt.Errorf("%s %s: %w: %s", name, strings.Join(args, " "), err, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+// runCmdOutput executes a command and returns its stdout, logging errors.
+func runCmdOutput(name string, args ...string) ([]byte, error) {
+	cmd := exec.Command(name, args...)
+	out, err := cmd.Output()
+	if err != nil {
+		stderr := ""
+		if ee, ok := err.(*exec.ExitError); ok {
+			stderr = strings.TrimSpace(string(ee.Stderr))
+		}
+		iptablesLog.Errorf("%s %s: %v: %s", name, strings.Join(args, " "), err, stderr)
+		return nil, fmt.Errorf("%s %s: %w: %s", name, strings.Join(args, " "), err, stderr)
+	}
+	return out, nil
 }
 
 // ValidateIPSetName checks that a name is safe for ipset operations.
@@ -62,8 +92,13 @@ func (m *IptablesManager) CreateIPSet(name string, maxElem int) error {
 	if err := ValidateIPSetName(name); err != nil {
 		return err
 	}
-	return exec.Command("ipset", "create", "-exist", name,
-		"hash:net", "family", "inet", "maxelem", fmt.Sprintf("%d", maxElem)).Run()
+	err := runCmd("ipset", "create", "-exist", name,
+		"hash:net", "family", "inet", "maxelem", fmt.Sprintf("%d", maxElem))
+	if err != nil {
+		return fmt.Errorf("create ipset %q: %w", name, err)
+	}
+	iptablesLog.Debugf("created ipset %s (maxelem %d)", name, maxElem)
+	return nil
 }
 
 // FlushIPSet flushes all entries from an ipset.
@@ -71,7 +106,12 @@ func (m *IptablesManager) FlushIPSet(name string) error {
 	if err := ValidateIPSetName(name); err != nil {
 		return err
 	}
-	return exec.Command("ipset", "flush", name).Run()
+	err := runCmd("ipset", "flush", name)
+	if err != nil {
+		return fmt.Errorf("flush ipset %q: %w", name, err)
+	}
+	iptablesLog.Debugf("flushed ipset %s", name)
+	return nil
 }
 
 // RestoreIPSet loads CIDR entries via ipset restore.
@@ -81,7 +121,6 @@ func (m *IptablesManager) RestoreIPSet(name string, cidrs []string) error {
 	}
 	var b strings.Builder
 	for _, cidr := range cidrs {
-		// Validate CIDR to prevent ipset command injection
 		if _, _, err := net.ParseCIDR(cidr); err != nil {
 			return fmt.Errorf("invalid CIDR %q: %w", cidr, err)
 		}
@@ -89,7 +128,13 @@ func (m *IptablesManager) RestoreIPSet(name string, cidrs []string) error {
 	}
 	cmd := exec.Command("ipset", "restore", "-exist")
 	cmd.Stdin = strings.NewReader(b.String())
-	return cmd.Run()
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		iptablesLog.Errorf("ipset restore %s (%d entries): %v: %s", name, len(cidrs), err, strings.TrimSpace(string(out)))
+		return fmt.Errorf("ipset restore %s: %w: %s", name, err, strings.TrimSpace(string(out)))
+	}
+	iptablesLog.Infof("restored ipset %s (%d entries)", name, len(cidrs))
+	return nil
 }
 
 // DestroyIPSet destroys an ipset.
@@ -97,11 +142,15 @@ func (m *IptablesManager) DestroyIPSet(name string) error {
 	if err := ValidateIPSetName(name); err != nil {
 		return err
 	}
-	return exec.Command("ipset", "destroy", name).Run()
+	err := runCmd("ipset", "destroy", name)
+	if err != nil {
+		return fmt.Errorf("destroy ipset %q: %w", name, err)
+	}
+	iptablesLog.Debugf("destroyed ipset %s", name)
+	return nil
 }
 
 // SetRule creates an iptables rule for geo-blocking.
-// action: "DROP" or "ACCEPT"
 func (m *IptablesManager) SetRule(setName, port, action string) error {
 	if err := ValidateIPSetName(setName); err != nil {
 		return err
@@ -122,11 +171,16 @@ func (m *IptablesManager) SetRule(setName, port, action string) error {
 		return nil // rule exists
 	}
 
-	return exec.Command("iptables", "-I", "INPUT",
+	err := runCmd("iptables", "-I", "INPUT",
 		"-m", "set", "--match-set", setName, "src",
 		"-p", "tcp", "--dport", port,
 		"-m", "comment", "--comment", "popugate-geoblock",
-		"-j", action).Run()
+		"-j", action)
+	if err != nil {
+		return fmt.Errorf("set geoblock rule %s port %s %s: %w", setName, port, action, err)
+	}
+	iptablesLog.Infof("geoblock rule: set %s port %s → %s", setName, port, action)
+	return nil
 }
 
 // SetDefaultDeny adds a default deny rule (for whitelist mode).
@@ -142,35 +196,44 @@ func (m *IptablesManager) SetDefaultDeny(port string) error {
 	if check.Run() == nil {
 		return nil
 	}
-	return exec.Command("iptables", "-A", "INPUT",
+
+	err := runCmd("iptables", "-A", "INPUT",
 		"-p", "tcp", "--dport", port,
 		"-m", "comment", "--comment", "popugate-geoblock-default",
-		"-j", "DROP").Run()
+		"-j", "DROP")
+	if err != nil {
+		return fmt.Errorf("set default deny port %s: %w", port, err)
+	}
+	iptablesLog.Infof("geoblock default deny: port %s → DROP", port)
+	return nil
 }
 
 // RemoveGeoBlockRules removes all popugate geo-block rules.
 func (m *IptablesManager) RemoveGeoBlockRules() error {
-	// List rules with comments
-	out, err := exec.Command("iptables-save").Output()
+	out, err := runCmdOutput("iptables-save")
 	if err != nil {
-		return fmt.Errorf("iptables-save: %w", err)
+		return fmt.Errorf("remove geoblock rules: %w", err)
 	}
 
+	removed := 0
 	for _, line := range strings.Split(string(out), "\n") {
 		if !strings.Contains(line, "popugate-geoblock") {
 			continue
 		}
-		// Only process lines that look like iptables rules (start with -A)
 		if !strings.HasPrefix(strings.TrimSpace(line), "-A ") {
 			continue
 		}
-		// Convert -A to -D for deletion
 		rule := strings.Replace(line, "-A ", "-D ", 1)
 		parts := strings.Fields(rule)
 		if len(parts) > 1 && parts[0] == "-D" {
-			_ = exec.Command("iptables", parts[1:]...).Run()
+			if err := runCmd("iptables", parts[1:]...); err != nil {
+				iptablesLog.Warnf("failed to remove geoblock rule: %v", err)
+			} else {
+				removed++
+			}
 		}
 	}
+	iptablesLog.Infof("removed %d geoblock rules", removed)
 	return nil
 }
 
@@ -201,19 +264,24 @@ func (m *IptablesManager) SetTCPMSSRule(port int, mss int) error {
 		return nil
 	}
 
-	return exec.Command("iptables", "-t", "mangle", "-A", "POSTROUTING",
+	err := runCmd("iptables", "-t", "mangle", "-A", "POSTROUTING",
 		"-p", "tcp", "--sport", portStr,
 		"--tcp-flags", "SYN,RST", "SYN",
 		"-j", "TCPMSS", "--set-mss", mssStr,
-		"-m", "comment", "--comment", comment).Run()
+		"-m", "comment", "--comment", comment)
+	if err != nil {
+		return fmt.Errorf("set tcpmss rule port %d mss %d: %w", port, mss, err)
+	}
+	iptablesLog.Infof("tcpmss rule: port %d mss %d", port, mss)
+	return nil
 }
 
 // RemoveTCPMSSRules removes TCPMSS rules from the mangle table.
 // If port is 0, removes all popugate TCPMSS rules.
 func (m *IptablesManager) RemoveTCPMSSRules(port int) error {
-	out, err := exec.Command("iptables-save", "-t", "mangle").Output()
+	out, err := runCmdOutput("iptables-save", "-t", "mangle")
 	if err != nil {
-		return fmt.Errorf("iptables-save mangle: %w", err)
+		return fmt.Errorf("remove tcpmss rules: %w", err)
 	}
 
 	prefix := "popugate-tcpmss"
@@ -221,6 +289,7 @@ func (m *IptablesManager) RemoveTCPMSSRules(port int) error {
 		prefix = fmt.Sprintf("popugate-tcpmss-%d", port)
 	}
 
+	removed := 0
 	for _, line := range strings.Split(string(out), "\n") {
 		if !strings.Contains(line, prefix) {
 			continue
@@ -232,8 +301,15 @@ func (m *IptablesManager) RemoveTCPMSSRules(port int) error {
 		parts := strings.Fields(rule)
 		if len(parts) > 1 && parts[0] == "-D" {
 			args := append([]string{"-t", "mangle"}, parts[1:]...)
-			_ = exec.Command("iptables", args...).Run()
+			if err := runCmd("iptables", args...); err != nil {
+				iptablesLog.Warnf("failed to remove tcpmss rule: %v", err)
+			} else {
+				removed++
+			}
 		}
+	}
+	if removed > 0 || port > 0 {
+		iptablesLog.Infof("removed %d tcpmss rules (port=%d)", removed, port)
 	}
 	return nil
 }

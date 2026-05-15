@@ -25,7 +25,7 @@ server {
 
     # Proxy API requests to the backend service
     location /api/ {
-        proxy_pass ${BACKEND_URL:-http://popugate-backend:8090/api/};
+        proxy_pass ${BACKEND_URL:-http://host.docker.internal:8090/api/};
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -61,7 +61,7 @@ server {
     }
 
     location /api/ {
-        proxy_pass ${BACKEND_URL:-http://popugate-backend:8090/api/};
+        proxy_pass ${BACKEND_URL:-http://host.docker.internal:8090/api/};
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -78,7 +78,7 @@ EOF
 temp_conf=$(mktemp)
 # Export variables so envsubst can see them
 export DOMAIN_NAME="${DOMAIN_NAME:-localhost}"
-export BACKEND_URL="${BACKEND_URL:-http://popugate-backend:8090/api/}"
+export BACKEND_URL="${BACKEND_URL:-http://host.docker.internal:8090/api/}"
 envsubst '${DOMAIN_NAME} ${BACKEND_URL}' < /etc/nginx/conf.d/default.conf > "$temp_conf"
 mv "$temp_conf" /etc/nginx/conf.d/default.conf
 

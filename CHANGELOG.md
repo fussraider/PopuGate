@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.8] - 2026-05-15
+
+### Changed
+- **Host networking mode**: Backend container now uses `network_mode: host` — required for iptables to operate on the host's network stack. Removed port mapping and Docker DNS from backend
+- **Web-backend connectivity**: Web container connects to backend via `host.docker.internal` instead of Docker service DNS. New `BACKEND_URL` env variable (default: `http://host.docker.internal:8090/api/`)
+- **iptables/ipset bundled**: Added `iptables` and `ipset` packages to the backend Docker image so geo-blocking and TCPMSS work out of the box in Docker deployments
+- **iptables error handling**: All iptables/ipset operations now properly propagate errors with structured logging instead of silently ignoring failures. Geoblock handler returns specific error messages
+- **TCPMSS lifecycle**: `applyTCPMSSRules` and `ReconcileInstanceRules` now return errors. Rules cleanup on instance stop logs warnings on failure
+- **Container self-detection**: Rewritten `detectHostPath` to try multiple container ID sources (hostname, `/proc/self/cgroup`, `/proc/self/mountinfo`) — fixes host path resolution when running in `network_mode: host`
+
+### Added
+- **X-Warning response headers**: Non-critical operation failures (e.g., iptables rule reconciliation on instance update) are surfaced via `X-Warning` HTTP header and shown as toast notifications in the web UI
+
 ## [0.1.7] - 2026-05-15
 
 ### Added
@@ -211,6 +224,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - SQLite storage with WAL mode
 - JWT authentication
 
+[0.1.8]: https://github.com/fussraider/PopuGate/compare/v0.1.7...v0.1.8
 [0.1.7]: https://github.com/fussraider/PopuGate/compare/v0.1.6...v0.1.7
 [0.1.6]: https://github.com/fussraider/PopuGate/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/fussraider/PopuGate/compare/v0.1.4...v0.1.5

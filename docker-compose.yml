@@ -6,6 +6,7 @@ services:
     image: ghcr.io/fussraider/popugate:latest
     container_name: popugate-backend
     restart: unless-stopped
+    network_mode: host
     volumes:
       - ./data:/data
       - /var/run/docker.sock:/var/run/docker.sock
@@ -13,11 +14,6 @@ services:
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-changeme}
       - POPUGATE_DATA_DIR=/data
       - TZ=Europe/Moscow
-      - HOSTNAME=popugate-backend
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    ports:
-      - "9090:9090" # Prometheus metrics
 
   popugate-web:
     build:
@@ -26,11 +22,14 @@ services:
     image: ghcr.io/fussraider/popugate-web:latest
     container_name: popugate-web
     restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "80:80"
       - "8443:8443"
     environment:
       - DOMAIN_NAME=${DOMAIN_NAME:-localhost}
+      - BACKEND_URL=http://host.docker.internal:8090/api/
     volumes:
       - ./certbot/conf:/etc/letsencrypt:ro
       - ./certbot/www:/var/www/certbot:ro

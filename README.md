@@ -33,6 +33,7 @@ services:
     image: ghcr.io/fussraider/popugate:latest
     container_name: popugate-backend
     restart: unless-stopped
+    network_mode: host
     volumes:
       - ./data:/data
       - /var/run/docker.sock:/var/run/docker.sock
@@ -40,21 +41,19 @@ services:
       - ADMIN_PASSWORD=mysecretpassword
       - POPUGATE_DATA_DIR=/data
       - TZ=Europe/Moscow
-      - HOSTNAME=popugate-backend
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    ports:
-      - "9090:9090"
 
   popugate-web:
     image: ghcr.io/fussraider/popugate-web:latest
     container_name: popugate-web
     restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "80:80"
       - "8443:8443"
     environment:
       - DOMAIN_NAME=your-domain.com
+      - BACKEND_URL=http://host.docker.internal:8090/api/
     volumes:
       - ./certbot/conf:/etc/letsencrypt:ro
       - ./certbot/www:/var/www/certbot:ro
@@ -87,7 +86,7 @@ cd web && DOCKER_BUILDKIT=1 docker buildx build -t popugate-web . --load
 ```
 </details>
 
-> **Note:** The proxy engine (`telemt`) runs in `network: host` mode and binds ports (443, etc.) directly on the host machine. Do not forward proxy ports in the `ports` section for `popugate-backend` and do not assign `popugate-web` to port 443.
+> **Note:** The backend container runs in `network_mode: host` — all ports (8090, 443, 9090, etc.) are bound directly on the host. Do not add a `ports` section to `popugate-backend`. The web container connects to the backend via `host.docker.internal` (configurable via the `BACKEND_URL` environment variable).
 
 ---
 
@@ -117,7 +116,7 @@ The backend is available on port `8090`, the proxy engine on port `443`. To run 
 
 | Port | Purpose |
 |------|---------|
-| `8090` | REST API and web interface (binary mode) |
+| `8090` | REST API and web interface |
 | `80` / `8443` | Web interface HTTP/HTTPS (Docker Compose) |
 | `443` | Incoming MTProto connections (bound by the engine) |
 | `9090` | Prometheus metrics |

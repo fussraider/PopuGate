@@ -88,7 +88,7 @@ func (h *GeoblockHandler) Add(c *gin.Context) {
 	// Apply rules
 	if h.geoSvc != nil {
 		if err := h.geoSvc.Apply(ctx); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to apply iptables rules: %v", err)})
 			return
 		}
 	}
@@ -132,7 +132,7 @@ func (h *GeoblockHandler) Remove(c *gin.Context) {
 	// Re-apply rules
 	if h.geoSvc != nil {
 		if err := h.geoSvc.Apply(ctx); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to apply iptables rules: %v", err)})
 			return
 		}
 	}
@@ -156,7 +156,7 @@ func (h *GeoblockHandler) Clear(c *gin.Context) {
 
 	if h.geoSvc != nil {
 		if err := h.geoSvc.Clear(ctx); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to clear iptables rules: %v", err)})
 			return
 		}
 	}
@@ -201,7 +201,7 @@ func (h *GeoblockHandler) SetMode(c *gin.Context) {
 	// Re-apply rules with new mode
 	if h.geoSvc != nil {
 		if err := h.geoSvc.Apply(ctx); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to apply iptables rules: %v", err)})
 			return
 		}
 	}

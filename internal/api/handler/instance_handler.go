@@ -299,7 +299,9 @@ func (h *InstanceHandler) validateAndSaveInstance(c *gin.Context, id int64, inst
 	auditLog(c, "instance.update", fmt.Sprintf("id=%d label=%s port=%d", id, inst.Label, inst.Port))
 	if h.containerSvc != nil {
 		h.containerSvc.RevalidateInstance(c.Request.Context(), id)
-		h.containerSvc.ReconcileInstanceRules(c.Request.Context(), id)
+		if err := h.containerSvc.ReconcileInstanceRules(c.Request.Context(), id); err != nil {
+			c.Header("X-Warning", fmt.Sprintf("iptables rules failed: %v", err))
+		}
 	}
 	c.JSON(http.StatusOK, inst)
 	return true

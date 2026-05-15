@@ -33,6 +33,7 @@ services:
     image: ghcr.io/fussraider/popugate:latest
     container_name: popugate-backend
     restart: unless-stopped
+    network_mode: host
     volumes:
       - ./data:/data
       - /var/run/docker.sock:/var/run/docker.sock
@@ -40,21 +41,19 @@ services:
       - ADMIN_PASSWORD=mysecretpassword
       - POPUGATE_DATA_DIR=/data
       - TZ=Europe/Moscow
-      - HOSTNAME=popugate-backend
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    ports:
-      - "9090:9090"
 
   popugate-web:
     image: ghcr.io/fussraider/popugate-web:latest
     container_name: popugate-web
     restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "80:80"
       - "8443:8443"
     environment:
       - DOMAIN_NAME=your-domain.com
+      - BACKEND_URL=http://host.docker.internal:8090/api/
     volumes:
       - ./certbot/conf:/etc/letsencrypt:ro
       - ./certbot/www:/var/www/certbot:ro
@@ -87,7 +86,7 @@ cd web && DOCKER_BUILDKIT=1 docker buildx build -t popugate-web . --load
 ```
 </details>
 
-> **Примечание:** Прокси-движок (`telemt`) запускается в режиме `network: host` и занимает порты (443 и др.) непосредственно на хост-машине. Не пробрасывайте порты прокси в секции `ports` для `popugate-backend` и не назначайте `popugate-web` на порт 443.
+> **Примечание:** Контейнер бэкенда запускается в `network_mode: host` — все порты (8090, 443, 9090 и др.) привязываются напрямую к хосту. Не добавляйте секцию `ports` для `popugate-backend`. Веб-контейнер подключается к бэкенду через `host.docker.internal` (настраивается через переменную окружения `BACKEND_URL`).
 
 ---
 
@@ -117,7 +116,7 @@ sudo ./popugate server
 
 | Порт | Назначение |
 |------|-----------|
-| `8090` | REST API и веб-интерфейс (бинарный запуск) |
+| `8090` | REST API и веб-интерфейс |
 | `80` / `8443` | Веб-интерфейс HTTP/HTTPS (Docker Compose) |
 | `443` | Входящие подключения MTProto (занят движком) |
 | `9090` | Метрики Prometheus |

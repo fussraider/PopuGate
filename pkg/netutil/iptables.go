@@ -226,7 +226,7 @@ func (m *IptablesManager) RemoveGeoBlockRules() error {
 		rule := strings.Replace(line, "-A ", "-D ", 1)
 		parts := strings.Fields(rule)
 		if len(parts) > 1 && parts[0] == "-D" {
-			if err := runCmd("iptables", parts[1:]...); err != nil {
+			if err := runCmd("iptables", parts...); err != nil {
 				iptablesLog.Warnf("failed to remove geoblock rule: %v", err)
 			} else {
 				removed++
@@ -300,7 +300,7 @@ func (m *IptablesManager) RemoveTCPMSSRules(port int) error {
 		rule := strings.Replace(line, "-A ", "-D ", 1)
 		parts := strings.Fields(rule)
 		if len(parts) > 1 && parts[0] == "-D" {
-			args := append([]string{"-t", "mangle"}, parts[1:]...)
+			args := append([]string{"-t", "mangle"}, parts...)
 			if err := runCmd("iptables", args...); err != nil {
 				iptablesLog.Warnf("failed to remove tcpmss rule: %v", err)
 			} else {

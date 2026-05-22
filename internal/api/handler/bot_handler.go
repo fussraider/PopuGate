@@ -252,7 +252,7 @@ func detectChatID(ctx context.Context, botToken string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var result struct {
 		OK     bool `json:"ok"`

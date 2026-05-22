@@ -9,59 +9,37 @@ import (
 func TestDefaultSettings(t *testing.T) {
 	s := DefaultSettings()
 
-	if s.ProxyPort != 443 {
-		t.Errorf("ProxyPort = %d, want 443", s.ProxyPort)
+	defaults := []struct {
+		name string
+		got  interface{}
+		want interface{}
+	}{
+		{"ProxyPort", s.ProxyPort, 443},
+		{"ProxyMetricsPort", s.ProxyMetricsPort, 9090},
+		{"ProxyDomain", s.ProxyDomain, "cloudflare.com"},
+		{"ProxyConcurrency", s.ProxyConcurrency, 8192},
+		{"FakeCertLen", s.FakeCertLen, 2048},
+		{"GeoblockMode", s.GeoblockMode, "blacklist"},
+		{"MaskingEnabled", s.MaskingEnabled, true},
+		{"MaskingPort", s.MaskingPort, 443},
+		{"UnknownSNIAction", s.UnknownSNIAction, "mask"},
+		{"TelegramInterval", s.TelegramInterval, 6},
+		{"TelegramAlertsEnabled", s.TelegramAlertsEnabled, true},
+		{"TelegramServerLabel", s.TelegramServerLabel, "PopuGate"},
+		{"AutoUpdateEnabled", s.AutoUpdateEnabled, true},
+		{"ReplicationRole", s.ReplicationRole, "standalone"},
+		{"ReplicationSyncInterval", s.ReplicationSyncInterval, 60},
+		{"ReplicationSSHPort", s.ReplicationSSHPort, 22},
+		{"ReplicationSSHUser", s.ReplicationSSHUser, "root"},
+		{"BackupRetentionDays", s.BackupRetentionDays, 7},
 	}
-	if s.ProxyMetricsPort != 9090 {
-		t.Errorf("ProxyMetricsPort = %d, want 9090", s.ProxyMetricsPort)
-	}
-	if s.ProxyDomain != "cloudflare.com" {
-		t.Errorf("ProxyDomain = %q, want cloudflare.com", s.ProxyDomain)
-	}
-	if s.ProxyConcurrency != 8192 {
-		t.Errorf("ProxyConcurrency = %d, want 8192", s.ProxyConcurrency)
-	}
-	if s.FakeCertLen != 2048 {
-		t.Errorf("FakeCertLen = %d, want 2048", s.FakeCertLen)
-	}
-	if s.GeoblockMode != "blacklist" {
-		t.Errorf("GeoblockMode = %q, want blacklist", s.GeoblockMode)
-	}
-	if !s.MaskingEnabled {
-		t.Error("MaskingEnabled = false, want true")
-	}
-	if s.MaskingPort != 443 {
-		t.Errorf("MaskingPort = %d, want 443", s.MaskingPort)
-	}
-	if s.UnknownSNIAction != "mask" {
-		t.Errorf("UnknownSNIAction = %q, want mask", s.UnknownSNIAction)
-	}
-	if s.TelegramInterval != 6 {
-		t.Errorf("TelegramInterval = %d, want 6", s.TelegramInterval)
-	}
-	if !s.TelegramAlertsEnabled {
-		t.Error("TelegramAlertsEnabled = false, want true")
-	}
-	if s.TelegramServerLabel != "PopuGate" {
-		t.Errorf("TelegramServerLabel = %q, want PopuGate", s.TelegramServerLabel)
-	}
-	if !s.AutoUpdateEnabled {
-		t.Error("AutoUpdateEnabled = false, want true")
-	}
-	if s.ReplicationRole != "standalone" {
-		t.Errorf("ReplicationRole = %q, want standalone", s.ReplicationRole)
-	}
-	if s.ReplicationSyncInterval != 60 {
-		t.Errorf("ReplicationSyncInterval = %d, want 60", s.ReplicationSyncInterval)
-	}
-	if s.ReplicationSSHPort != 22 {
-		t.Errorf("ReplicationSSHPort = %d, want 22", s.ReplicationSSHPort)
-	}
-	if s.ReplicationSSHUser != "root" {
-		t.Errorf("ReplicationSSHUser = %q, want root", s.ReplicationSSHUser)
-	}
-	if s.BackupRetentionDays != 7 {
-		t.Errorf("BackupRetentionDays = %d, want 7", s.BackupRetentionDays)
+
+	for _, tt := range defaults {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.got != tt.want {
+				t.Errorf("%s = %v, want %v", tt.name, tt.got, tt.want)
+			}
+		})
 	}
 }
 
@@ -274,7 +252,7 @@ func TestConfigDir(t *testing.T) {
 }
 
 func TestTelemtVersion_Default(t *testing.T) {
-	os.Unsetenv("TELEMT_VERSION")
+	_ = os.Unsetenv("TELEMT_VERSION")
 	got := TelemtVersion()
 	if got != DefaultTelemtVer {
 		t.Errorf("TelemtVersion() = %q, want %q", got, DefaultTelemtVer)
@@ -282,8 +260,8 @@ func TestTelemtVersion_Default(t *testing.T) {
 }
 
 func TestTelemtVersion_Env(t *testing.T) {
-	os.Setenv("TELEMT_VERSION", "3.4.0")
-	defer os.Unsetenv("TELEMT_VERSION")
+	_ = os.Setenv("TELEMT_VERSION", "3.4.0")
+	defer func() { _ = os.Unsetenv("TELEMT_VERSION") }()
 	got := TelemtVersion()
 	if got != "3.4.0" {
 		t.Errorf("TelemtVersion() = %q, want 3.4.0", got)
@@ -291,7 +269,7 @@ func TestTelemtVersion_Env(t *testing.T) {
 }
 
 func TestTelemtCommit_Default(t *testing.T) {
-	os.Unsetenv("TELEMT_COMMIT")
+	_ = os.Unsetenv("TELEMT_COMMIT")
 	got := TelemtCommit()
 	if got != DefaultTelemtRef {
 		t.Errorf("TelemtCommit() = %q, want %q", got, DefaultTelemtRef)
@@ -299,8 +277,8 @@ func TestTelemtCommit_Default(t *testing.T) {
 }
 
 func TestTelemtCommit_Env(t *testing.T) {
-	os.Setenv("TELEMT_COMMIT", "abc123")
-	defer os.Unsetenv("TELEMT_COMMIT")
+	_ = os.Setenv("TELEMT_COMMIT", "abc123")
+	defer func() { _ = os.Unsetenv("TELEMT_COMMIT") }()
 	got := TelemtCommit()
 	if got != "abc123" {
 		t.Errorf("TelemtCommit() = %q, want abc123", got)
@@ -308,7 +286,7 @@ func TestTelemtCommit_Env(t *testing.T) {
 }
 
 func TestTelemtRepo_Default(t *testing.T) {
-	os.Unsetenv("TELEMT_REPO")
+	_ = os.Unsetenv("TELEMT_REPO")
 	got := TelemtRepo()
 	if got != DefaultTelemtURL {
 		t.Errorf("TelemtRepo() = %q, want %q", got, DefaultTelemtURL)
@@ -316,8 +294,8 @@ func TestTelemtRepo_Default(t *testing.T) {
 }
 
 func TestTelemtRepo_Env(t *testing.T) {
-	os.Setenv("TELEMT_REPO", "https://example.com/repo.git")
-	defer os.Unsetenv("TELEMT_REPO")
+	_ = os.Setenv("TELEMT_REPO", "https://example.com/repo.git")
+	defer func() { _ = os.Unsetenv("TELEMT_REPO") }()
 	got := TelemtRepo()
 	if got != "https://example.com/repo.git" {
 		t.Errorf("TelemtRepo() = %q, want https://example.com/repo.git", got)

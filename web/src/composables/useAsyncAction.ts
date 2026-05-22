@@ -1,5 +1,5 @@
-import { ref, type Ref } from 'vue'
-import { useToastStore } from '@/stores/toast'
+import {ref, type Ref} from 'vue'
+import {useToastStore} from '@/stores/toast'
 
 export interface UseAsyncActionOptions {
   successMessage?: string
@@ -18,8 +18,8 @@ export function useAsyncAction(options?: UseAsyncActionOptions) {
       if (msg) toast.success(msg)
       if (options?.modal) options.modal.value = false
       return result
-    } catch (e: any) {
-      toast.error(e.response?.data?.error ?? e.message)
+    } catch {
+      // interceptor handles error toast
       return undefined
     } finally {
       loading.value = false

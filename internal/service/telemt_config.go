@@ -8,7 +8,10 @@ import (
 
 	"github.com/fussraider/PopuGate/internal/model"
 	"github.com/fussraider/PopuGate/internal/store"
+	"github.com/fussraider/PopuGate/pkg/logger"
 )
+
+var telemtCfgLog = logger.WithScope("telemt-config")
 
 // TelemtConfigProvider abstracts how telemt version/commit/repo are resolved.
 type TelemtConfigProvider interface {
@@ -52,7 +55,9 @@ func (c *DBTelemtConfig) refresh() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	if v, _ := c.store.Get(ctx, "telemt_version"); v != "" {
+	if v, err := c.store.Get(ctx, "telemt_version"); err != nil {
+		telemtCfgLog.Warnf("read telemt_version from DB: %v", err)
+	} else if v != "" {
 		c.version = v
 	} else if v := os.Getenv("TELEMT_VERSION"); v != "" {
 		c.version = v
@@ -60,7 +65,9 @@ func (c *DBTelemtConfig) refresh() {
 		c.version = model.DefaultTelemtVer
 	}
 
-	if v, _ := c.store.Get(ctx, "telemt_commit"); v != "" {
+	if v, err := c.store.Get(ctx, "telemt_commit"); err != nil {
+		telemtCfgLog.Warnf("read telemt_commit from DB: %v", err)
+	} else if v != "" {
 		c.commit = v
 	} else if v := os.Getenv("TELEMT_COMMIT"); v != "" {
 		c.commit = v
@@ -68,7 +75,9 @@ func (c *DBTelemtConfig) refresh() {
 		c.commit = model.DefaultTelemtRef
 	}
 
-	if v, _ := c.store.Get(ctx, "telemt_repo"); v != "" {
+	if v, err := c.store.Get(ctx, "telemt_repo"); err != nil {
+		telemtCfgLog.Warnf("read telemt_repo from DB: %v", err)
+	} else if v != "" {
 		c.repo = v
 	} else if v := os.Getenv("TELEMT_REPO"); v != "" {
 		c.repo = v

@@ -115,7 +115,7 @@ func (s *Secret) GetTags() []string {
 		return nil
 	}
 	var tags []string
-	json.Unmarshal([]byte(s.Tags), &tags)
+	_ = json.Unmarshal([]byte(s.Tags), &tags)
 	return tags
 }
 

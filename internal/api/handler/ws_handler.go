@@ -65,7 +65,7 @@ func (h *WSHandler) Handle(c *gin.Context) {
 	if err != nil {
 		return
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
@@ -101,7 +101,7 @@ func (h *WSHandler) HandleEngineUpdate(c *gin.Context) {
 	if err != nil {
 		return
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	ch, unsubscribe := h.telemt.Subscribe()
 	defer unsubscribe()

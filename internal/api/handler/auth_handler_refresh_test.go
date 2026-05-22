@@ -24,7 +24,7 @@ func TestRefresh_RejectsReuse(t *testing.T) {
 
 	// Setup password
 	hash, _ := bcrypt.GenerateFromPassword([]byte("testpass123"), bcrypt.MinCost)
-	settingsStore.SetAuthPasswordHash(context.Background(), string(hash))
+	_ = settingsStore.SetAuthPasswordHash(context.Background(), string(hash))
 
 	r := gin.New()
 	r.POST("/auth/login", handler.Login)
@@ -38,7 +38,7 @@ func TestRefresh_RejectsReuse(t *testing.T) {
 	r.ServeHTTP(loginW, loginReq)
 
 	var loginResp map[string]interface{}
-	json.Unmarshal(loginW.Body.Bytes(), &loginResp)
+	_ = json.Unmarshal(loginW.Body.Bytes(), &loginResp)
 	refreshToken := loginResp["refresh_token"].(string)
 
 	// First refresh — should succeed
@@ -63,7 +63,7 @@ func TestRefresh_RejectsReuse(t *testing.T) {
 	}
 
 	var resp map[string]string
-	json.Unmarshal(w2.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w2.Body.Bytes(), &resp)
 	if resp["error"] != "refresh token already used" {
 		t.Errorf("unexpected error message: %s", resp["error"])
 	}

@@ -568,8 +568,8 @@ async function handleSubmit() {
     }
     modalOpen.value = false
     await Promise.all([store.load(), proxyStore.loadStatus()])
-  } catch (e: any) {
-    toast.error(e.response?.data?.error || t('common.error'))
+  } catch {
+    // interceptor handles error toast
   } finally {
     submitting.value = false
   }
@@ -580,8 +580,8 @@ async function handleRemove(item: Instance) {
   try {
     await store.removeById(item.id)
     toast.success(t('instances.removed_success', { label: item.label }))
-  } catch (e: any) {
-    toast.error(e.response?.data?.error || t('common.error'))
+  } catch {
+    // interceptor handles error toast
   }
 }
 
@@ -596,8 +596,8 @@ async function handleInstanceAction(item: Instance, action: 'start' | 'stop' | '
     }
     toast.success(messages[action])
     await proxyStore.loadStatus()
-  } catch (e: any) {
-    toast.error(e.response?.data?.error || t('common.error'))
+  } catch {
+    // interceptor handles error toast
   } finally {
     store.setActionLoading(item.id, null)
   }
@@ -608,8 +608,8 @@ async function handleRefreshFronting(item: Instance) {
   try {
     await instancesApi.refreshFronting(item.id)
     toast.success(t('instances.fronting_refreshed', { label: item.label }))
-  } catch (e: any) {
-    toast.error(e.response?.data?.error || t('common.error'))
+  } catch {
+    // interceptor handles error toast
   } finally {
     store.setActionLoading(item.id, null)
   }
@@ -626,8 +626,8 @@ async function globalAction(action: 'start' | 'stop' | 'restart' | 'reload') {
     }
     toast.success(labels[action])
     await store.load()
-  } catch (e: any) {
-    toast.error(e.response?.data?.error ?? e.message)
+  } catch {
+    // interceptor handles error toast
   }
 }
 
@@ -643,8 +643,8 @@ async function handleBulkAction(action: 'start' | 'stop' | 'reload') {
     toast.success(labels[action])
     selectedIds.value = new Set()
     await Promise.all([store.load(), proxyStore.loadStatus()])
-  } catch (e: any) {
-    toast.error(e.response?.data?.error || t('common.error'))
+  } catch {
+    // interceptor handles error toast
   }
 }
 
@@ -655,8 +655,8 @@ async function handleBulkToggle(enabled: boolean) {
     toast.success(enabled ? t('instances.bulk_enabled', { count }) : t('instances.bulk_disabled', { count }))
     selectedIds.value = new Set()
     await store.load()
-  } catch (e: any) {
-    toast.error(e.response?.data?.error || t('common.error'))
+  } catch {
+    // interceptor handles error toast
   }
 }
 

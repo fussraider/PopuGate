@@ -261,7 +261,6 @@ async function handleToggle(task: SchedulerTask) {
     )
   } catch (e: any) {
     await schedulerStore.load()
-    toast.error(e.response?.data?.error ?? e.message)
   }
 }
 
@@ -294,8 +293,8 @@ async function handleSaveSchedule() {
     )
     toast.success(t('scheduler.schedule_updated'))
     showEditModal.value = false
-  } catch (e: any) {
-    toast.error(e.response?.data?.error ?? e.message)
+  } catch {
+    // interceptor handles error toast
   } finally {
     submitting.value = false
   }

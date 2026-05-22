@@ -161,7 +161,7 @@ async function handleAdd() {
       })
     })
     toast.success(t('templates.created_success', { name: addModal.form.value.name }))
-  } catch (e: any) { toast.error(e.response?.data?.error ?? e.message) }
+  } catch { /* interceptor handles error toast */ }
 }
 
 // Remove
@@ -171,7 +171,7 @@ async function handleRemove(name: string) {
   try {
     await templatesStore.remove(name)
     toast.success(t('templates.removed_success', { name }))
-  } catch (e: any) { toast.error(e.response?.data?.error ?? e.message) }
+  } catch { /* interceptor handles error toast */ }
 }
 
 // Apply
@@ -191,7 +191,7 @@ async function handleApply() {
     await templatesStore.apply(applyTemplateName.value, applyTarget.value)
     toast.success(t('templates.apply_success', { label: applyTarget.value }))
     applyModal.value = false
-  } catch (e: any) { toast.error(e.response?.data?.error ?? e.message) }
+  } catch { /* interceptor handles error toast */ }
 }
 
 onMounted(() => {

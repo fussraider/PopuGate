@@ -90,7 +90,7 @@ func TestHealthHandler_Check_VersionFields(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 
 	// These fields should always be present
 	requiredFields := []string{"status", "version", "commit", "version_url"}

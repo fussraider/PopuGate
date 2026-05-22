@@ -11,7 +11,7 @@ import (
 )
 
 var (
-	metricRe = regexp.MustCompile(`^(\w+)(?:\{([^}]*)\})?\s+([\d.eE+-]+|NaN)`)
+	metricRe = regexp.MustCompile(`^(\w+)(?:\{([^}]*)\})?\s+([\d.eE+-]+|[+-]?Inf|NaN)`)
 	labelRe  = regexp.MustCompile(`(\w+)="([^"]*)"`)
 )
 
@@ -59,51 +59,36 @@ func ExtractTelemtMetrics(metrics []ParsedMetric) *model.LiveMetrics {
 		UserMetrics: make(map[string]*model.UserLiveMetrics),
 	}
 
-	for _, m := range metrics {
-		switch m.Name {
-		case "telemt_uptime_seconds":
-			lm.UptimeSeconds = m.Value
-		case "telemt_connections_current":
-			lm.ConnsCurrent = m.Value
-		case "telemt_connections_total":
-			lm.ConnsTotal = m.Value
-		case "telemt_connections_bad_total":
-			lm.ConnsBadTotal = m.Value
-		case "telemt_connections_me_current":
-			lm.ConnsMECurrent = m.Value
-		case "telemt_connections_direct_current":
-			lm.ConnsDirectCurrent = m.Value
-		case "telemt_upstream_connect_attempt_total":
-			lm.UpstreamAttemptTotal = m.Value
-		case "telemt_upstream_connect_success_total":
-			lm.UpstreamSuccessTotal = m.Value
-		case "telemt_upstream_connect_fail_total":
-			lm.UpstreamFailTotal = m.Value
-		case "telemt_me_writers_active":
-			lm.MEWritersActive = m.Value
-		case "telemt_me_writers_warm":
-			lm.MEWritersWarm = m.Value
+	scalarFields := map[string]*float64{
+		"telemt_uptime_seconds":                 &lm.UptimeSeconds,
+		"telemt_connections_current":            &lm.ConnsCurrent,
+		"telemt_connections_total":              &lm.ConnsTotal,
+		"telemt_connections_bad_total":          &lm.ConnsBadTotal,
+		"telemt_connections_me_current":         &lm.ConnsMECurrent,
+		"telemt_connections_direct_current":     &lm.ConnsDirectCurrent,
+		"telemt_upstream_connect_attempt_total": &lm.UpstreamAttemptTotal,
+		"telemt_upstream_connect_success_total": &lm.UpstreamSuccessTotal,
+		"telemt_upstream_connect_fail_total":    &lm.UpstreamFailTotal,
+		"telemt_me_writers_active":              &lm.MEWritersActive,
+		"telemt_me_writers_warm":                &lm.MEWritersWarm,
+	}
 
-		// Per-user metrics
-		case "telemt_user_octets_from_client":
+	userFields := map[string]func(*model.UserLiveMetrics, float64){
+		"telemt_user_octets_from_client":  func(u *model.UserLiveMetrics, v float64) { u.OctetsFromClient = v },
+		"telemt_user_octets_to_client":    func(u *model.UserLiveMetrics, v float64) { u.OctetsToClient = v },
+		"telemt_user_connections_current": func(u *model.UserLiveMetrics, v float64) { u.Connections = v },
+		"telemt_user_unique_ips_current":  func(u *model.UserLiveMetrics, v float64) { u.UniqueIPs = v },
+	}
+
+	for _, m := range metrics {
+		if ptr, ok := scalarFields[m.Name]; ok {
+			*ptr = m.Value
+			continue
+		}
+		if fn, ok := userFields[m.Name]; ok {
 			if user, ok := m.Labels["user"]; ok {
 				ensureUser(lm, user)
-				lm.UserMetrics[user].OctetsFromClient = m.Value
-			}
-		case "telemt_user_octets_to_client":
-			if user, ok := m.Labels["user"]; ok {
-				ensureUser(lm, user)
-				lm.UserMetrics[user].OctetsToClient = m.Value
-			}
-		case "telemt_user_connections_current":
-			if user, ok := m.Labels["user"]; ok {
-				ensureUser(lm, user)
-				lm.UserMetrics[user].Connections = m.Value
-			}
-		case "telemt_user_unique_ips_current":
-			if user, ok := m.Labels["user"]; ok {
-				ensureUser(lm, user)
-				lm.UserMetrics[user].UniqueIPs = m.Value
+				fn(lm.UserMetrics[user], m.Value)
 			}
 		}
 	}

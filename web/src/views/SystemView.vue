@@ -226,8 +226,8 @@ async function handleInstall() {
   try {
     await systemStore.installService()
     toast.success(t('system.installed_success'))
-  } catch (e: any) {
-    toast.error(e.response?.data?.error || e.message)
+  } catch {
+    // interceptor handles error toast
   }
 }
 
@@ -236,8 +236,8 @@ async function handleUninstall() {
   try {
     await systemStore.uninstallService()
     toast.success(t('system.uninstalled_success'))
-  } catch (e: any) {
-    toast.error(e.response?.data?.error || e.message)
+  } catch {
+    // interceptor handles error toast
   }
 }
 
@@ -245,8 +245,8 @@ async function handleRestart() {
   try {
     await systemStore.restartService()
     toast.success(t('system.restart_success'))
-  } catch (e: any) {
-    toast.error(e.response?.data?.error || e.message)
+  } catch {
+    // interceptor handles error toast
   }
 }
 
@@ -254,8 +254,8 @@ async function handleReload() {
   try {
     await systemStore.reloadService()
     toast.success(t('system.reload_success'))
-  } catch (e: any) {
-    toast.error(e.response?.data?.error || e.message)
+  } catch {
+    // interceptor handles error toast
   }
 }
 

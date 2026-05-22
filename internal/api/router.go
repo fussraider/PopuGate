@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	swaggerFiles "github.com/swaggo/files"
@@ -89,7 +90,7 @@ func SetupRouter(cfg RouterConfig) *gin.Engine {
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	// Auth endpoints (no auth, rate-limited)
-	authLimiter := NewIPRateLimiter(rate.Every(0), 10) // 10 requests per second per IP
+	authLimiter := NewIPRateLimiter(rate.Every(time.Second), 10) // 10 requests per second per IP
 	authHandler := handler.NewAuthHandler(cfg.Settings, cfg.Blocklist)
 	auth := r.Group("/api/v1/auth")
 	auth.Use(RateLimitMiddleware(authLimiter))
@@ -97,7 +98,6 @@ func SetupRouter(cfg RouterConfig) *gin.Engine {
 		auth.POST("/setup", authHandler.Setup)
 		auth.POST("/login", authHandler.Login)
 		auth.POST("/refresh", authHandler.Refresh)
-		auth.POST("/logout", authHandler.Logout)
 		auth.PUT("/password", AuthMiddleware(cfg.JWTSecret, cfg.Blocklist), authHandler.ChangePassword)
 	}
 
@@ -116,6 +116,9 @@ func SetupRouter(cfg RouterConfig) *gin.Engine {
 		protected.GET("/config", configHandler.GetAll)
 		protected.PUT("/config", configHandler.Update)
 		protected.GET("/config/:key", configHandler.GetKey)
+
+		// Auth (authenticated)
+		protected.POST("/auth/logout", authHandler.Logout)
 
 		// Secrets — static paths before :label
 		secretHandler := handler.NewSecretHandler(cfg.SecretSvc, cfg.Settings)
@@ -180,7 +183,7 @@ func SetupRouter(cfg RouterConfig) *gin.Engine {
 		protected.GET("/instances/:id/logs", instanceHandler.InstanceLogs)
 
 		// Proxy control
-		proxyHandler := handler.NewProxyHandler(cfg.ContainerSvc, cfg.Secrets, cfg.Settings, cfg.SecretSvc)
+		proxyHandler := handler.NewProxyHandler(cfg.ContainerSvc, cfg.Settings, cfg.SecretSvc)
 		proxyHandler.SetDockerClient(cfg.Docker)
 		proxyHandler.SetInstanceStore(cfg.Instances)
 		protected.POST("/proxy/start", proxyHandler.Start)

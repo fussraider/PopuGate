@@ -231,7 +231,7 @@ func (s *BackupStore) Delete(ctx context.Context, filename string) error {
 		return fmt.Errorf("invalid filename: %s", filename)
 	}
 	path := filepath.Join(s.backupsDir, filename)
-	os.Remove(path + ".sha256") // clean sidecar
+	_ = os.Remove(path + ".sha256") // clean sidecar
 	return os.Remove(path)
 }
 
@@ -267,7 +267,7 @@ func (s *BackupStore) CleanOld(ctx context.Context, maxAge time.Duration) (int, 
 			if err := os.Remove(filepath.Join(s.backupsDir, e.Name())); err != nil {
 				return deleted, fmt.Errorf("remove %s: %w", e.Name(), err)
 			}
-			os.Remove(filepath.Join(s.backupsDir, e.Name()+".sha256"))
+			_ = os.Remove(filepath.Join(s.backupsDir, e.Name()+".sha256"))
 			deleted++
 		}
 	}
@@ -293,83 +293,24 @@ func (s *BackupStore) createTarGz(outputPath string, includes []string, manifest
 		return err
 	}
 	defer func() {
-		f.Close()
+		_ = f.Close()
 		if retErr != nil {
-			os.Remove(tmpPath)
+			_ = os.Remove(tmpPath)
 		}
 	}()
 
 	gw := gzip.NewWriter(f)
 	tw := tar.NewWriter(gw)
 
-	// Add manifest first
-	if manifest != nil {
-		manifestData, err := json.MarshalIndent(manifest, "", "  ")
-		if err != nil {
-			return fmt.Errorf("marshal manifest: %w", err)
-		}
-		if err := tw.WriteHeader(&tar.Header{
-			Name:    "manifest.json",
-			Mode:    0644,
-			Size:    int64(len(manifestData)),
-			ModTime: time.Now(),
-		}); err != nil {
-			return err
-		}
-		if _, err := tw.Write(manifestData); err != nil {
-			return err
-		}
+	if err := s.writeManifest(tw, manifest); err != nil {
+		return err
 	}
-
 	for _, rel := range includes {
-		path := filepath.Join(s.baseDir, rel)
-		if _, err := os.Stat(path); err != nil {
-			continue // skip missing files
-		}
-
-		if rel == "settings.db" {
-			if err := s.addDBToTar(tw, path); err != nil {
-				return err
-			}
-			continue
-		}
-
-		err = filepath.Walk(path, func(file string, info os.FileInfo, err error) error {
-			if err != nil {
-				return err
-			}
-			header, err := tar.FileInfoHeader(info, "")
-			if err != nil {
-				return err
-			}
-
-			relPath, err := filepath.Rel(s.baseDir, file)
-			if err != nil {
-				return err
-			}
-			header.Name = relPath
-
-			if err := tw.WriteHeader(header); err != nil {
-				return err
-			}
-			if info.IsDir() {
-				return nil
-			}
-
-			fileIn, err := os.Open(file)
-			if err != nil {
-				return err
-			}
-			_, err = io.Copy(tw, fileIn)
-			fileIn.Close()
-			return err
-		})
-		if err != nil {
+		if err := s.addToArchive(tw, rel); err != nil {
 			return err
 		}
 	}
 
-	// Flush and close writers in order — check errors
 	if err := tw.Close(); err != nil {
 		return fmt.Errorf("close tar writer: %w", err)
 	}
@@ -380,19 +321,79 @@ func (s *BackupStore) createTarGz(outputPath string, includes []string, manifest
 		return fmt.Errorf("close temp file: %w", err)
 	}
 
-	// Finalize: encrypt or rename
+	return s.finalizeArchive(tmpPath, outputPath)
+}
+
+func (s *BackupStore) writeManifest(tw *tar.Writer, manifest *Manifest) error {
+	if manifest == nil {
+		return nil
+	}
+	manifestData, err := json.MarshalIndent(manifest, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal manifest: %w", err)
+	}
+	if err := tw.WriteHeader(&tar.Header{
+		Name:    "manifest.json",
+		Mode:    0644,
+		Size:    int64(len(manifestData)),
+		ModTime: time.Now(),
+	}); err != nil {
+		return err
+	}
+	_, err = tw.Write(manifestData)
+	return err
+}
+
+func (s *BackupStore) addToArchive(tw *tar.Writer, rel string) error {
+	path := filepath.Join(s.baseDir, rel)
+	if _, err := os.Stat(path); err != nil {
+		return nil // skip missing files
+	}
+	if rel == "settings.db" {
+		return s.addDBToTar(tw, path)
+	}
+	return s.addTreeToTar(tw, path)
+}
+
+func (s *BackupStore) addTreeToTar(tw *tar.Writer, root string) error {
+	return filepath.Walk(root, func(file string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		header, err := tar.FileInfoHeader(info, "")
+		if err != nil {
+			return err
+		}
+		relPath, err := filepath.Rel(s.baseDir, file)
+		if err != nil {
+			return err
+		}
+		header.Name = relPath
+		if err := tw.WriteHeader(header); err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return nil
+		}
+		fileIn, err := os.Open(file)
+		if err != nil {
+			return err
+		}
+		_, err = io.Copy(tw, fileIn)
+		_ = fileIn.Close()
+		return err
+	})
+}
+
+func (s *BackupStore) finalizeArchive(tmpPath, outputPath string) error {
 	if s.encryptionKey != nil {
 		if err := s.encryptFile(tmpPath, outputPath); err != nil {
 			return err
 		}
-		os.Remove(tmpPath)
-	} else {
-		if err := os.Rename(tmpPath, outputPath); err != nil {
-			return err
-		}
+		_ = os.Remove(tmpPath)
+		return nil
 	}
-
-	return nil
+	return os.Rename(tmpPath, outputPath)
 }
 
 // addDBToTar creates a consistent database snapshot using VACUUM INTO.
@@ -401,15 +402,15 @@ func (s *BackupStore) addDBToTar(tw *tar.Writer, dbPath string) error {
 	if err != nil {
 		return s.addFileToTar(tw, dbPath, "settings.db")
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	tmpDB, err := os.CreateTemp("", "backup-*.db")
 	if err != nil {
 		return s.addFileToTar(tw, dbPath, "settings.db")
 	}
 	tmpPath := tmpDB.Name()
-	tmpDB.Close()
-	defer os.Remove(tmpPath)
+	_ = tmpDB.Close()
+	defer func() { _ = os.Remove(tmpPath) }()
 
 	// Sanitize path for VACUUM INTO — escape single quotes
 	safePath := strings.ReplaceAll(tmpPath, "'", "''")
@@ -442,7 +443,7 @@ func (s *BackupStore) addFileToTar(tw *tar.Writer, filePath, tarName string) err
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	_, err = io.Copy(tw, file)
 	return err
@@ -477,7 +478,7 @@ func (s *BackupStore) encryptFile(inputPath, outputPath string) error {
 	if err != nil {
 		return err
 	}
-	defer outFile.Close()
+	defer func() { _ = outFile.Close() }()
 
 	if _, err := outFile.Write(nonce); err != nil {
 		return err
@@ -503,7 +504,7 @@ func (s *BackupStore) decryptFile(inputPath, outputPath string) error {
 	if err != nil {
 		return err
 	}
-	defer inFile.Close()
+	defer func() { _ = inFile.Close() }()
 
 	nonce := make([]byte, 12) // GCM standard nonce size
 	if _, err := io.ReadFull(inFile, nonce); err != nil {
@@ -548,39 +549,22 @@ func (s *BackupStore) decryptFile(inputPath, outputPath string) error {
 }
 
 func (s *BackupStore) extractTarGz(path string) error {
-	var f *os.File
-	var cleanup func()
-
-	if s.encryptionKey != nil {
-		tmpPath := path + ".decrypted"
-		if err := s.decryptFile(path, tmpPath); err != nil {
-			return fmt.Errorf("decrypt backup: %w", err)
-		}
-		cleanup = func() { os.Remove(tmpPath) }
-		decFile, err := os.Open(tmpPath)
-		if err != nil {
-			cleanup()
-			return err
-		}
-		f = decFile
-		defer func() {
-			f.Close()
-			cleanup()
-		}()
-	} else {
-		plainFile, err := os.Open(path)
-		if err != nil {
-			return err
-		}
-		f = plainFile
-		defer f.Close()
+	f, cleanup, err := s.openArchive(path)
+	if err != nil {
+		return err
 	}
+	defer func() {
+		_ = f.Close()
+		if cleanup != nil {
+			cleanup()
+		}
+	}()
 
 	gr, err := gzip.NewReader(f)
 	if err != nil {
 		return err
 	}
-	defer gr.Close()
+	defer func() { _ = gr.Close() }()
 
 	tr := tar.NewReader(gr)
 	for {
@@ -591,45 +575,69 @@ func (s *BackupStore) extractTarGz(path string) error {
 		if err != nil {
 			return err
 		}
-
-		// Skip manifest.json - we don't need to extract it
 		if header.Name == "manifest.json" {
 			continue
 		}
-
-		target := filepath.Join(s.baseDir, header.Name)
-
-		// Prevent tar-slip: ensure extracted path stays within baseDir
-		if !strings.HasPrefix(filepath.Clean(target), filepath.Clean(s.baseDir)+string(os.PathSeparator)) {
-			return fmt.Errorf("refusing to extract path outside base dir: %s", header.Name)
+		if err := s.extractEntry(tr, header); err != nil {
+			return err
 		}
+	}
+	return nil
+}
 
-		switch header.Typeflag {
-		case tar.TypeDir:
-			if err := os.MkdirAll(target, 0755); err != nil {
-				return err
-			}
-		case tar.TypeReg:
-			if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
-				return err
-			}
-			// Write to temp file then rename for atomicity; ignore tar mode for safety
-			tmpTarget := target + ".tmp"
-			fout, err := os.OpenFile(tmpTarget, os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0644)
-			if err != nil {
-				return err
-			}
-			if _, err := io.Copy(fout, tr); err != nil {
-				fout.Close()
-				os.Remove(tmpTarget)
-				return err
-			}
-			fout.Close()
-			if err := os.Rename(tmpTarget, target); err != nil {
-				os.Remove(tmpTarget)
-				return err
-			}
-		}
+func (s *BackupStore) openArchive(path string) (*os.File, func(), error) {
+	if s.encryptionKey == nil {
+		f, err := os.Open(path)
+		return f, nil, err
+	}
+	tmpPath := path + ".decrypted"
+	if err := s.decryptFile(path, tmpPath); err != nil {
+		return nil, nil, fmt.Errorf("decrypt backup: %w", err)
+	}
+	cleanup := func() { _ = os.Remove(tmpPath) }
+	f, err := os.Open(tmpPath)
+	if err != nil {
+		cleanup()
+		return nil, nil, err
+	}
+	return f, cleanup, nil
+}
+
+func (s *BackupStore) extractEntry(tr *tar.Reader, header *tar.Header) error {
+	target := filepath.Join(s.baseDir, header.Name)
+	if !strings.HasPrefix(filepath.Clean(target), filepath.Clean(s.baseDir)+string(os.PathSeparator)) {
+		return fmt.Errorf("refusing to extract path outside base dir: %s", header.Name)
+	}
+	switch header.Typeflag {
+	case tar.TypeDir:
+		return os.MkdirAll(target, 0755)
+	case tar.TypeReg:
+		return s.extractFileEntry(tr, target)
+	}
+	return nil
+}
+
+func (s *BackupStore) extractFileEntry(tr *tar.Reader, target string) error {
+	if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+		return err
+	}
+	tmpTarget := target + ".tmp"
+	fout, err := os.OpenFile(tmpTarget, os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0644)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(fout, tr); err != nil {
+		_ = fout.Close()
+		_ = os.Remove(tmpTarget)
+		return err
+	}
+	if err := fout.Close(); err != nil {
+		_ = os.Remove(tmpTarget)
+		return fmt.Errorf("close extracted file: %w", err)
+	}
+	if err := os.Rename(tmpTarget, target); err != nil {
+		_ = os.Remove(tmpTarget)
+		return err
 	}
 	return nil
 }
@@ -643,19 +651,19 @@ func (s *BackupStore) readManifestFromBackup(path string) (*Manifest, error) {
 		if err := s.decryptFile(path, tmpPath); err != nil {
 			return nil, err
 		}
-		defer os.Remove(tmpPath)
+		defer func() { _ = os.Remove(tmpPath) }()
 		f, err := os.Open(tmpPath)
 		if err != nil {
 			return nil, err
 		}
-		defer f.Close()
+		defer func() { _ = f.Close() }()
 		reader = f
 	} else {
 		f, err := os.Open(path)
 		if err != nil {
 			return nil, err
 		}
-		defer f.Close()
+		defer func() { _ = f.Close() }()
 		reader = f
 	}
 
@@ -663,7 +671,7 @@ func (s *BackupStore) readManifestFromBackup(path string) (*Manifest, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer gr.Close()
+	defer func() { _ = gr.Close() }()
 
 	tr := tar.NewReader(gr)
 	for {
@@ -698,7 +706,7 @@ func (s *BackupStore) getCurrentSchemaVersion() int {
 	if err != nil {
 		return 9 // Default to latest known version
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	var version int
 	err = db.QueryRow("SELECT MAX(version) FROM schema_version").Scan(&version)
@@ -726,7 +734,7 @@ func (s *BackupStore) calculateFileChecksum(path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	hash := sha256.New()
 	if _, err := io.Copy(hash, file); err != nil {

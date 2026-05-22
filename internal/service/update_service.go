@@ -19,6 +19,8 @@ import (
 	"time"
 
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/mount"
+	"github.com/docker/go-connections/nat"
 	"github.com/fussraider/PopuGate/internal/model"
 	"github.com/fussraider/PopuGate/pkg/dockerutil"
 	"github.com/fussraider/PopuGate/pkg/logger"
@@ -172,7 +174,7 @@ func (s *UpdateService) ApplyBinary(ctx context.Context) (*UpdateResult, error) 
 	if err != nil {
 		return nil, fmt.Errorf("download: %w", err)
 	}
-	defer os.Remove(tmpFile)
+	defer func() { _ = os.Remove(tmpFile) }()
 
 	if err := os.Chmod(tmpFile, 0755); err != nil {
 		return nil, fmt.Errorf("chmod: %w", err)
@@ -245,7 +247,7 @@ func (s *UpdateService) updateWebDist(ctx context.Context, release *githubReleas
 		log.Warnf("web dist download failed: %v", err)
 		return
 	}
-	defer os.Remove(tmpWeb)
+	defer func() { _ = os.Remove(tmpWeb) }()
 	if err := extractWebDist(tmpWeb, destDir); err != nil {
 		log.Warnf("web dist extraction failed: %v", err)
 		return
@@ -277,7 +279,7 @@ func (s *UpdateService) ApplyDocker(ctx context.Context) (*UpdateResult, error) 
 		return nil, fmt.Errorf("pull image %s: %w", newImage, err)
 	}
 	if _, err := io.Copy(io.Discard, reader); err != nil {
-		reader.Close()
+		_ = reader.Close()
 		return nil, fmt.Errorf("read pull response for %s: %w", newImage, err)
 	}
 	if err := reader.Close(); err != nil {
@@ -413,6 +415,11 @@ func (s *UpdateService) RestartSelfDocker(newImage string) error {
 }
 
 func (s *UpdateService) streamSidecarLogs(ctx context.Context, containerID string) {
+	defer func() {
+		if r := recover(); r != nil {
+			logger.WithScope("updater").Errorf("goroutine panic (stream sidecar logs): %v", r)
+		}
+	}()
 	log := logger.WithScope("updater")
 	opts := container.LogsOptions{
 		Follow:     true,
@@ -425,7 +432,7 @@ func (s *UpdateService) streamSidecarLogs(ctx context.Context, containerID strin
 		log.Warnf("sidecar logs: %v", err)
 		return
 	}
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 
 	scanner := bufio.NewScanner(reader)
 	for scanner.Scan() {
@@ -549,9 +556,25 @@ func (s *UpdateService) buildRecreateScript(containerName string, inspect contai
 
 // buildRecreateScriptInner generates stop/rm/create/start commands for one container.
 func (s *UpdateService) buildRecreateScriptInner(containerName string, inspect container.InspectResponse, newImage string) string {
+	flags := buildContainerFlags(containerName, inspect)
+	cmdStr := buildCmdString(inspect.Config.Cmd)
+	argsStr := strings.Join(flags, " ")
+
+	var script strings.Builder
+	fmt.Fprintf(&script, "echo '[popugate-updater] Stopping old container: %s'\n", containerName)
+	fmt.Fprintf(&script, "docker stop -t 10 %s\n", shellescape(containerName))
+	fmt.Fprintf(&script, "echo '[popugate-updater] Removing old container: %s'\n", containerName)
+	fmt.Fprintf(&script, "docker rm %s\n", shellescape(containerName))
+	fmt.Fprintf(&script, "echo '[popugate-updater] Creating new container with image: %s'\n", newImage)
+	fmt.Fprintf(&script, "docker create %s %s %s\n", argsStr, shellescape(newImage), cmdStr)
+	fmt.Fprintf(&script, "echo '[popugate-updater] Starting new container: %s'\n", containerName)
+	fmt.Fprintf(&script, "docker start %s\n", shellescape(containerName))
+	return script.String()
+}
+
+func buildContainerFlags(name string, inspect container.InspectResponse) []string {
 	var flags []string
-	flags = append(flags, "-d")
-	flags = append(flags, fmt.Sprintf("--name %s", shellescape(containerName)))
+	flags = append(flags, "-d", fmt.Sprintf("--name %s", shellescape(name)))
 
 	if inspect.Config.Hostname != "" {
 		flags = append(flags, fmt.Sprintf("--hostname %s", shellescape(inspect.Config.Hostname)))
@@ -575,34 +598,13 @@ func (s *UpdateService) buildRecreateScriptInner(containerName string, inspect c
 	for _, e := range inspect.Config.Env {
 		flags = append(flags, "-e", shellescape(e))
 	}
-	for _, m := range inspect.Mounts {
-		switch m.Type {
-		case "bind":
-			ro := ""
-			if !m.RW {
-				ro = ":ro"
-			}
-			flags = append(flags, "-v", fmt.Sprintf("%s:%s%s", shellescape(m.Source), shellescape(m.Destination), ro))
-		case "volume":
-			flags = append(flags, "-v", fmt.Sprintf("%s:%s", shellescape(m.Name), shellescape(m.Destination)))
-		}
-	}
-	for hostPort, bindings := range inspect.HostConfig.PortBindings {
-		for _, b := range bindings {
-			hostIP := b.HostIP
-			if hostIP == "" {
-				hostIP = "0.0.0.0"
-			}
-			flags = append(flags, "-p", fmt.Sprintf("%s:%s:%s", shellescape(hostIP), shellescape(string(hostPort)), shellescape(b.HostPort)))
-		}
-	}
+	flags = appendMountFlags(flags, inspect.Mounts)
+	flags = appendPortFlags(flags, inspect.HostConfig.PortBindings)
 	for _, eh := range inspect.HostConfig.ExtraHosts {
 		flags = append(flags, "--add-host", shellescape(eh))
 	}
-	if inspect.HostConfig.LogConfig.Config != nil {
-		for k, v := range inspect.HostConfig.LogConfig.Config {
-			flags = append(flags, "--log-opt", shellescape(fmt.Sprintf("%s=%s", k, v)))
-		}
+	for k, v := range inspect.HostConfig.LogConfig.Config {
+		flags = append(flags, "--log-opt", shellescape(fmt.Sprintf("%s=%s", k, v)))
 	}
 	if inspect.HostConfig.Memory != 0 {
 		flags = append(flags, fmt.Sprintf("--memory=%d", inspect.HostConfig.Memory))
@@ -613,25 +615,44 @@ func (s *UpdateService) buildRecreateScriptInner(containerName string, inspect c
 	if inspect.Config.StopSignal != "" {
 		flags = append(flags, fmt.Sprintf("--stop-signal %s", shellescape(inspect.Config.StopSignal)))
 	}
+	return flags
+}
 
-	var cmdParts []string
-	for _, c := range inspect.Config.Cmd {
-		cmdParts = append(cmdParts, shellescape(c))
+func appendMountFlags(flags []string, mounts []container.MountPoint) []string {
+	for _, m := range mounts {
+		switch m.Type {
+		case mount.TypeBind:
+			ro := ""
+			if !m.RW {
+				ro = ":ro"
+			}
+			flags = append(flags, "-v", fmt.Sprintf("%s:%s%s", shellescape(m.Source), shellescape(m.Destination), ro))
+		case mount.TypeVolume:
+			flags = append(flags, "-v", fmt.Sprintf("%s:%s", shellescape(m.Name), shellescape(m.Destination)))
+		}
 	}
+	return flags
+}
 
-	argsStr := strings.Join(flags, " ")
-	cmdStr := strings.Join(cmdParts, " ")
+func appendPortFlags(flags []string, bindings nat.PortMap) []string {
+	for hostPort, portBindings := range bindings {
+		for _, b := range portBindings {
+			hostIP := b.HostIP
+			if hostIP == "" {
+				hostIP = "0.0.0.0"
+			}
+			flags = append(flags, "-p", fmt.Sprintf("%s:%s:%s", shellescape(hostIP), shellescape(string(hostPort)), shellescape(b.HostPort)))
+		}
+	}
+	return flags
+}
 
-	var script strings.Builder
-	fmt.Fprintf(&script, "echo '[popugate-updater] Stopping old container: %s'\n", containerName)
-	fmt.Fprintf(&script, "docker stop -t 10 %s\n", shellescape(containerName))
-	fmt.Fprintf(&script, "echo '[popugate-updater] Removing old container: %s'\n", containerName)
-	fmt.Fprintf(&script, "docker rm %s\n", shellescape(containerName))
-	fmt.Fprintf(&script, "echo '[popugate-updater] Creating new container with image: %s'\n", newImage)
-	fmt.Fprintf(&script, "docker create %s %s %s\n", argsStr, shellescape(newImage), cmdStr)
-	fmt.Fprintf(&script, "echo '[popugate-updater] Starting new container: %s'\n", containerName)
-	fmt.Fprintf(&script, "docker start %s\n", shellescape(containerName))
-	return script.String()
+func buildCmdString(cmd []string) string {
+	var parts []string
+	for _, c := range cmd {
+		parts = append(parts, shellescape(c))
+	}
+	return strings.Join(parts, " ")
 }
 
 // buildDualRecreateScript generates a sidecar script that recreates both
@@ -665,13 +686,13 @@ func extractWebDist(archivePath, targetDir string) error {
 	if err != nil {
 		return fmt.Errorf("open archive: %w", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	gz, err := gzip.NewReader(f)
 	if err != nil {
 		return fmt.Errorf("gzip reader: %w", err)
 	}
-	defer gz.Close()
+	defer func() { _ = gz.Close() }()
 
 	tr := tar.NewReader(gz)
 	for {
@@ -683,21 +704,28 @@ func extractWebDist(archivePath, targetDir string) error {
 			return fmt.Errorf("tar read: %w", err)
 		}
 		target := filepath.Join(targetDir, hdr.Name)
+		if !strings.HasPrefix(filepath.Clean(target), filepath.Clean(targetDir)+string(os.PathSeparator)) {
+			return fmt.Errorf("refusing to extract path outside target dir: %s", hdr.Name)
+		}
 
 		switch hdr.Typeflag {
 		case tar.TypeDir:
-			os.MkdirAll(target, os.FileMode(hdr.Mode))
+			if err := os.MkdirAll(target, os.FileMode(hdr.Mode)); err != nil {
+				return fmt.Errorf("mkdir %s: %w", target, err)
+			}
 		case tar.TypeReg:
-			os.MkdirAll(filepath.Dir(target), 0755)
+			if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+				return fmt.Errorf("mkdir %s: %w", filepath.Dir(target), err)
+			}
 			out, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(hdr.Mode))
 			if err != nil {
 				return fmt.Errorf("create %s: %w", target, err)
 			}
 			if _, err := io.Copy(out, tr); err != nil {
-				out.Close()
+				_ = out.Close()
 				return fmt.Errorf("write %s: %w", target, err)
 			}
-			out.Close()
+			_ = out.Close()
 		}
 	}
 	return nil
@@ -718,7 +746,7 @@ func (s *UpdateService) downloadWebArchive(ctx context.Context, url string, expe
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != 200 {
 		return "", fmt.Errorf("download returned %d", resp.StatusCode)
@@ -731,34 +759,34 @@ func (s *UpdateService) downloadWebArchive(ctx context.Context, url string, expe
 	tmpPath := tmpFile.Name()
 
 	written, err := io.Copy(tmpFile, resp.Body)
-	tmpFile.Close()
+	_ = tmpFile.Close()
 	if err != nil {
-		os.Remove(tmpPath)
+		_ = os.Remove(tmpPath)
 		return "", fmt.Errorf("write download: %w", err)
 	}
 
 	if expectedSHA256 != "" {
 		f, err := os.Open(tmpPath)
 		if err != nil {
-			os.Remove(tmpPath)
+			_ = os.Remove(tmpPath)
 			return "", fmt.Errorf("open for hash: %w", err)
 		}
 		h := sha256.New()
 		if _, err := io.Copy(h, f); err != nil {
-			f.Close()
-			os.Remove(tmpPath)
+			_ = f.Close()
+			_ = os.Remove(tmpPath)
 			return "", fmt.Errorf("hash read: %w", err)
 		}
-		f.Close()
+		_ = f.Close()
 		actualHash := hex.EncodeToString(h.Sum(nil))
 		if !strings.EqualFold(actualHash, expectedSHA256) {
-			os.Remove(tmpPath)
+			_ = os.Remove(tmpPath)
 			return "", fmt.Errorf("SHA256 mismatch: expected %s, got %s", expectedSHA256, actualHash)
 		}
 	}
 
 	if expectedSize > 0 && written != expectedSize {
-		os.Remove(tmpPath)
+		_ = os.Remove(tmpPath)
 		return "", fmt.Errorf("size mismatch: expected %d, got %d", expectedSize, written)
 	}
 
@@ -790,7 +818,7 @@ func (s *UpdateService) fetchRelease(ctx context.Context) (*githubRelease, error
 	if err != nil {
 		return nil, fmt.Errorf("check update: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != 200 {
 		return nil, fmt.Errorf("GitHub API returned %d", resp.StatusCode)
@@ -816,7 +844,7 @@ func (s *UpdateService) downloadAsset(ctx context.Context, url string, expectedS
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != 200 {
 		return "", fmt.Errorf("download returned %d", resp.StatusCode)
@@ -829,39 +857,39 @@ func (s *UpdateService) downloadAsset(ctx context.Context, url string, expectedS
 	tmpPath := tmpFile.Name()
 
 	written, err := io.Copy(tmpFile, resp.Body)
-	tmpFile.Close()
+	_ = tmpFile.Close()
 	if err != nil {
-		os.Remove(tmpPath)
+		_ = os.Remove(tmpPath)
 		return "", fmt.Errorf("write download: %w", err)
 	}
 
 	if expectedSHA256 != "" {
 		f, err := os.Open(tmpPath)
 		if err != nil {
-			os.Remove(tmpPath)
+			_ = os.Remove(tmpPath)
 			return "", fmt.Errorf("open for hash: %w", err)
 		}
 		h := sha256.New()
 		if _, err := io.Copy(h, f); err != nil {
-			f.Close()
-			os.Remove(tmpPath)
+			_ = f.Close()
+			_ = os.Remove(tmpPath)
 			return "", fmt.Errorf("hash read: %w", err)
 		}
-		f.Close()
+		_ = f.Close()
 		actualHash := hex.EncodeToString(h.Sum(nil))
 		if !strings.EqualFold(actualHash, expectedSHA256) {
-			os.Remove(tmpPath)
+			_ = os.Remove(tmpPath)
 			return "", fmt.Errorf("SHA256 mismatch: expected %s, got %s", expectedSHA256, actualHash)
 		}
 	}
 
 	if expectedSize > 0 && written != expectedSize {
-		os.Remove(tmpPath)
+		_ = os.Remove(tmpPath)
 		return "", fmt.Errorf("size mismatch: expected %d, got %d", expectedSize, written)
 	}
 
 	if written < 1<<20 {
-		os.Remove(tmpPath)
+		_ = os.Remove(tmpPath)
 		return "", fmt.Errorf("downloaded file too small (%d bytes), likely corrupted", written)
 	}
 
@@ -879,7 +907,7 @@ func (s *UpdateService) fetchChecksum(ctx context.Context, url, assetName string
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != 200 {
 		return "", fmt.Errorf("checksums download returned %d", resp.StatusCode)
 	}

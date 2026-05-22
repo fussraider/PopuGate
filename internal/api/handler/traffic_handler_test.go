@@ -99,7 +99,7 @@ func TestTrafficHandler_Get_WithTraffic(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 
 	users := resp["users"].([]interface{})
 	if len(users) != 1 {
@@ -123,7 +123,7 @@ func TestTrafficHandler_GetLive_NoService(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp["error"] != "traffic service not available" {
 		t.Errorf("unexpected error: %v", resp["error"])
 	}
@@ -141,7 +141,7 @@ func TestTrafficHandler_GetUser(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 
 	if resp["label"] != "testuser" {
 		t.Errorf("expected label 'testuser', got %v", resp["label"])
@@ -172,7 +172,7 @@ func TestTrafficHandler_GetUser_WithTraffic(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp["label"] != "alice" {
 		t.Errorf("expected label 'alice', got %v", resp["label"])
 	}
@@ -214,7 +214,7 @@ func TestTrafficHandler_GetHistory_InvalidAggregate(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp["error"] != "aggregate must be 'none', 'hour', or 'day'" {
 		t.Errorf("unexpected error: %v", resp["error"])
 	}
@@ -243,7 +243,7 @@ func TestTrafficHandler_GetHistory_ValidParams(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	if _, ok := resp["history"]; !ok {
 		t.Error("expected 'history' key in response")
 	}

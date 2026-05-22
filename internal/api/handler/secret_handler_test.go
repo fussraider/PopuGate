@@ -21,7 +21,7 @@ func setupSecretTestRouter(t *testing.T) (*gin.Engine, *SecretHandler) {
 	secretStore := store.NewSecretStore(db)
 	instanceStore := store.NewInstanceStore(db)
 	settingsStore := store.NewSettingsStore(db)
-	secretSvc := service.NewSecretService(secretStore, instanceStore, settingsStore)
+	secretSvc := service.NewSecretService(secretStore, instanceStore, settingsStore, store.NewTrafficStore(db))
 	handler := NewSecretHandler(secretSvc, settingsStore)
 
 	r := gin.New()
@@ -113,7 +113,7 @@ func TestSecretHandler_Add_Valid(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp["label"] != "testuser" {
 		t.Errorf("expected label 'testuser', got %v", resp["label"])
 	}
@@ -198,7 +198,7 @@ func TestSecretHandler_Get(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp["label"] != "alice" {
 		t.Errorf("expected label 'alice', got %v", resp["label"])
 	}
@@ -241,7 +241,7 @@ func TestSecretHandler_Remove(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp["ok"] != true {
 		t.Error("expected ok=true")
 	}
@@ -291,7 +291,7 @@ func TestSecretHandler_Toggle(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp["ok"] != true {
 		t.Error("expected ok=true")
 	}
@@ -423,7 +423,7 @@ func TestSecretHandler_GetLimits(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp["label"] != "limuser" {
 		t.Errorf("expected label 'limuser', got %v", resp["label"])
 	}
@@ -463,7 +463,7 @@ func TestSecretHandler_UpdateNotes(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp["notes"] != "test notes" {
 		t.Errorf("expected notes 'test notes', got %v", resp["notes"])
 	}
@@ -515,7 +515,7 @@ func TestSecretHandler_ResetAllTraffic(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp["ok"] != true {
 		t.Error("expected ok=true")
 	}
@@ -553,7 +553,7 @@ func TestSecretHandler_Rename(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp["ok"] != true {
 		t.Error("expected ok=true")
 	}
@@ -598,7 +598,7 @@ func TestSecretHandler_Extend(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp["ok"] != true {
 		t.Error("expected ok=true")
 	}
@@ -630,7 +630,7 @@ func TestSecretHandler_DisableExpired(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp["ok"] != true {
 		t.Error("expected ok=true")
 	}

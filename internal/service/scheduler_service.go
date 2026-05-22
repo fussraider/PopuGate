@@ -8,7 +8,10 @@ import (
 
 	"github.com/fussraider/PopuGate/internal/scheduler"
 	"github.com/fussraider/PopuGate/internal/store"
+	"github.com/fussraider/PopuGate/pkg/logger"
 )
+
+var schedulerSvcLog = logger.WithScope("scheduler-svc")
 
 // SchedulerService handles scheduler business logic.
 type SchedulerService struct {
@@ -124,13 +127,16 @@ func (svc *SchedulerService) UpdateTask(ctx context.Context, name string, enable
 
 	defaultSchedule := scheduler.DefaultScheduleFor(name)
 	if ovr.Enabled && (ovr.CustomSchedule == "" || ovr.CustomSchedule == defaultSchedule) {
-		svc.store.DeleteOverride(ctx, name)
+		if err := svc.store.DeleteOverride(ctx, name); err != nil {
+			return fmt.Errorf("delete override for %s: %w", name, err)
+		}
 	} else {
 		if err := svc.store.UpsertOverride(ctx, ovr); err != nil {
 			return fmt.Errorf("save override: %w", err)
 		}
 	}
 
+	schedulerSvcLog.Infof("task %s updated: enabled=%v schedule=%q", name, ovr.Enabled, ovr.CustomSchedule)
 	return svc.applyTaskRuntime(name, ovr)
 }
 

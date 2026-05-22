@@ -219,7 +219,7 @@ async function handleRemove(name: string) {
   try {
     await store.remove(name)
     toast.success(t('upstreams.removed_success', { name }))
-  } catch (e: any) { toast.error(e.response?.data?.error ?? e.message) }
+  } catch { /* interceptor handles error toast */ }
 }
 
 // Modal state
@@ -298,7 +298,7 @@ async function handleSubmit() {
       toast.success(t('upstreams.added_success', { name: form.value.name }))
     }
     modalOpen.value = false
-  } catch (e: any) { toast.error(e.response?.data?.error ?? e.message) }
+  } catch { /* interceptor handles error toast */ }
 }
 
 async function testUpstream(name: string) {
@@ -320,7 +320,7 @@ async function testUpstream(name: string) {
     } else {
       toast.error(t('upstreams.test_failed', { name, error: result?.error ?? 'Unknown error' }))
     }
-  } catch (e: any) { toast.error(t('upstreams.test_failed', { name, error: e.response?.data?.error ?? e.message })) }
+  } catch { /* interceptor handles error toast */ }
 }
 
 onMounted(() => store.load())

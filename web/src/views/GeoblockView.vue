@@ -59,10 +59,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { useI18n } from 'vue-i18n'
-import { useGeoblockStore, useConfigStore } from '@/stores'
-import { Loader2 } from '@lucide/vue'
+import {onMounted, ref} from 'vue'
+import {useI18n} from 'vue-i18n'
+import {useConfigStore, useGeoblockStore} from '@/stores'
+import {Loader2} from '@lucide/vue'
 
 const { t } = useI18n()
 const geoblockStore = useGeoblockStore()
@@ -79,7 +79,11 @@ async function handleAddCountry() {
   const codes = countryInput.value.split(',').map((c) => c.trim().toUpperCase()).filter(Boolean)
   for (const code of codes) {
     if (/^[A-Z]{2}$/.test(code)) {
-      await geoblockStore.addCountry(code)
+      try {
+        await geoblockStore.addCountry(code)
+      } catch {
+        // Error toast shown by API interceptor; continue with remaining codes
+      }
     }
   }
   countryInput.value = ''

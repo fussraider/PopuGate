@@ -54,7 +54,7 @@ func (s *InstanceStore) List(ctx context.Context) ([]model.Instance, error) {
 	if err != nil {
 		return nil, fmt.Errorf("list instances: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	instances := make([]model.Instance, 0)
 	for rows.Next() {
@@ -98,30 +98,6 @@ func (s *InstanceStore) GetByPort(ctx context.Context, port int) (*model.Instanc
 		return nil, fmt.Errorf("get instance port %d: %w", port, err)
 	}
 	return inst, nil
-}
-
-// EnsureDefaultInstance checks if instances table is empty and seeds it from settings.
-func (s *InstanceStore) EnsureDefaultInstance(ctx context.Context, proxyPort, metricsPort int, proxyDomain, maskingHost string, maskingEnabled bool) error {
-	var count int
-	err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM instances").Scan(&count)
-	if err != nil {
-		return fmt.Errorf("count instances: %w", err)
-	}
-
-	if count == 0 {
-		fakeTLS := 0
-		if maskingEnabled {
-			fakeTLS = 1
-		}
-		_, err = s.db.ExecContext(ctx, `
-			INSERT INTO instances (port, metrics_port, enabled, label, tls_domain, fake_tls, mask_host, mask_port, tcp_mss_enabled, tcp_mss, tls_fronting)
-			VALUES (?, ?, 1, 'Default', ?, ?, ?, 443, 0, 88, 0)
-		`, proxyPort, metricsPort, proxyDomain, fakeTLS, maskingHost)
-		if err != nil {
-			return fmt.Errorf("seed default instance: %w", err)
-		}
-	}
-	return nil
 }
 
 // Create inserts a new instance.
@@ -190,7 +166,7 @@ func (s *InstanceStore) ListEnabled(ctx context.Context) ([]model.Instance, erro
 	if err != nil {
 		return nil, fmt.Errorf("list enabled instances: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	instances := make([]model.Instance, 0)
 	for rows.Next() {
@@ -201,5 +177,8 @@ func (s *InstanceStore) ListEnabled(ctx context.Context) ([]model.Instance, erro
 		inst.Enabled = true
 		instances = append(instances, *inst)
 	}
-	return instances, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate enabled instances: %w", err)
+	}
+	return instances, nil
 }

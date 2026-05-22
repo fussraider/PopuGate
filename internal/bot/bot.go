@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"github.com/fussraider/PopuGate/internal/store"
 	"github.com/fussraider/PopuGate/pkg/fmtutil"
@@ -28,6 +29,9 @@ type Dependencies struct {
 	Upstreams *store.UpstreamStore
 	Traffic   *store.TrafficStore
 	Instances *store.InstanceStore
+	Slaves    *store.SlaveStore
+	Backups   *store.BackupStore
+	Geoblock  *store.GeoblockCacheStore
 
 	// Callbacks for actions that need service layer (set by caller)
 	GetPublicIP       func(ctx context.Context) string
@@ -40,6 +44,8 @@ type Dependencies struct {
 	StopInstance      func(ctx context.Context, id int64) error
 	GenerateQR        func(ctx context.Context, link string) ([]byte, error)
 	GetSchedulerTasks func(ctx context.Context) []string
+	CreateBackup      func(ctx context.Context) (store.Backup, error)
+	ResetTraffic      func(ctx context.Context, label string) error
 }
 
 // Bot represents the Telegram bot.
@@ -75,24 +81,28 @@ type telegramCommand struct {
 func defaultCommands() []telegramCommand {
 	return []telegramCommand{
 		// Management
-		{Command: "status", Description: "Proxy status & connections"},
-		{Command: "health", Description: "Health check (Docker, ports, metrics)"},
+		{Command: "status", Description: "Proxy status, engine, uptime"},
+		{Command: "instances", Description: "List instances with config"},
 		{Command: "restart", Description: "Restart proxy"},
 		{Command: "start", Description: "Start instance by label"},
 		{Command: "stop", Description: "Stop instance"},
 		// Secrets
-		{Command: "secrets", Description: "List secrets"},
+		{Command: "secrets", Description: "List secrets with limits"},
+		{Command: "info", Description: "Detailed secret card"},
 		{Command: "link", Description: "Proxy links + QR"},
 		{Command: "add", Description: "Add secret"},
 		{Command: "remove", Description: "Remove secret"},
 		{Command: "rotate", Description: "Rotate secret key"},
 		{Command: "enable", Description: "Enable secret"},
 		{Command: "disable", Description: "Disable secret"},
-		// Limits & Traffic
-		{Command: "limits", Description: "Show all user limits"},
 		{Command: "setlimit", Description: "Set limits (conns, IPs, quota, expiry)"},
+		{Command: "resetquota", Description: "Reset user traffic counters"},
+		// Traffic
 		{Command: "traffic", Description: "Traffic report"},
 		// System
+		{Command: "geoblock", Description: "Geo-blocking status"},
+		{Command: "replication", Description: "Replication status"},
+		{Command: "backup", Description: "Backup status & create"},
 		{Command: "upstreams", Description: "List upstreams"},
 		{Command: "tasks", Description: "Scheduled tasks status"},
 		{Command: "update", Description: "Version info"},
@@ -125,7 +135,7 @@ func setCommandsForTokenWithClient(ctx context.Context, client *http.Client, tok
 	if err != nil {
 		return fmt.Errorf("setMyCommands call: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var result struct {
 		OK bool `json:"ok"`
@@ -230,7 +240,7 @@ func (b *Bot) SendMessage(ctx context.Context, text string) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != 200 {
 		return fmt.Errorf("telegram API returned %d", resp.StatusCode)
@@ -247,6 +257,18 @@ type InlineKeyboardButton struct {
 // InlineKeyboardMarkup is a Telegram Bot API reply markup for inline keyboards.
 type InlineKeyboardMarkup struct {
 	InlineKeyboard [][]InlineKeyboardButton `json:"inline_keyboard"`
+}
+
+// cmdResp is a bot command response with optional inline keyboard buttons.
+type cmdResp struct {
+	text string
+	kb   [][]InlineKeyboardButton
+}
+
+func reply(text string) cmdResp { return cmdResp{text: text} }
+
+func replyKB(text string, kb [][]InlineKeyboardButton) cmdResp {
+	return cmdResp{text: text, kb: kb}
 }
 
 // SendMessageWithKeyboard sends a Markdown message with an inline keyboard.
@@ -278,7 +300,7 @@ func (b *Bot) SendMessageWithKeyboard(ctx context.Context, text string, keyboard
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != 200 {
 		return fmt.Errorf("telegram API returned %d", resp.StatusCode)
@@ -308,7 +330,7 @@ func (b *Bot) SendPhoto(ctx context.Context, pngData []byte, caption string) err
 	if _, err := io.Copy(fw, bytes.NewReader(pngData)); err != nil {
 		return fmt.Errorf("copy photo data: %w", err)
 	}
-	w.Close()
+	_ = w.Close()
 
 	req, err := http.NewRequestWithContext(ctx, "POST", apiURL, &buf)
 	if err != nil {
@@ -320,7 +342,7 @@ func (b *Bot) SendPhoto(ctx context.Context, pngData []byte, caption string) err
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != 200 {
 		return fmt.Errorf("telegram sendPhoto returned %d", resp.StatusCode)
@@ -356,7 +378,7 @@ func (b *Bot) getUpdates(ctx context.Context, offset int64) ([]TelegramUpdate, e
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var result struct {
 		OK     bool             `json:"ok"`
@@ -371,7 +393,7 @@ func (b *Bot) getUpdates(ctx context.Context, offset int64) ([]TelegramUpdate, e
 	return result.Result, nil
 }
 
-type commandHandler func(ctx context.Context, text string) string
+type commandHandler func(ctx context.Context, text string) cmdResp
 
 type commandEntry struct {
 	exact   bool
@@ -380,29 +402,33 @@ type commandEntry struct {
 
 func (b *Bot) buildCommandDispatch() map[string]commandEntry {
 	return map[string]commandEntry{
-		"/status":    {exact: true, handler: func(ctx context.Context, _ string) string { return b.cmdStatus(ctx) }},
-		"/secrets":   {exact: true, handler: func(ctx context.Context, _ string) string { return b.cmdSecrets(ctx) }},
-		"/link":      {exact: false, handler: b.cmdLink},
-		"/add":       {exact: false, handler: b.cmdAdd},
-		"/remove":    {exact: false, handler: b.cmdRemove},
-		"/rotate":    {exact: false, handler: b.cmdRotate},
-		"/restart":   {exact: true, handler: func(ctx context.Context, _ string) string { return b.cmdRestart(ctx) }},
-		"/enable":    {exact: false, handler: b.cmdEnable},
-		"/disable":   {exact: false, handler: b.cmdDisable},
-		"/start":     {exact: false, handler: b.dispatchStart},
-		"/stop":      {exact: false, handler: b.cmdStopInstance},
-		"/health":    {exact: true, handler: func(ctx context.Context, _ string) string { return b.cmdHealth(ctx) }},
-		"/traffic":   {exact: true, handler: func(ctx context.Context, _ string) string { return b.cmdTraffic(ctx) }},
-		"/update":    {exact: true, handler: func(ctx context.Context, _ string) string { return b.cmdUpdate(ctx) }},
-		"/limits":    {exact: true, handler: func(ctx context.Context, _ string) string { return b.cmdLimits(ctx) }},
-		"/setlimit":  {exact: false, handler: b.cmdSetLimit},
-		"/upstreams": {exact: true, handler: func(ctx context.Context, _ string) string { return b.cmdUpstreams(ctx) }},
-		"/tasks":     {exact: true, handler: func(ctx context.Context, _ string) string { return b.cmdTasks(ctx) }},
-		"/help":      {exact: true, handler: func(_ context.Context, _ string) string { return b.cmdHelp() }},
+		"/status":      {exact: true, handler: func(ctx context.Context, _ string) cmdResp { return b.cmdStatus(ctx) }},
+		"/instances":   {exact: true, handler: func(ctx context.Context, _ string) cmdResp { return b.cmdInstances(ctx) }},
+		"/secrets":     {exact: true, handler: func(ctx context.Context, _ string) cmdResp { return b.cmdSecrets(ctx) }},
+		"/info":        {exact: false, handler: b.cmdInfo},
+		"/link":        {exact: false, handler: b.cmdLink},
+		"/add":         {exact: false, handler: b.cmdAdd},
+		"/remove":      {exact: false, handler: b.cmdRemove},
+		"/rotate":      {exact: false, handler: b.cmdRotate},
+		"/restart":     {exact: true, handler: func(ctx context.Context, _ string) cmdResp { return b.cmdRestart(ctx) }},
+		"/enable":      {exact: false, handler: b.cmdEnable},
+		"/disable":     {exact: false, handler: b.cmdDisable},
+		"/start":       {exact: false, handler: b.dispatchStart},
+		"/stop":        {exact: false, handler: b.cmdStopInstance},
+		"/traffic":     {exact: true, handler: func(ctx context.Context, _ string) cmdResp { return b.cmdTraffic(ctx) }},
+		"/setlimit":    {exact: false, handler: b.cmdSetLimit},
+		"/resetquota":  {exact: false, handler: b.cmdResetQuota},
+		"/geoblock":    {exact: true, handler: func(ctx context.Context, _ string) cmdResp { return b.cmdGeoblock(ctx) }},
+		"/replication": {exact: true, handler: func(ctx context.Context, _ string) cmdResp { return b.cmdReplication(ctx) }},
+		"/backup":      {exact: false, handler: b.cmdBackup},
+		"/upstreams":   {exact: true, handler: func(ctx context.Context, _ string) cmdResp { return b.cmdUpstreams(ctx) }},
+		"/tasks":       {exact: true, handler: func(ctx context.Context, _ string) cmdResp { return b.cmdTasks(ctx) }},
+		"/update":      {exact: true, handler: func(ctx context.Context, _ string) cmdResp { return b.cmdUpdate(ctx) }},
+		"/help":        {exact: true, handler: func(_ context.Context, _ string) cmdResp { return b.cmdHelp() }},
 	}
 }
 
-func (b *Bot) dispatchStart(ctx context.Context, text string) string {
+func (b *Bot) dispatchStart(ctx context.Context, text string) cmdResp {
 	if text == "/start" {
 		return b.cmdWelcome()
 	}
@@ -454,28 +480,100 @@ func (b *Bot) handleUpdate(ctx context.Context, update TelegramUpdate) {
 	log.Debugf("command from %s: %s", update.Message.From.Username, text)
 
 	handler, _ := b.resolveCommand(text)
-	var response string
+	var resp cmdResp
 	if handler != nil {
-		response = handler(ctx, text)
+		resp = handler(ctx, text)
 	} else {
-		response = "Unknown command. Send /help for available commands."
+		resp = reply("Unknown command. Send /help for available commands.")
 	}
 
-	if response != "" {
-		if err := b.SendMessage(ctx, response); err != nil {
-			log.Errorf("send error: %v", err)
-		}
+	if resp.text != "" {
+		b.sendChunked(ctx, resp.text, resp.kb)
 	}
 }
 
 // --- Command helpers ---
 
+const maxMessageLen = 4000
+
+// splitMessage splits text into chunks of at most maxMessageLen Unicode characters.
+// It splits only on paragraph boundaries (double newlines) to preserve semantic blocks.
+// If a single block exceeds maxMessageLen, it is further split on single newlines.
+func splitMessage(text string) []string {
+	if utf8.RuneCountInString(text) <= maxMessageLen {
+		return []string{text}
+	}
+
+	// Split into paragraphs by double newline
+	paragraphs := strings.Split(text, "\n\n")
+	var chunks []string
+	var current strings.Builder
+
+	for _, p := range paragraphs {
+		pRunes := utf8.RuneCountInString(p)
+		curRunes := utf8.RuneCountInString(current.String())
+
+		// Single paragraph too large — split by lines
+		if pRunes > maxMessageLen {
+			if current.Len() > 0 {
+				chunks = append(chunks, current.String())
+				current.Reset()
+			}
+			lines := strings.Split(p, "\n")
+			for _, line := range lines {
+				lineRunes := utf8.RuneCountInString(line)
+				curRunes = utf8.RuneCountInString(current.String())
+				if curRunes > 0 && curRunes+1+lineRunes > maxMessageLen {
+					chunks = append(chunks, current.String())
+					current.Reset()
+				}
+				if current.Len() > 0 {
+					current.WriteByte('\n')
+				}
+				current.WriteString(line)
+			}
+			continue
+		}
+
+		if curRunes > 0 && curRunes+2+pRunes > maxMessageLen {
+			chunks = append(chunks, current.String())
+			current.Reset()
+		}
+		if current.Len() > 0 {
+			current.WriteString("\n\n")
+		}
+		current.WriteString(p)
+	}
+	if current.Len() > 0 {
+		chunks = append(chunks, current.String())
+	}
+	return chunks
+}
+
+// sendChunked splits a message into chunks if needed and sends them.
+// Keyboard buttons are attached only to the last chunk.
+func (b *Bot) sendChunked(ctx context.Context, text string, kb [][]InlineKeyboardButton) {
+	chunks := splitMessage(text)
+	for i, chunk := range chunks {
+		if i == len(chunks)-1 && len(kb) > 0 {
+			if err := b.SendMessageWithKeyboard(ctx, chunk, InlineKeyboardMarkup{InlineKeyboard: kb}); err != nil {
+				log.Errorf("send error (chunk %d): %v", i, err)
+			}
+		} else {
+			if err := b.SendMessage(ctx, chunk); err != nil {
+				log.Errorf("send error (chunk %d): %v", i, err)
+			}
+		}
+	}
+}
+
 // isKnownCommand checks if the command is one of ours.
 func isKnownCommand(cmd string) bool {
 	switch cmd {
 	case "/status", "/secrets", "/link", "/add", "/remove", "/rotate",
-		"/restart", "/enable", "/disable", "/start", "/stop", "/health", "/traffic",
-		"/update", "/limits", "/setlimit", "/upstreams", "/tasks", "/help":
+		"/restart", "/enable", "/disable", "/start", "/stop", "/traffic",
+		"/update", "/setlimit", "/upstreams", "/tasks", "/help",
+		"/instances", "/info", "/geoblock", "/replication", "/backup", "/resetquota":
 		return true
 	}
 	return false
@@ -495,6 +593,33 @@ func formatBytes(n int64) string {
 		return "0 B"
 	}
 	return fmtutil.FormatBytes(uint64(n))
+}
+
+// webURL returns the configured web UI base URL, or empty string.
+func (b *Bot) webURL(ctx context.Context) string {
+	s, _ := b.deps.Settings.Load(ctx)
+	if s == nil {
+		return ""
+	}
+	return s.WebURL
+}
+
+// dashboardKB returns a single-row keyboard with a Dashboard button, or nil.
+func (b *Bot) dashboardKB(ctx context.Context) [][]InlineKeyboardButton {
+	wu := b.webURL(ctx)
+	if wu == "" {
+		return nil
+	}
+	return [][]InlineKeyboardButton{{{Text: "Dashboard", URL: wu}}}
+}
+
+// pageKB returns a single-row keyboard with a named button linking to a web UI path.
+func (b *Bot) pageKB(ctx context.Context, label, path string) [][]InlineKeyboardButton {
+	wu := b.webURL(ctx)
+	if wu == "" {
+		return nil
+	}
+	return [][]InlineKeyboardButton{{{Text: label, URL: wu + path}}}
 }
 
 func escapeURL(s string) string {

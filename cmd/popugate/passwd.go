@@ -45,7 +45,7 @@ func runPasswd(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("open database: %w", err)
 	}
-	defer database.Close()
+	defer func() { _ = database.Close() }()
 
 	settingsStore := store.NewSettingsStore(db)
 

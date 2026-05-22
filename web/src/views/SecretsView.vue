@@ -497,7 +497,7 @@ async function handleRemove(label: string) {
   try {
     await secretsStore.remove(label)
     toast.success(t('secrets.removed_success', { label }))
-  } catch (e: any) { toast.error(e.response?.data?.error ?? e.message) }
+  } catch { /* interceptor handles error toast */ }
 }
 
 async function handleRotate(label: string) {
@@ -505,7 +505,7 @@ async function handleRotate(label: string) {
   try {
     await secretsStore.rotate(label)
     toast.success(t('secrets.rotated_success', { label }))
-  } catch (e: any) { toast.error(e.response?.data?.error ?? e.message) }
+  } catch { /* interceptor handles error toast */ }
 }
 
 async function handleArchive(item: any) {
@@ -515,13 +515,13 @@ async function handleArchive(item: any) {
     try {
       await secretsStore.unarchive(label)
       toast.success(t('secrets.unarchived_success', { label }))
-    } catch (e: any) { toast.error(e.response?.data?.error ?? e.message) }
+    } catch { /* interceptor handles error toast */ }
   } else {
     if (!await confirm({ title: t('secrets.archive'), message: t('secrets.confirm_archive', { label }) })) return
     try {
       await secretsStore.archive(label)
       toast.success(t('secrets.archived_success', { label }))
-    } catch (e: any) { toast.error(e.response?.data?.error ?? e.message) }
+    } catch { /* interceptor handles error toast */ }
   }
 }
 
@@ -542,7 +542,7 @@ async function handleClone() {
       await secretsStore.clone(cloneSource.value, cloneModal.form.value.newLabel)
     })
     toast.success(t('secrets.cloned_success', { label: cloneModal.form.value.newLabel }))
-  } catch (e: any) { toast.error(e.response?.data?.error ?? e.message) }
+  } catch { /* interceptor handles error toast */ }
 }
 
 // Edit modal (label, tags, notes, extend)
@@ -579,7 +579,7 @@ async function handleEdit() {
       await Promise.all(promises)
     })
     toast.success(t('secrets.edit_saved', { label: f.label }))
-  } catch (e: any) { toast.error(e.response?.data?.error ?? e.message) }
+  } catch { /* interceptor handles error toast */ }
 }
 
 // Top by traffic
@@ -593,7 +593,7 @@ async function toggleTop() {
     topLoading.value = true
     try {
       topItems.value = await secretsStore.loadTop(10)
-    } catch (e: any) { toast.error(e.response?.data?.error ?? e.message) }
+    } catch { /* interceptor handles error toast */ }
     topLoading.value = false
   } else {
     topModal.value = false
@@ -606,7 +606,7 @@ async function handleResetTraffic(label: string) {
   try {
     await secretsStore.resetTraffic(label)
     toast.success(t('secrets.reset_traffic_success', { label }))
-  } catch (e: any) { toast.error(e.response?.data?.error ?? e.message) }
+  } catch { /* interceptor handles error toast */ }
 }
 
 // Disable expired
@@ -615,7 +615,7 @@ async function handleDisableExpired() {
   try {
     const count = await secretsStore.disableExpired()
     toast.success(t('secrets.disabled_expired', { count }))
-  } catch (e: any) { toast.error(e.response?.data?.error ?? e.message) }
+  } catch { /* interceptor handles error toast */ }
 }
 
 // Limits modal
@@ -648,7 +648,7 @@ async function handleBulkExtend() {
     })
     toast.success(t('secrets.bulk_extended', { count: labels.length }))
     selectedLabels.value = new Set()
-  } catch (e: any) { toast.error(e.response?.data?.error ?? e.message) }
+  } catch { /* interceptor handles error toast */ }
 }
 
 // Bulk rotate
@@ -659,7 +659,7 @@ async function handleBulkRotate() {
     await secretsStore.bulkRotate(labels)
     toast.success(t('secrets.bulk_rotated', { count: labels.length }))
     selectedLabels.value = new Set()
-  } catch (e: any) { toast.error(e.response?.data?.error ?? e.message) }
+  } catch { /* interceptor handles error toast */ }
 }
 
 // Bulk toggle
@@ -674,7 +674,7 @@ async function handleBulkToggle(enable: boolean) {
     await secretsStore.bulkToggle(labels, enable)
     toast.success(enable ? t('secrets.bulk_enabled', { count: labels.length }) : t('secrets.bulk_disabled', { count: labels.length }))
     selectedLabels.value = new Set()
-  } catch (e: any) { toast.error(e.response?.data?.error ?? e.message) }
+  } catch { /* interceptor handles error toast */ }
 }
 
 // Bulk set limits modal
@@ -692,7 +692,7 @@ async function handleBulkSetLimits() {
     })
     toast.success(t('secrets.bulk_limits_set', { count: labels.length }))
     selectedLabels.value = new Set()
-  } catch (e: any) { toast.error(e.response?.data?.error ?? e.message) }
+  } catch { /* interceptor handles error toast */ }
 }
 
 // Export
@@ -706,7 +706,7 @@ async function handleExport() {
     a.download = 'popugate-secrets.json'
     a.click()
     URL.revokeObjectURL(url)
-  } catch (e: any) { toast.error(e.response?.data?.error ?? e.message) }
+  } catch { /* interceptor handles error toast */ }
 }
 
 // Import
@@ -744,12 +744,17 @@ async function handleImport() {
   if (!importData.value.length) return
   importing.value = true
   try {
-    await secretsStore.importSecrets(importData.value)
-    toast.success(t('secrets.imported_success', { count: importData.value.length }))
+    const result = await secretsStore.importSecrets(importData.value)
+    const imported = result?.imported?.length ?? 0
+    const skipped = result?.skipped?.length ?? 0
+    const errors = result?.errors?.length ?? 0
+    if (imported > 0) toast.success(t('secrets.imported_success', { count: imported }))
+    if (skipped > 0) toast.warning(t('secrets.imported_skipped', { count: skipped }))
+    if (errors > 0) toast.error(t('secrets.imported_errors', { count: errors }))
     importModal.value = false
     importData.value = []
     importPreview.value = 0
-  } catch (e: any) { toast.error(e.response?.data?.error ?? e.message) }
+  } catch { /* interceptor handles error toast */ }
   importing.value = false
 }
 
@@ -769,7 +774,7 @@ async function showQR(label: string) {
     const linkData = await secretsApi.getLink(label)
     proxyLinks.value = linkData.links || []
     qrModal.value = true
-  } catch (e: any) { toast.error(t('secrets.load_failed', { label })) }
+  } catch { /* interceptor handles error toast */ }
 }
 
 async function toggleLinkQR(key: string, text: string) {

@@ -86,7 +86,7 @@ func TestCachedJWTSecret_ReturnsStaleOnSourceError(t *testing.T) {
 	cached := NewCachedJWTSecretProvider(mock, 50*time.Millisecond)
 
 	// Populate cache
-	cached.GetJWTSecret(context.Background())
+	_, _ = cached.GetJWTSecret(context.Background())
 
 	// TTL expires, source now returns error
 	time.Sleep(80 * time.Millisecond)

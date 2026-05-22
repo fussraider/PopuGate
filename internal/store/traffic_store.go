@@ -60,7 +60,7 @@ func (s *TrafficStore) ListUserTraffic(ctx context.Context) ([]model.UserTraffic
 	if err != nil {
 		return nil, fmt.Errorf("list user traffic: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	stats := make([]model.UserTraffic, 0)
 	for rows.Next() {
@@ -109,7 +109,7 @@ func (s *TrafficStore) GetAllUserSnapshots(ctx context.Context, instanceID int64
 	if err != nil {
 		return nil, fmt.Errorf("get user snapshots: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	result := make(map[string][2]int64)
 	for rows.Next() {
@@ -146,7 +146,7 @@ func (s *TrafficStore) FlushTraffic(ctx context.Context, global model.TrafficSna
 	if err != nil {
 		return fmt.Errorf("begin flush tx: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	if _, err := tx.ExecContext(ctx, `
 		UPDATE traffic_global SET
@@ -170,7 +170,7 @@ func (s *TrafficStore) FlushInstanceTraffic(ctx context.Context, users map[strin
 	if err != nil {
 		return fmt.Errorf("begin instance flush tx: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	if err := s.flushUsers(tx, ctx, users, instanceID); err != nil {
 		return err
@@ -192,7 +192,7 @@ func (s *TrafficStore) flushUsers(tx *sql.Tx, ctx context.Context, users map[str
 	if err != nil {
 		return fmt.Errorf("prepare user flush: %w", err)
 	}
-	defer stmt.Close()
+	defer func() { _ = stmt.Close() }()
 
 	for label, snap := range users {
 		if _, err := stmt.ExecContext(ctx, label, instanceID, snap.BytesIn, snap.BytesOut, snap.SnapIn, snap.SnapOut); err != nil {
@@ -208,7 +208,7 @@ func (s *TrafficStore) InsertHistoryBatch(ctx context.Context, ts int64, globalI
 	if err != nil {
 		return fmt.Errorf("begin history tx: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	stmt, err := tx.PrepareContext(ctx, `
 		INSERT INTO traffic_history (timestamp, bytes_in, bytes_out, label) VALUES (?, ?, ?, ?)
@@ -216,7 +216,7 @@ func (s *TrafficStore) InsertHistoryBatch(ctx context.Context, ts int64, globalI
 	if err != nil {
 		return fmt.Errorf("prepare history insert: %w", err)
 	}
-	defer stmt.Close()
+	defer func() { _ = stmt.Close() }()
 
 	if globalIn > 0 || globalOut > 0 {
 		if _, err := stmt.ExecContext(ctx, ts, globalIn, globalOut, ""); err != nil {
@@ -242,7 +242,7 @@ func (s *TrafficStore) GetHistory(ctx context.Context, start, end int64, label s
 	if err != nil {
 		return nil, fmt.Errorf("get history: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var records []model.TrafficHistoryRecord
 	for rows.Next() {
@@ -257,12 +257,15 @@ func (s *TrafficStore) GetHistory(ctx context.Context, start, end int64, label s
 
 // GetAggregatedHistory returns traffic history aggregated by hour or day.
 func (s *TrafficStore) GetAggregatedHistory(ctx context.Context, start, end int64, label string, groupSeconds int64) ([]model.TrafficHistoryRecord, error) {
-	query := fmt.Sprintf(`SELECT (timestamp / %d) * %d AS ts, SUM(bytes_in), SUM(bytes_out) FROM traffic_history WHERE timestamp >= ? AND timestamp <= ? AND label = ? GROUP BY ts ORDER BY ts ASC`, groupSeconds, groupSeconds)
-	rows, err := s.db.QueryContext(ctx, query, start, end, label)
+	if groupSeconds <= 0 {
+		return nil, fmt.Errorf("groupSeconds must be positive, got %d", groupSeconds)
+	}
+	query := `SELECT (timestamp / ?) * ? AS ts, SUM(bytes_in), SUM(bytes_out) FROM traffic_history WHERE timestamp >= ? AND timestamp <= ? AND label = ? GROUP BY ts ORDER BY ts ASC`
+	rows, err := s.db.QueryContext(ctx, query, groupSeconds, groupSeconds, start, end, label)
 	if err != nil {
 		return nil, fmt.Errorf("get aggregated history: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var records []model.TrafficHistoryRecord
 	for rows.Next() {
@@ -279,5 +282,22 @@ func (s *TrafficStore) GetAggregatedHistory(ctx context.Context, start, end int6
 func (s *TrafficStore) CleanOldHistory(ctx context.Context, maxAge time.Duration) error {
 	cutoff := time.Now().Add(-maxAge).Unix()
 	_, err := s.db.ExecContext(ctx, `DELETE FROM traffic_history WHERE timestamp < ?`, cutoff)
+	return err
+}
+
+// ResetTraffic clears traffic for a specific user.
+func (s *TrafficStore) ResetTraffic(ctx context.Context, label string) error {
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE traffic_user SET bytes_in = 0, bytes_out = 0, snap_in = 0, snap_out = 0
+		WHERE label = ?
+	`, label)
+	return err
+}
+
+// ResetAllTraffic clears traffic for all users.
+func (s *TrafficStore) ResetAllTraffic(ctx context.Context) error {
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE traffic_user SET bytes_in = 0, bytes_out = 0, snap_in = 0, snap_out = 0
+	`)
 	return err
 }

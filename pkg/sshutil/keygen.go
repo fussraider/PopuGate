@@ -36,7 +36,7 @@ func GenerateEd25519Key(privateKeyPath string) (string, error) {
 		return "", fmt.Errorf("write private key: %w", err)
 	}
 	if err := os.Rename(tmpPath, privateKeyPath); err != nil {
-		os.Remove(tmpPath)
+		_ = os.Remove(tmpPath)
 		return "", fmt.Errorf("rename private key: %w", err)
 	}
 
@@ -53,7 +53,7 @@ func GenerateEd25519Key(privateKeyPath string) (string, error) {
 		return "", fmt.Errorf("write public key: %w", err)
 	}
 	if err := os.Rename(tmpPubPath, pubPath); err != nil {
-		os.Remove(tmpPubPath)
+		_ = os.Remove(tmpPubPath)
 		return "", fmt.Errorf("rename public key: %w", err)
 	}
 

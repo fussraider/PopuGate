@@ -28,7 +28,7 @@ func (s *SettingsStore) Load(ctx context.Context) (*model.Settings, error) {
 	if err != nil {
 		return nil, fmt.Errorf("query settings: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	kv := make(map[string]string)
 	for rows.Next() {
@@ -37,6 +37,9 @@ func (s *SettingsStore) Load(ctx context.Context) (*model.Settings, error) {
 			return nil, fmt.Errorf("scan setting: %w", err)
 		}
 		kv[key] = value
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate settings: %w", err)
 	}
 
 	settings := model.DefaultSettings()
@@ -106,13 +109,13 @@ func (s *SettingsStore) Save(ctx context.Context, updates map[string]string) err
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	stmt, err := tx.PrepareContext(ctx, "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)")
 	if err != nil {
 		return fmt.Errorf("prepare: %w", err)
 	}
-	defer stmt.Close()
+	defer func() { _ = stmt.Close() }()
 
 	for key, value := range updates {
 		if _, err := stmt.ExecContext(ctx, key, value); err != nil {

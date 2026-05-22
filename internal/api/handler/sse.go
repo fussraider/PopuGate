@@ -8,8 +8,11 @@ import (
 	"time"
 
 	"github.com/fussraider/PopuGate/pkg/dockerutil"
+	"github.com/fussraider/PopuGate/pkg/logger"
 	"github.com/gin-gonic/gin"
 )
+
+var sseLog = logger.WithScope("sse")
 
 // streamLogs handles SSE and plain-text log streaming from a Docker container.
 // It unifies the log streaming logic used by both instance and proxy log endpoints.
@@ -31,7 +34,7 @@ func streamLogs(c *gin.Context, docker *dockerutil.DockerClient, containerName, 
 		}
 		return
 	}
-	defer logs.Close()
+	defer func() { _ = logs.Close() }()
 
 	scanner := bufio.NewScanner(logs)
 
@@ -49,7 +52,7 @@ func streamPlainText(c *gin.Context, scanner *bufio.Scanner) {
 		if len(line) > 8 {
 			line = line[8:]
 		}
-		fmt.Fprintln(c.Writer, line)
+		_, _ = fmt.Fprintln(c.Writer, line)
 	}
 }
 
@@ -62,8 +65,21 @@ func streamSSE(c *gin.Context, scanner *bufio.Scanner, logs io.Reader) {
 	closeDone := func() { doneOnce.Do(func() { close(done) }) }
 	defer closeDone()
 
+	var writeMu sync.Mutex
+	writeSSE := func(event string, data interface{}) {
+		writeMu.Lock()
+		c.SSEvent(event, data)
+		c.Writer.Flush()
+		writeMu.Unlock()
+	}
+
 	// Cancel context closes done when client disconnects
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				sseLog.Debugf("goroutine panic (context monitor): %v", r)
+			}
+		}()
 		select {
 		case <-c.Request.Context().Done():
 			closeDone()
@@ -72,11 +88,15 @@ func streamSSE(c *gin.Context, scanner *bufio.Scanner, logs io.Reader) {
 	}()
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				sseLog.Debugf("goroutine panic (heartbeat): %v", r)
+			}
+		}()
 		for {
 			select {
 			case <-heartbeat.C:
-				c.SSEvent("heartbeat", time.Now().Unix())
-				c.Writer.Flush()
+				writeSSE("heartbeat", time.Now().Unix())
 			case <-done:
 				return
 			}
@@ -94,7 +114,6 @@ func streamSSE(c *gin.Context, scanner *bufio.Scanner, logs io.Reader) {
 		if len(line) > 8 {
 			line = line[8:]
 		}
-		c.SSEvent("message", line)
-		c.Writer.Flush()
+		writeSSE("message", line)
 	}
 }

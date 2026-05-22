@@ -61,6 +61,11 @@
           {{ dockerStore.telemtUpdateStatus.update_available ? t('docker.update_available') : t('docker.up_to_date') }}
         </StatusBadge>
       </div>
+      <div v-if="dockerStore.telemtUpdateStatus?.update_available && dockerStore.telemtUpdateStatus?.latest?.html_url" class="update-links mb-md">
+        <a :href="dockerStore.telemtUpdateStatus.latest.html_url" target="_blank" rel="noopener" class="update-link">
+          <ExternalLink :size="14" /> {{ t('updates.release_notes') }}
+        </a>
+      </div>
       <div v-if="!dockerStore.telemtUpdateStatus" class="text-muted mb-md">{{ t('common.loading') }}</div>
       <div class="flex gap-sm">
         <button class="btn btn-secondary" :disabled="dockerStore.checkingRemote || dockerStore.telemtUpdateStatus?.updating" @click="dockerStore.checkRemoteTelemt()">
@@ -107,7 +112,7 @@ import {onBeforeUnmount, onMounted} from 'vue'
 import {useI18n} from 'vue-i18n'
 import {useDockerStore} from '@/stores'
 import {useConfirmDialog} from '@/composables/useConfirmDialog'
-import {Loader2} from '@lucide/vue'
+import {ExternalLink, Loader2} from '@lucide/vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 
@@ -156,6 +161,22 @@ onBeforeUnmount(() => {
   margin-right: 0.25rem;
 }
 .btn-group-wrap { display: flex; gap: $spacing-sm; flex-wrap: wrap; }
+
+.update-links {
+  display: flex;
+  gap: $spacing-md;
+}
+
+.update-link {
+  display: inline-flex;
+  align-items: center;
+  gap: $spacing-xs;
+  color: var(--color-primary);
+  text-decoration: none;
+  font-size: $font-size-sm;
+
+  &:hover { text-decoration: underline; }
+}
 
 .docker-grid {
   display: grid;

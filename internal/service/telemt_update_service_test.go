@@ -33,7 +33,7 @@ func TestTelemtUpdateService_GetStatus_UpdateAvailable(t *testing.T) {
 	db := testutil.OpenTestDB(t)
 	settingsStore := store.NewSettingsStore(db)
 
-	settingsStore.Save(context.Background(), map[string]string{
+	_ = settingsStore.Save(context.Background(), map[string]string{
 		"telemt_latest_version": "99.0.0",
 		"telemt_latest_commit":  "abcdef",
 	})
@@ -66,7 +66,7 @@ func TestTelemtUpdateService_GetStatus_UpToDate(t *testing.T) {
 	settingsStore := store.NewSettingsStore(db)
 
 	// Set current version to match latest
-	settingsStore.Save(context.Background(), map[string]string{
+	_ = settingsStore.Save(context.Background(), map[string]string{
 		"telemt_version":        "3.3.39",
 		"telemt_commit":         "bc69153",
 		"telemt_latest_version": "3.3.39",
@@ -120,7 +120,7 @@ func TestTelemtUpdateService_GetStatus_LastChecked(t *testing.T) {
 	db := testutil.OpenTestDB(t)
 	settingsStore := store.NewSettingsStore(db)
 
-	settingsStore.Save(context.Background(), map[string]string{
+	_ = settingsStore.Save(context.Background(), map[string]string{
 		"telemt_latest_checked": "1700000000",
 		"telemt_latest_version": "5.0.0",
 	})
@@ -147,7 +147,7 @@ func TestTelemtUpdateService_GetStatus_UpdatingFlag(t *testing.T) {
 	db := testutil.OpenTestDB(t)
 	settingsStore := store.NewSettingsStore(db)
 
-	settingsStore.Save(context.Background(), map[string]string{
+	_ = settingsStore.Save(context.Background(), map[string]string{
 		"telemt_updating":       "true",
 		"telemt_updating_to":    "4.0.0-abcd",
 		"telemt_latest_version": "4.0.0",
@@ -211,7 +211,7 @@ func TestTelemtUpdateService_GetReleases_Cached(t *testing.T) {
 		{Version: "3.3.39", Commit: "bc69153", TagName: "v3.3.39", Prerelease: false},
 	}
 	data, _ := json.Marshal(cached)
-	settingsStore.Save(context.Background(), map[string]string{
+	_ = settingsStore.Save(context.Background(), map[string]string{
 		"telemt_releases_cache": string(data),
 	})
 
@@ -237,7 +237,7 @@ func TestTelemtUpdateService_GetReleases_InvalidJSON(t *testing.T) {
 	settingsStore := store.NewSettingsStore(db)
 	telemtCfg := NewDBTelemtConfig(settingsStore)
 
-	settingsStore.Save(context.Background(), map[string]string{
+	_ = settingsStore.Save(context.Background(), map[string]string{
 		"telemt_releases_cache": "not-valid-json",
 	})
 
@@ -256,7 +256,7 @@ func TestTelemtUpdateService_ResetStaleUpdate_ClearsFlag(t *testing.T) {
 	db := testutil.OpenTestDB(t)
 	settingsStore := store.NewSettingsStore(db)
 
-	settingsStore.Save(context.Background(), map[string]string{
+	_ = settingsStore.Save(context.Background(), map[string]string{
 		"telemt_updating":    "true",
 		"telemt_updating_to": "4.0.0-abcd",
 	})

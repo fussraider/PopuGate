@@ -13,14 +13,8 @@ const apiClient: AxiosInstance = axios.create({
 // succeeds and blocklists the old refresh token, so the rest fail → logout.
 let refreshPromise: Promise<boolean> | null = null
 
-// Skip auth interceptor for logout endpoint to prevent recursion
-function isLogoutRequest(url?: string): boolean {
-  return !!url && (url.endsWith('/auth/logout') || url.includes('/auth/logout'))
-}
-
 // Request interceptor: attach JWT
 apiClient.interceptors.request.use((config) => {
-  if (isLogoutRequest(config.url)) return config
   const authStore = useAuthStore()
   if (authStore.accessToken) {
     config.headers.Authorization = `Bearer ${authStore.accessToken}`
@@ -39,7 +33,7 @@ apiClient.interceptors.response.use(
     return res
   },
   async (error) => {
-    const original = error.config as AxiosRequestConfig & { _retry?: boolean; _silent?: boolean }
+    const original = error.config as AxiosRequestConfig & { _retry?: boolean; _noRetry?: boolean; _silent?: boolean }
     const status = error.response?.status
     const toastStore = useToastStore()
 
@@ -51,8 +45,8 @@ apiClient.interceptors.response.use(
       return Promise.reject(error)
     }
 
-    // 401 → refresh or logout
-    if (status === 401 && !original._retry) {
+    // 401 → refresh or logout (skip for auth endpoints to prevent deadlock)
+    if (status === 401 && !original._retry && !original._noRetry) {
       original._retry = true
       const authStore = useAuthStore()
 

@@ -16,11 +16,12 @@ type SecretService struct {
 	secrets   *store.SecretStore
 	instances *store.InstanceStore
 	settings  *store.SettingsStore
+	traffic   *store.TrafficStore
 }
 
 // NewSecretService creates a new SecretService.
-func NewSecretService(secrets *store.SecretStore, instances *store.InstanceStore, settings *store.SettingsStore) *SecretService {
-	return &SecretService{secrets: secrets, instances: instances, settings: settings}
+func NewSecretService(secrets *store.SecretStore, instances *store.InstanceStore, settings *store.SettingsStore, traffic *store.TrafficStore) *SecretService {
+	return &SecretService{secrets: secrets, instances: instances, settings: settings, traffic: traffic}
 }
 
 // List returns all secrets with traffic data.
@@ -260,12 +261,12 @@ func (s *SecretService) GetLink(ctx context.Context, label, serverIP string, por
 
 // ResetTraffic resets traffic for a specific user.
 func (s *SecretService) ResetTraffic(ctx context.Context, label string) error {
-	return s.secrets.ResetTraffic(ctx, label)
+	return s.traffic.ResetTraffic(ctx, label)
 }
 
 // ResetAllTraffic resets traffic for all users.
 func (s *SecretService) ResetAllTraffic(ctx context.Context) error {
-	return s.secrets.ResetAllTraffic(ctx)
+	return s.traffic.ResetAllTraffic(ctx)
 }
 
 // UpdateNotes updates the notes/description for a secret.
@@ -425,7 +426,22 @@ func (s *SecretService) Clone(ctx context.Context, srcLabel, newLabel string) (*
 		return nil, fmt.Errorf("generate secret: %w", err)
 	}
 
-	return s.secrets.CloneSecret(ctx, srcLabel, newLabel, newKey)
+	clone := &model.Secret{
+		Label:      newLabel,
+		SecretKey:  newKey,
+		Enabled:    src.Enabled,
+		MaxConns:   src.MaxConns,
+		MaxIPs:     src.MaxIPs,
+		QuotaBytes: src.QuotaBytes,
+		ExpiresAt:  src.ExpiresAt,
+		Notes:      src.Notes,
+		Tags:       src.Tags,
+		CreatedAt:  time.Now().Unix(),
+	}
+	if err := s.secrets.Create(ctx, clone); err != nil {
+		return nil, err
+	}
+	return clone, nil
 }
 
 // BulkExtend extends expiry for multiple secrets.
@@ -469,45 +485,58 @@ func (s *SecretService) ExportJSON(ctx context.Context) ([]model.Secret, error) 
 	return s.secrets.List(ctx)
 }
 
+// ImportResult holds the outcome of a bulk import operation.
+type ImportResult struct {
+	Imported []string // Labels successfully created
+	Skipped  []string // Labels skipped (already exist)
+	Errors   []string // Entries that failed with reason
+}
+
 // ImportSecrets creates multiple secrets from an import list.
-func (s *SecretService) ImportSecrets(ctx context.Context, entries []model.Secret) (int, []string, error) {
+// The top-level error is nil for best-effort imports; per-entry details are in ImportResult.
+func (s *SecretService) ImportSecrets(ctx context.Context, entries []model.Secret) (*ImportResult, error) {
 	count, err := s.secrets.Count(ctx)
 	if err != nil {
-		return 0, nil, err
+		return nil, err
 	}
 	if count+len(entries) > model.MaxSecrets {
-		return 0, nil, fmt.Errorf("import would exceed max %d secrets", model.MaxSecrets)
+		return nil, fmt.Errorf("import would exceed max %d secrets", model.MaxSecrets)
 	}
 
-	var created []string
-	imported := 0
+	result := &ImportResult{}
 	for _, e := range entries {
 		if e.Label == "" {
+			result.Errors = append(result.Errors, "entry with empty label skipped")
 			continue
 		}
 		if err := model.ValidateLabel(e.Label); err != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("%s: %s", e.Label, err.Error()))
 			continue
 		}
 		existing, err := s.secrets.GetByLabel(ctx, e.Label)
 		if err != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("%s: lookup failed: %s", e.Label, err.Error()))
 			continue
 		}
 		if existing != nil {
+			result.Skipped = append(result.Skipped, e.Label)
 			continue
 		}
 		if e.SecretKey == "" {
 			e.SecretKey, _ = telemt.GenerateSecret()
 		} else if !telemt.ValidateSecretKey(e.SecretKey) {
+			result.Errors = append(result.Errors, fmt.Sprintf("%s: invalid secret key", e.Label))
 			continue
 		}
 		e.Enabled = true
 		e.CreatedAt = time.Now().Unix()
-		if err := s.secrets.Create(ctx, &e); err == nil {
-			imported++
-			created = append(created, e.Label)
+		if err := s.secrets.Create(ctx, &e); err != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("%s: create failed: %s", e.Label, err.Error()))
+			continue
 		}
+		result.Imported = append(result.Imported, e.Label)
 	}
-	return imported, created, nil
+	return result, nil
 }
 
 // ListByTag returns secrets matching the given tag.

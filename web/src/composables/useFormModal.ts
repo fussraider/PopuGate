@@ -1,5 +1,5 @@
-import { ref, type Ref } from 'vue'
-import { useToastStore } from '@/stores/toast'
+import {ref, type Ref} from 'vue'
+import {useToastStore} from '@/stores/toast'
 
 export function useFormModal<T extends Record<string, any>>(defaults: T) {
   const isOpen = ref(false)
@@ -23,8 +23,8 @@ export function useFormModal<T extends Record<string, any>>(defaults: T) {
       if (successMsg) toast.success(successMsg)
       isOpen.value = false
       return true
-    } catch (e: any) {
-      toast.error(e.response?.data?.error ?? e.message)
+    } catch {
+      // interceptor handles error toast
       return false
     } finally {
       submitting.value = false

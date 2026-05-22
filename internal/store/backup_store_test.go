@@ -259,13 +259,13 @@ func createMinimalTarGz(t *testing.T, outputPath string, files map[string]string
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	gw := gzip.NewWriter(f)
-	defer gw.Close()
+	defer func() { _ = gw.Close() }()
 
 	tw := tar.NewWriter(gw)
-	defer tw.Close()
+	defer func() { _ = tw.Close() }()
 
 	for name, content := range files {
 		// Ensure parent directories have entries
@@ -358,9 +358,9 @@ func TestBackupStore_CreateAndRestore_Roundtrip(t *testing.T) {
 	s := NewBackupStore(tmpDir)
 
 	// Create some files to back up
-	os.MkdirAll(filepath.Join(tmpDir, "mtproxy"), 0755)
-	os.WriteFile(filepath.Join(tmpDir, "settings.db"), []byte("fake db"), 0644)
-	os.WriteFile(filepath.Join(tmpDir, "mtproxy", "config.toml"), []byte("key=value"), 0644)
+	_ = os.MkdirAll(filepath.Join(tmpDir, "mtproxy"), 0755)
+	_ = os.WriteFile(filepath.Join(tmpDir, "settings.db"), []byte("fake db"), 0644)
+	_ = os.WriteFile(filepath.Join(tmpDir, "mtproxy", "config.toml"), []byte("key=value"), 0644)
 
 	ctx := context.Background()
 	backup, err := s.Create(ctx)
@@ -392,8 +392,8 @@ func TestBackupStore_CreateAndRestore_Roundtrip(t *testing.T) {
 	}
 
 	// Delete the original files
-	os.Remove(filepath.Join(tmpDir, "settings.db"))
-	os.Remove(filepath.Join(tmpDir, "mtproxy", "config.toml"))
+	_ = os.Remove(filepath.Join(tmpDir, "settings.db"))
+	_ = os.Remove(filepath.Join(tmpDir, "mtproxy", "config.toml"))
 
 	// Restore should bring them back
 	if err := s.Restore(ctx, backup.Filename); err != nil {
@@ -416,12 +416,12 @@ func TestBackupStore_CleanOld_RemovesOldFiles(t *testing.T) {
 
 	// Create an old backup file
 	oldFile := filepath.Join(backupsDir, "popugate-20200101-000000.tar.gz")
-	os.WriteFile(oldFile, []byte("old"), 0644)
-	os.Chtimes(oldFile, time.Now().Add(-48*time.Hour), time.Now().Add(-48*time.Hour))
+	_ = os.WriteFile(oldFile, []byte("old"), 0644)
+	_ = os.Chtimes(oldFile, time.Now().Add(-48*time.Hour), time.Now().Add(-48*time.Hour))
 
 	// Create a recent backup file
 	recentFile := filepath.Join(backupsDir, "popugate-20260503-000000.tar.gz")
-	os.WriteFile(recentFile, []byte("recent"), 0644)
+	_ = os.WriteFile(recentFile, []byte("recent"), 0644)
 
 	deleted, err := s.CleanOld(context.Background(), 24*time.Hour)
 	if err != nil {
@@ -445,7 +445,7 @@ func TestBackupStore_CleanOld_NoOldFiles(t *testing.T) {
 	backupsDir := filepath.Join(tmpDir, "backups")
 
 	recentFile := filepath.Join(backupsDir, "popugate-20260503-000000.tar.gz")
-	os.WriteFile(recentFile, []byte("recent"), 0644)
+	_ = os.WriteFile(recentFile, []byte("recent"), 0644)
 
 	deleted, err := s.CleanOld(context.Background(), 24*time.Hour)
 	if err != nil {
@@ -467,7 +467,7 @@ func TestBackupStore_CreateWithEncryption(t *testing.T) {
 	s := NewBackupStore(tmpDir, key)
 
 	// Create a dummy settings.db
-	os.WriteFile(filepath.Join(tmpDir, "settings.db"), []byte("test db"), 0644)
+	_ = os.WriteFile(filepath.Join(tmpDir, "settings.db"), []byte("test db"), 0644)
 
 	backup, err := s.Create(context.Background())
 	if err != nil {
@@ -490,11 +490,11 @@ func TestBackupStore_CreateWithEncryption(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open backup: %v", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	gzReader, err := gzip.NewReader(f)
 	if err == nil {
-		gzReader.Close()
+		_ = gzReader.Close()
 		t.Error("expected encrypted file to not be valid gzip")
 	}
 }
@@ -504,7 +504,7 @@ func TestBackupStore_ManifestInBackup(t *testing.T) {
 	s := NewBackupStore(tmpDir)
 
 	// Create a dummy settings.db
-	os.WriteFile(filepath.Join(tmpDir, "settings.db"), []byte("test db"), 0644)
+	_ = os.WriteFile(filepath.Join(tmpDir, "settings.db"), []byte("test db"), 0644)
 
 	backup, err := s.Create(context.Background())
 	if err != nil {
@@ -517,13 +517,13 @@ func TestBackupStore_ManifestInBackup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open backup: %v", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	gzReader, err := gzip.NewReader(f)
 	if err != nil {
 		t.Fatalf("gzip reader: %v", err)
 	}
-	defer gzReader.Close()
+	defer func() { _ = gzReader.Close() }()
 
 	tarReader := tar.NewReader(gzReader)
 	manifestFound := false
@@ -563,7 +563,7 @@ func TestBackupStore_ChecksumInBackup(t *testing.T) {
 	s := NewBackupStore(tmpDir)
 
 	// Create a dummy settings.db
-	os.WriteFile(filepath.Join(tmpDir, "settings.db"), []byte("test db"), 0644)
+	_ = os.WriteFile(filepath.Join(tmpDir, "settings.db"), []byte("test db"), 0644)
 
 	backup, err := s.Create(context.Background())
 	if err != nil {
@@ -586,7 +586,7 @@ func TestBackupStore_TelemtVersionInBackup(t *testing.T) {
 	s := NewBackupStore(tmpDir)
 
 	// Create .telemt_version file
-	os.WriteFile(filepath.Join(tmpDir, ".telemt_version"), []byte("3.3.39"), 0644)
+	_ = os.WriteFile(filepath.Join(tmpDir, ".telemt_version"), []byte("3.3.39"), 0644)
 
 	backup, err := s.Create(context.Background())
 	if err != nil {
@@ -599,13 +599,13 @@ func TestBackupStore_TelemtVersionInBackup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open backup: %v", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	gzReader, err := gzip.NewReader(f)
 	if err != nil {
 		t.Fatalf("gzip reader: %v", err)
 	}
-	defer gzReader.Close()
+	defer func() { _ = gzReader.Close() }()
 
 	tarReader := tar.NewReader(gzReader)
 	telemtVersionFound := false
@@ -631,7 +631,7 @@ func TestBackupStore_RestoreWithManifestVersionCheck(t *testing.T) {
 
 	// Create a backup with a newer schema version (simulated)
 	backupsDir := filepath.Join(tmpDir, "backups")
-	os.MkdirAll(backupsDir, 0755)
+	_ = os.MkdirAll(backupsDir, 0755)
 
 	// Create a backup with manifest that has newer schema version
 	backupPath := filepath.Join(backupsDir, "test.tar.gz")
@@ -653,14 +653,14 @@ func TestBackupStore_RestoreWithManifestVersionCheck(t *testing.T) {
 	tw := tar.NewWriter(gw)
 
 	manifestData, _ := json.Marshal(manifest)
-	tw.WriteHeader(&tar.Header{
+	_ = tw.WriteHeader(&tar.Header{
 		Name: "manifest.json",
 		Size: int64(len(manifestData)),
 	})
-	tw.Write(manifestData)
-	tw.Close()
-	gw.Close()
-	f.Close()
+	_, _ = tw.Write(manifestData)
+	_ = tw.Close()
+	_ = gw.Close()
+	_ = f.Close()
 
 	// Restore should fail due to version mismatch
 	err = s.Restore(context.Background(), "test.tar.gz")
@@ -678,7 +678,7 @@ func TestBackupStore_RestoreOldBackupWithoutManifest(t *testing.T) {
 
 	// Create a backup without manifest (old format)
 	backupsDir := filepath.Join(tmpDir, "backups")
-	os.MkdirAll(backupsDir, 0755)
+	_ = os.MkdirAll(backupsDir, 0755)
 
 	backupPath := filepath.Join(backupsDir, "old.tar.gz")
 	f, err := os.Create(backupPath)
@@ -689,14 +689,14 @@ func TestBackupStore_RestoreOldBackupWithoutManifest(t *testing.T) {
 	tw := tar.NewWriter(gw)
 
 	// Just add a simple file, no manifest
-	tw.WriteHeader(&tar.Header{
+	_ = tw.WriteHeader(&tar.Header{
 		Name: "test.txt",
 		Size: 4,
 	})
-	tw.Write([]byte("test"))
-	tw.Close()
-	gw.Close()
-	f.Close()
+	_, _ = tw.Write([]byte("test"))
+	_ = tw.Close()
+	_ = gw.Close()
+	_ = f.Close()
 
 	// Restore should succeed (backward compatibility)
 	err = s.Restore(context.Background(), "old.tar.gz")
@@ -710,7 +710,7 @@ func TestBackupStore_Restore_ChecksumMismatch(t *testing.T) {
 	s := NewBackupStore(tmpDir)
 
 	backupsDir := filepath.Join(tmpDir, "backups")
-	os.MkdirAll(backupsDir, 0755)
+	_ = os.MkdirAll(backupsDir, 0755)
 
 	// Create a minimal tar.gz
 	backupPath := filepath.Join(backupsDir, "corrupt.tar.gz")
@@ -721,7 +721,7 @@ func TestBackupStore_Restore_ChecksumMismatch(t *testing.T) {
 	}
 
 	// Write a wrong checksum sidecar
-	os.WriteFile(backupPath+".sha256", []byte("0000000000000000000000000000000000000000000000000000000000000000"), 0644)
+	_ = os.WriteFile(backupPath+".sha256", []byte("0000000000000000000000000000000000000000000000000000000000000000"), 0644)
 
 	// Restore should fail due to checksum mismatch
 	err := s.Restore(context.Background(), "corrupt.tar.gz")
@@ -737,7 +737,7 @@ func TestBackupStore_Restore_ChecksumMatch(t *testing.T) {
 	tmpDir := t.TempDir()
 	s := NewBackupStore(tmpDir)
 
-	os.WriteFile(filepath.Join(tmpDir, "settings.db"), []byte("test"), 0644)
+	_ = os.WriteFile(filepath.Join(tmpDir, "settings.db"), []byte("test"), 0644)
 
 	// Create a proper backup (which writes .sha256 sidecar)
 	backup, err := s.Create(context.Background())
@@ -766,9 +766,9 @@ func TestBackupStore_EncryptedCreateAndRestore_Roundtrip(t *testing.T) {
 	s := NewBackupStore(tmpDir, key)
 
 	// Create files to back up
-	os.MkdirAll(filepath.Join(tmpDir, "mtproxy"), 0755)
-	os.WriteFile(filepath.Join(tmpDir, "settings.db"), []byte("encrypted db content"), 0644)
-	os.WriteFile(filepath.Join(tmpDir, "mtproxy", "config.toml"), []byte("secret=config"), 0644)
+	_ = os.MkdirAll(filepath.Join(tmpDir, "mtproxy"), 0755)
+	_ = os.WriteFile(filepath.Join(tmpDir, "settings.db"), []byte("encrypted db content"), 0644)
+	_ = os.WriteFile(filepath.Join(tmpDir, "mtproxy", "config.toml"), []byte("secret=config"), 0644)
 
 	ctx := context.Background()
 	backup, err := s.Create(ctx)
@@ -790,14 +790,14 @@ func TestBackupStore_EncryptedCreateAndRestore_Roundtrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, gzErr := gzip.NewReader(f)
-	f.Close()
+	_ = f.Close()
 	if gzErr == nil {
 		t.Error("expected encrypted file to not be valid gzip")
 	}
 
 	// Delete original files
-	os.Remove(filepath.Join(tmpDir, "settings.db"))
-	os.Remove(filepath.Join(tmpDir, "mtproxy", "config.toml"))
+	_ = os.Remove(filepath.Join(tmpDir, "settings.db"))
+	_ = os.Remove(filepath.Join(tmpDir, "mtproxy", "config.toml"))
 
 	// Restore
 	if err := s.Restore(ctx, backup.Filename); err != nil {

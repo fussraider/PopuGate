@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"sync"
 	"time"
@@ -15,6 +16,8 @@ type IPRateLimiter struct {
 	visitors map[string]*visitorEntry
 	rate     rate.Limit
 	burst    int
+	stopCh   chan struct{}
+	stopOnce sync.Once
 }
 
 type visitorEntry struct {
@@ -29,21 +32,34 @@ func NewIPRateLimiter(r rate.Limit, burst int) *IPRateLimiter {
 		visitors: make(map[string]*visitorEntry),
 		rate:     r,
 		burst:    burst,
+		stopCh:   make(chan struct{}),
 	}
 	go l.cleanupStale()
 	return l
 }
 
+// Close stops the background cleanup goroutine.
+func (l *IPRateLimiter) Close() {
+	l.stopOnce.Do(func() { close(l.stopCh) })
+}
+
 // cleanupStale removes entries not seen in the last 10 minutes.
 func (l *IPRateLimiter) cleanupStale() {
-	for range time.Tick(10 * time.Minute) {
-		l.mu.Lock()
-		for ip, v := range l.visitors {
-			if time.Since(v.lastSeen) > 10*time.Minute {
-				delete(l.visitors, ip)
+	ticker := time.NewTicker(10 * time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-l.stopCh:
+			return
+		case <-ticker.C:
+			l.mu.Lock()
+			for ip, v := range l.visitors {
+				if time.Since(v.lastSeen) > 10*time.Minute {
+					delete(l.visitors, ip)
+				}
 			}
+			l.mu.Unlock()
 		}
-		l.mu.Unlock()
 	}
 }
 
@@ -67,6 +83,11 @@ func RateLimitMiddleware(limiter *IPRateLimiter) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ip := c.ClientIP()
 		if !limiter.GetLimiter(ip).Allow() {
+			retryAfter := "1"
+			if limiter.rate > 0 {
+				retryAfter = fmt.Sprintf("%.0f", 1.0/float64(limiter.rate))
+			}
+			c.Header("Retry-After", retryAfter)
 			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
 				"error": "too many requests, please try again later",
 			})

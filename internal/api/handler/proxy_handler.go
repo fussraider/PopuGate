@@ -15,7 +15,6 @@ import (
 // ProxyHandler handles proxy control endpoints.
 type ProxyHandler struct {
 	container *service.ContainerService
-	secrets   *store.SecretStore
 	settings  *store.SettingsStore
 	secretSvc *service.SecretService
 	docker    *dockerutil.DockerClient
@@ -23,8 +22,8 @@ type ProxyHandler struct {
 }
 
 // NewProxyHandler creates a new ProxyHandler.
-func NewProxyHandler(container *service.ContainerService, secrets *store.SecretStore, settings *store.SettingsStore, secretSvc *service.SecretService) *ProxyHandler {
-	return &ProxyHandler{container: container, secrets: secrets, settings: settings, secretSvc: secretSvc}
+func NewProxyHandler(container *service.ContainerService, settings *store.SettingsStore, secretSvc *service.SecretService) *ProxyHandler {
+	return &ProxyHandler{container: container, settings: settings, secretSvc: secretSvc}
 }
 
 // SetInstanceStore sets the instance store for log streaming.

@@ -28,7 +28,7 @@ func (s *SchedulerStore) GetOverrides(ctx context.Context) ([]scheduler.TaskOver
 	if err != nil {
 		return nil, fmt.Errorf("get overrides: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var result []scheduler.TaskOverride
 	for rows.Next() {
@@ -107,7 +107,7 @@ func (s *SchedulerStore) ListHistory(ctx context.Context, limit, offset int) ([]
 	if err != nil {
 		return nil, fmt.Errorf("list history: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	return scanHistory(rows)
 }
 
@@ -120,7 +120,7 @@ func (s *SchedulerStore) ListHistoryByTask(ctx context.Context, taskName string,
 	if err != nil {
 		return nil, fmt.Errorf("list history for %s: %w", taskName, err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	return scanHistory(rows)
 }
 

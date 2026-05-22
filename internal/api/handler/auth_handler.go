@@ -10,7 +10,10 @@ import (
 
 	"github.com/fussraider/PopuGate/internal/auth"
 	"github.com/fussraider/PopuGate/internal/store"
+	"github.com/fussraider/PopuGate/pkg/logger"
 )
+
+var authLog = logger.WithScope("auth")
 
 // AuthHandler handles authentication endpoints.
 type AuthHandler struct {
@@ -193,7 +196,9 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 					exp = int64(e)
 				}
 			}
-			_ = h.blocklist.Add(ctx, jti, exp)
+			if err := h.blocklist.Add(ctx, jti, exp); err != nil {
+				authLog.Warnf("blocklist access token: %v", err)
+			}
 		}
 	}
 
@@ -215,7 +220,9 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 		if claims, ok := token.Claims.(jwt.MapClaims); ok {
 			if jti, ok := claims["jti"].(string); ok {
 				if exp, ok := claims["exp"].(float64); ok {
-					_ = h.blocklist.Add(ctx, jti, int64(exp))
+					if err := h.blocklist.Add(ctx, jti, int64(exp)); err != nil {
+						authLog.Warnf("blocklist refresh token: %v", err)
+					}
 				}
 			}
 		}

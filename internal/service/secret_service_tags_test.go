@@ -13,10 +13,10 @@ func TestSecretService_ListByTag(t *testing.T) {
 	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
-	svc.Add(ctx, "alpha", "")
-	svc.Add(ctx, "beta", "")
-	svc.SetTags(ctx, "alpha", `["prod"]`)
-	svc.SetTags(ctx, "beta", `["dev"]`)
+	_, _ = svc.Add(ctx, "alpha", "")
+	_, _ = svc.Add(ctx, "beta", "")
+	_ = svc.SetTags(ctx, "alpha", `["prod"]`)
+	_ = svc.SetTags(ctx, "beta", `["dev"]`)
 
 	got, err := svc.ListByTag(ctx, "prod")
 	if err != nil {
@@ -52,10 +52,10 @@ func TestSecretService_ListAllTags(t *testing.T) {
 	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
-	svc.Add(ctx, "s1", "")
-	svc.Add(ctx, "s2", "")
-	svc.SetTags(ctx, "s1", `["tag-a","tag-b"]`)
-	svc.SetTags(ctx, "s2", `["tag-b","tag-c"]`)
+	_, _ = svc.Add(ctx, "s1", "")
+	_, _ = svc.Add(ctx, "s2", "")
+	_ = svc.SetTags(ctx, "s1", `["tag-a","tag-b"]`)
+	_ = svc.SetTags(ctx, "s2", `["tag-b","tag-c"]`)
 
 	tags, err := svc.ListAllTags(ctx)
 	if err != nil {
@@ -76,10 +76,10 @@ func TestSecretService_LabelsByTag(t *testing.T) {
 	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
-	svc.Add(ctx, "x1", "")
-	svc.Add(ctx, "x2", "")
-	svc.SetTags(ctx, "x1", `["shared"]`)
-	svc.SetTags(ctx, "x2", `["shared"]`)
+	_, _ = svc.Add(ctx, "x1", "")
+	_, _ = svc.Add(ctx, "x2", "")
+	_ = svc.SetTags(ctx, "x1", `["shared"]`)
+	_ = svc.SetTags(ctx, "x2", `["shared"]`)
 
 	labels, err := svc.LabelsByTag(ctx, "shared")
 	if err != nil {

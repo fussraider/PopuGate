@@ -73,7 +73,19 @@ func (h *GeoblockHandler) Add(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	settings, _ := h.settings.Load(ctx)
+	settings, err := h.settings.Load(ctx)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		return
+	}
+
+	for _, existing := range splitCountries(settings.BlocklistCountries) {
+		if strings.EqualFold(existing, req.Country) {
+			c.JSON(http.StatusConflict, gin.H{"error": "country already in list"})
+			return
+		}
+	}
+
 	countries := settings.BlocklistCountries
 	if countries != "" {
 		countries += ","
@@ -117,7 +129,11 @@ func (h *GeoblockHandler) Remove(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	settings, _ := h.settings.Load(ctx)
+	settings, err := h.settings.Load(ctx)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		return
+	}
 	var remaining []string
 	for _, c := range splitCountries(settings.BlocklistCountries) {
 		if c != req.Country {

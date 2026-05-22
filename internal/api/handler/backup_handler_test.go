@@ -114,7 +114,7 @@ func TestBackupHandler_Restore_PathTraversal(t *testing.T) {
 			}
 
 			var resp map[string]interface{}
-			json.Unmarshal(w.Body.Bytes(), &resp)
+			_ = json.Unmarshal(w.Body.Bytes(), &resp)
 			if resp["error"] != "invalid filename" {
 				t.Errorf("expected 'invalid filename', got %v", resp["error"])
 			}
@@ -158,7 +158,7 @@ func TestBackupHandler_Delete_PathTraversal(t *testing.T) {
 			}
 
 			var resp map[string]interface{}
-			json.Unmarshal(w.Body.Bytes(), &resp)
+			_ = json.Unmarshal(w.Body.Bytes(), &resp)
 			if resp["error"] != "invalid filename" {
 				t.Errorf("expected 'invalid filename', got %v", resp["error"])
 			}
@@ -191,7 +191,7 @@ func TestBackupHandler_Download_MissingFile(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp["error"] != "backup not found" {
 		t.Errorf("expected 'backup not found', got %v", resp["error"])
 	}

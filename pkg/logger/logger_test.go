@@ -2,44 +2,41 @@ package logger
 
 import (
 	"net/http/httptest"
+	"os"
+	"os/exec"
 	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
 )
 
-func TestFatalf_PanicsInsteadOfExit(t *testing.T) {
-	defer func() {
-		r := recover()
-		if r == nil {
-			t.Error("Fatalf should panic, but recovered nil")
-		}
-		msg, ok := r.(string)
-		if !ok {
-			t.Errorf("expected string panic, got %T: %v", r, r)
-			return
-		}
-		if !strings.Contains(msg, "fatal test message") {
-			t.Errorf("panic message should contain 'fatal test message', got: %s", msg)
-		}
-	}()
-
-	Fatalf("fatal test message: %d", 42)
+func TestFatalf_ExitsWithCode1(t *testing.T) {
+	if os.Getenv("TEST_FATALF") == "1" {
+		Fatalf("fatal test message: %d", 42)
+		return
+	}
+	cmd := exec.Command(os.Args[0], "-test.run=TestFatalf_ExitsWithCode1")
+	cmd.Env = append(os.Environ(), "TEST_FATALF=1")
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatal("Fatalf should cause the process to exit with a non-zero status")
+	}
+	if !strings.Contains(string(output), "fatal test message") {
+		t.Errorf("output should contain 'fatal test message', got: %s", output)
+	}
 }
 
-func TestFatalf_AllowsDeferredCleanup(t *testing.T) {
-	cleaned := false
-	defer func() {
-		recover()
-		if !cleaned {
-			t.Error("deferred cleanup should have run before Fatalf panic")
-		}
-	}()
-	defer func() {
-		cleaned = true
-	}()
-
-	Fatalf("should not prevent deferred cleanup")
+func TestFatalf_PrintsMessage(t *testing.T) {
+	if os.Getenv("TEST_FATALF") == "1" {
+		Fatalf("should print this message before exiting")
+		return
+	}
+	cmd := exec.Command(os.Args[0], "-test.run=TestFatalf_PrintsMessage")
+	cmd.Env = append(os.Environ(), "TEST_FATALF=1")
+	output, _ := cmd.CombinedOutput()
+	if !strings.Contains(string(output), "should print this message before exiting") {
+		t.Errorf("output should contain the fatal message, got: %s", output)
+	}
 }
 
 func TestSetGetLevel(t *testing.T) {

@@ -223,6 +223,96 @@ func TestUpstreamStore_UpdateNonexistent(t *testing.T) {
 	}
 }
 
+func TestUpstreamStore_UpdateHealth(t *testing.T) {
+	db := testutil.OpenTestDB(t)
+	s := NewUpstreamStore(db)
+	ctx := context.Background()
+
+	if err := s.Create(ctx, &model.Upstream{
+		Name: "health-check", Type: model.UpstreamDirect, Weight: 10, Enabled: true,
+	}); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	// Healthy check: should reset fail_count to 0
+	if err := s.UpdateHealth(ctx, "health-check", true, 42, ""); err != nil {
+		t.Fatalf("UpdateHealth ok: %v", err)
+	}
+	got, err := s.GetByName(ctx, "health-check")
+	if err != nil {
+		t.Fatalf("GetByName: %v", err)
+	}
+	if got.LastCheckOK == nil || !*got.LastCheckOK {
+		t.Fatal("expected last_check_ok=true")
+	}
+	if got.LatencyMs != 42 {
+		t.Fatalf("expected latency_ms=42, got %d", got.LatencyMs)
+	}
+	if got.FailCount != 0 {
+		t.Fatalf("expected fail_count=0, got %d", got.FailCount)
+	}
+
+	// Failed check: should increment fail_count
+	if err := s.UpdateHealth(ctx, "health-check", false, 0, "timeout"); err != nil {
+		t.Fatalf("UpdateHealth fail: %v", err)
+	}
+	got, err = s.GetByName(ctx, "health-check")
+	if err != nil {
+		t.Fatalf("GetByName: %v", err)
+	}
+	if got.LastCheckOK == nil || *got.LastCheckOK {
+		t.Fatal("expected last_check_ok=false")
+	}
+	if got.LastError != "timeout" {
+		t.Fatalf("expected last_error='timeout', got %s", got.LastError)
+	}
+	if got.FailCount != 1 {
+		t.Fatalf("expected fail_count=1, got %d", got.FailCount)
+	}
+}
+
+func TestUpstreamStore_ClearHealth(t *testing.T) {
+	db := testutil.OpenTestDB(t)
+	s := NewUpstreamStore(db)
+	ctx := context.Background()
+
+	if err := s.Create(ctx, &model.Upstream{
+		Name: "clear-me", Type: model.UpstreamDirect, Weight: 10, Enabled: true,
+	}); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	// Set some health data first
+	if err := s.UpdateHealth(ctx, "clear-me", false, 99, "conn refused"); err != nil {
+		t.Fatalf("UpdateHealth: %v", err)
+	}
+
+	// Clear it
+	if err := s.ClearHealth(ctx, "clear-me"); err != nil {
+		t.Fatalf("ClearHealth: %v", err)
+	}
+
+	got, err := s.GetByName(ctx, "clear-me")
+	if err != nil {
+		t.Fatalf("GetByName: %v", err)
+	}
+	if got.LastCheckOK != nil {
+		t.Fatalf("expected last_check_ok=nil, got %v", got.LastCheckOK)
+	}
+	if got.LatencyMs != 0 {
+		t.Fatalf("expected latency_ms=0, got %d", got.LatencyMs)
+	}
+	if got.LastError != "" {
+		t.Fatalf("expected last_error='', got %s", got.LastError)
+	}
+	if got.FailCount != 0 {
+		t.Fatalf("expected fail_count=0, got %d", got.FailCount)
+	}
+	if got.LastCheckAt != 0 {
+		t.Fatalf("expected last_check_at=0, got %d", got.LastCheckAt)
+	}
+}
+
 func TestUpstreamStore_GetByNameNonexistent(t *testing.T) {
 	db := testutil.OpenTestDB(t)
 	s := NewUpstreamStore(db)

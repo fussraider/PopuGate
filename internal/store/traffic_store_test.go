@@ -62,7 +62,7 @@ func TestTrafficStore_ResetGlobal(t *testing.T) {
 	s := NewTrafficStore(db)
 	ctx := context.Background()
 
-	s.UpdateGlobal(ctx, 1000, 2000, 500, 1000)
+	_ = s.UpdateGlobal(ctx, 1000, 2000, 500, 1000)
 
 	if err := s.ResetGlobal(ctx); err != nil {
 		t.Fatalf("ResetGlobal: %v", err)
@@ -212,7 +212,7 @@ func TestTrafficStore_FlushTrafficAtomicity(t *testing.T) {
 	ctx := context.Background()
 
 	// First flush
-	s.FlushTraffic(ctx,
+	_ = s.FlushTraffic(ctx,
 		model.TrafficSnapshot{BytesIn: 100, BytesOut: 200, SnapIn: 50, SnapOut: 100},
 		map[string]model.TrafficSnapshot{
 			"user1": {BytesIn: 10, BytesOut: 20, SnapIn: 5, SnapOut: 10},
@@ -221,7 +221,7 @@ func TestTrafficStore_FlushTrafficAtomicity(t *testing.T) {
 	)
 
 	// Second flush - cumulative
-	s.FlushTraffic(ctx,
+	_ = s.FlushTraffic(ctx,
 		model.TrafficSnapshot{BytesIn: 500, BytesOut: 600, SnapIn: 250, SnapOut: 300},
 		map[string]model.TrafficSnapshot{
 			"user1": {BytesIn: 50, BytesOut: 60, SnapIn: 25, SnapOut: 30},
@@ -246,8 +246,8 @@ func TestTrafficStore_GetAllUserSnapshots(t *testing.T) {
 	s := NewTrafficStore(db)
 	ctx := context.Background()
 
-	s.UpdateUserTraffic(ctx, "alice", 1, 100, 200, 50, 80)
-	s.UpdateUserTraffic(ctx, "bob", 1, 300, 400, 150, 200)
+	_ = s.UpdateUserTraffic(ctx, "alice", 1, 100, 200, 50, 80)
+	_ = s.UpdateUserTraffic(ctx, "bob", 1, 300, 400, 150, 200)
 
 	snaps, err := s.GetAllUserSnapshots(ctx, 1)
 	if err != nil {
@@ -366,8 +366,8 @@ func TestTrafficStore_GetAggregatedHistory(t *testing.T) {
 	users1 := map[string][2]int64{"alice": {100, 200}}
 	users2 := map[string][2]int64{"alice": {300, 400}}
 
-	s.InsertHistoryBatch(ctx, ts1, 500, 600, users1)
-	s.InsertHistoryBatch(ctx, ts2, 700, 800, users2)
+	_ = s.InsertHistoryBatch(ctx, ts1, 500, 600, users1)
+	_ = s.InsertHistoryBatch(ctx, ts2, 700, 800, users2)
 
 	// Aggregate by hour
 	records, err := s.GetAggregatedHistory(ctx, baseHour, baseHour+hourSec, "alice", hourSec)
@@ -409,11 +409,11 @@ func TestTrafficStore_CleanOldHistory(t *testing.T) {
 
 	// Insert old record (2 days ago)
 	users := map[string][2]int64{"old": {100, 200}}
-	s.InsertHistoryBatch(ctx, now-172800, 1000, 2000, users)
+	_ = s.InsertHistoryBatch(ctx, now-172800, 1000, 2000, users)
 
 	// Insert recent record
 	users2 := map[string][2]int64{"recent": {300, 400}}
-	s.InsertHistoryBatch(ctx, now-60, 500, 600, users2)
+	_ = s.InsertHistoryBatch(ctx, now-60, 500, 600, users2)
 
 	if err := s.CleanOldHistory(ctx, 24*time.Hour); err != nil {
 		t.Fatalf("CleanOldHistory: %v", err)
@@ -437,8 +437,8 @@ func TestTrafficStore_ListUserTraffic(t *testing.T) {
 	s := NewTrafficStore(db)
 	ctx := context.Background()
 
-	s.UpdateUserTraffic(ctx, "alice", 1, 100, 200, 0, 0)
-	s.UpdateUserTraffic(ctx, "bob", 1, 300, 400, 0, 0)
+	_ = s.UpdateUserTraffic(ctx, "alice", 1, 100, 200, 0, 0)
+	_ = s.UpdateUserTraffic(ctx, "bob", 1, 300, 400, 0, 0)
 
 	users, err := s.ListUserTraffic(ctx)
 	if err != nil {
@@ -453,5 +453,141 @@ func TestTrafficStore_ListUserTraffic(t *testing.T) {
 	}
 	if users[1].Label != "bob" {
 		t.Fatalf("expected second user bob, got %s", users[1].Label)
+	}
+}
+
+func TestTrafficStore_FlushInstanceTraffic(t *testing.T) {
+	db := testutil.OpenTestDB(t)
+	s := NewTrafficStore(db)
+	ctx := context.Background()
+
+	users := map[string]model.TrafficSnapshot{
+		"user1": {BytesIn: 100, BytesOut: 200, SnapIn: 50, SnapOut: 80},
+		"user2": {BytesIn: 300, BytesOut: 400, SnapIn: 150, SnapOut: 200},
+	}
+
+	if err := s.FlushInstanceTraffic(ctx, users, 1); err != nil {
+		t.Fatalf("FlushInstanceTraffic: %v", err)
+	}
+
+	u1, _ := s.GetUserTraffic(ctx, "user1")
+	if u1.BytesIn != 100 || u1.BytesOut != 200 {
+		t.Fatalf("user1: expected in=100 out=200, got in=%d out=%d", u1.BytesIn, u1.BytesOut)
+	}
+
+	u2, _ := s.GetUserTraffic(ctx, "user2")
+	if u2.BytesIn != 300 || u2.BytesOut != 400 {
+		t.Fatalf("user2: expected in=300 out=400, got in=%d out=%d", u2.BytesIn, u2.BytesOut)
+	}
+
+	// Global should NOT be updated by FlushInstanceTraffic
+	g, _ := s.GetGlobal(ctx)
+	if g.BytesIn != 0 || g.BytesOut != 0 {
+		t.Fatalf("global should be zero, got in=%d out=%d", g.BytesIn, g.BytesOut)
+	}
+}
+
+func TestTrafficStore_FlushInstanceTraffic_Cumulative(t *testing.T) {
+	db := testutil.OpenTestDB(t)
+	s := NewTrafficStore(db)
+	ctx := context.Background()
+
+	users1 := map[string]model.TrafficSnapshot{
+		"user1": {BytesIn: 100, BytesOut: 200, SnapIn: 50, SnapOut: 80},
+	}
+	_ = s.FlushInstanceTraffic(ctx, users1, 1)
+
+	users2 := map[string]model.TrafficSnapshot{
+		"user1": {BytesIn: 50, BytesOut: 75, SnapIn: 25, SnapOut: 40},
+	}
+	_ = s.FlushInstanceTraffic(ctx, users2, 1)
+
+	u1, _ := s.GetUserTraffic(ctx, "user1")
+	if u1.BytesIn != 150 {
+		t.Fatalf("expected cumulative bytes_in=150, got %d", u1.BytesIn)
+	}
+	if u1.BytesOut != 275 {
+		t.Fatalf("expected cumulative bytes_out=275, got %d", u1.BytesOut)
+	}
+}
+
+func TestTrafficStore_GetAggregatedHistory_ZeroGroupSeconds(t *testing.T) {
+	db := testutil.OpenTestDB(t)
+	s := NewTrafficStore(db)
+	ctx := context.Background()
+
+	_, err := s.GetAggregatedHistory(ctx, 0, 1000, "", 0)
+	if err == nil {
+		t.Fatal("expected error for groupSeconds=0")
+	}
+}
+
+func TestTrafficStore_GetAggregatedHistory_NegativeGroupSeconds(t *testing.T) {
+	db := testutil.OpenTestDB(t)
+	s := NewTrafficStore(db)
+	ctx := context.Background()
+
+	_, err := s.GetAggregatedHistory(ctx, 0, 1000, "", -1)
+	if err == nil {
+		t.Fatal("expected error for negative groupSeconds")
+	}
+}
+
+func TestTrafficStore_ResetTraffic(t *testing.T) {
+	db := testutil.OpenTestDB(t)
+	secrets := NewSecretStore(db)
+	traffic := NewTrafficStore(db)
+	ctx := context.Background()
+
+	if err := secrets.Create(ctx, &model.Secret{
+		Label: "user1", SecretKey: "aa000000000000000000000000000000", Enabled: true,
+	}); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	testutil.SeedTraffic(t, db, "user1", 500, 600)
+
+	if err := traffic.ResetTraffic(ctx, "user1"); err != nil {
+		t.Fatalf("ResetTraffic: %v", err)
+	}
+
+	got, err := secrets.GetByLabel(ctx, "user1")
+	if err != nil {
+		t.Fatalf("GetByLabel: %v", err)
+	}
+	if got.TrafficIn != 0 || got.TrafficOut != 0 {
+		t.Fatalf("expected zero traffic after reset, got in=%d out=%d", got.TrafficIn, got.TrafficOut)
+	}
+}
+
+func TestTrafficStore_ResetAllTraffic(t *testing.T) {
+	db := testutil.OpenTestDB(t)
+	secrets := NewSecretStore(db)
+	traffic := NewTrafficStore(db)
+	ctx := context.Background()
+
+	for _, label := range []string{"user1", "user2"} {
+		if err := secrets.Create(ctx, &model.Secret{
+			Label: label, SecretKey: "aa" + label + "0000000000000000000000000", Enabled: true,
+		}); err != nil {
+			t.Fatalf("Create %s: %v", label, err)
+		}
+	}
+
+	testutil.SeedTraffic(t, db, "user1", 100, 200)
+	testutil.SeedTraffic(t, db, "user2", 300, 400)
+
+	if err := traffic.ResetAllTraffic(ctx); err != nil {
+		t.Fatalf("ResetAllTraffic: %v", err)
+	}
+
+	for _, label := range []string{"user1", "user2"} {
+		got, err := secrets.GetByLabel(ctx, label)
+		if err != nil {
+			t.Fatalf("GetByLabel %s: %v", label, err)
+		}
+		if got.TrafficIn != 0 || got.TrafficOut != 0 {
+			t.Fatalf("%s: expected zero traffic, got in=%d out=%d", label, got.TrafficIn, got.TrafficOut)
+		}
 	}
 }

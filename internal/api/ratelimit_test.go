@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -171,4 +172,52 @@ func TestRateLimitMiddleware_DifferentIPsIndependent(t *testing.T) {
 	if w2.Code != http.StatusOK {
 		t.Errorf("second IP request 1: expected 200, got %d", w2.Code)
 	}
+}
+
+func TestRateLimitMiddleware_RetryAfterHeaderInSeconds(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	// rate=0 (no refill), burst=1
+	limiter := NewIPRateLimiter(0, 1)
+
+	r := gin.New()
+	r.Use(RateLimitMiddleware(limiter))
+	r.GET("/test", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"ok": true})
+	})
+
+	// Use the burst token
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	r.ServeHTTP(w, req)
+
+	// Second request triggers 429 with Retry-After header
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/test", nil)
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected 429, got %d", w.Code)
+	}
+
+	retryAfter := w.Header().Get("Retry-After")
+	if retryAfter == "" {
+		t.Fatal("expected Retry-After header to be set")
+	}
+
+	val, err := strconv.Atoi(retryAfter)
+	if err != nil {
+		t.Fatalf("Retry-After should be an integer (seconds), got %q", retryAfter)
+	}
+	// Must be a reasonable number of seconds (< 100), not nanoseconds (> 1000000000)
+	if val > 100 {
+		t.Errorf("Retry-After should be in seconds, got %d (looks like nanoseconds)", val)
+	}
+}
+
+func TestIPRateLimiter_Close_DoubleCloseSafe(t *testing.T) {
+	limiter := NewIPRateLimiter(1, 5)
+
+	// Double close should not panic
+	limiter.Close()
+	limiter.Close()
 }

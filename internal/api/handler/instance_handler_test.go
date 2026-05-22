@@ -58,7 +58,7 @@ func addInstanceFull(t *testing.T, r *gin.Engine, port, metricsPort int, label s
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 	if respOut != nil {
-		json.Unmarshal(w.Body.Bytes(), respOut)
+		_ = json.Unmarshal(w.Body.Bytes(), respOut)
 	}
 	return w.Code
 }
@@ -117,7 +117,7 @@ func TestInstanceHandler_Add_WithAutoMetricsPort(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp["metrics_port"] == nil {
 		t.Error("expected auto-assigned metrics_port")
 	}
@@ -142,7 +142,7 @@ func TestInstanceHandler_Add_PortEqualsMetricsPort(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp["error"] != "metrics_port must differ from port" {
 		t.Errorf("unexpected error: %v", resp["error"])
 	}
@@ -253,7 +253,7 @@ func TestInstanceHandler_Update(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp["label"] != "Updated" {
 		t.Errorf("expected label=Updated, got %v", resp["label"])
 	}
@@ -320,7 +320,7 @@ func TestInstanceHandler_Update_AutoAssignMetricsPort(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	mp := int(resp["metrics_port"].(float64))
 	if mp == 0 {
 		t.Error("expected auto-assigned metrics_port, got 0")
@@ -350,7 +350,7 @@ func TestInstanceHandler_Remove(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp["ok"] != true {
 		t.Error("expected ok=true")
 	}
@@ -375,7 +375,7 @@ func TestInstanceHandler_RemoveLastInstance(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp["error"] != "cannot delete the last instance" {
 		t.Errorf("expected 'cannot delete the last instance', got %v", resp["error"])
 	}
@@ -405,7 +405,7 @@ func TestInstanceHandler_CheckPort_Available(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp["available"] != true {
 		t.Errorf("expected available=true, got %v", resp["available"])
 	}
@@ -429,7 +429,7 @@ func TestInstanceHandler_CheckPort_ConflictWithInstance(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp["available"] != false {
 		t.Error("expected available=false for conflicting port")
 	}
@@ -454,7 +454,7 @@ func TestInstanceHandler_CheckPort_ExcludeSelf(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	// Port 9091 is metrics port of this instance, excluded — should be available
 	if resp["available"] != true {
 		t.Errorf("expected available=true when excluding self, got %v: %v", resp["available"], resp["reason"])
@@ -567,7 +567,7 @@ func TestInstanceHandler_NextMetricsPort_Empty(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	if int(resp["port"].(float64)) != 9091 {
 		t.Errorf("expected 9091, got %v", resp["port"])
 	}
@@ -599,7 +599,7 @@ func TestInstanceHandler_NextMetricsPort_WithExisting(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	if int(resp["port"].(float64)) != 9092 {
 		t.Errorf("expected 9092, got %v", resp["port"])
 	}
@@ -714,7 +714,7 @@ func TestInstanceHandler_Add_WithTCPMSS(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp["tcp_mss_enabled"] != true {
 		t.Errorf("expected tcp_mss_enabled=true, got %v", resp["tcp_mss_enabled"])
 	}
@@ -743,7 +743,7 @@ func TestInstanceHandler_Add_WithTLSFronting(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp["tls_fronting"] != true {
 		t.Errorf("expected tls_fronting=true, got %v", resp["tls_fronting"])
 	}
@@ -773,7 +773,7 @@ func TestInstanceHandler_Update_TCPMSS(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp["tcp_mss_enabled"] != true {
 		t.Errorf("expected tcp_mss_enabled=true, got %v", resp["tcp_mss_enabled"])
 	}

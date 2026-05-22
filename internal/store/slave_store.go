@@ -26,7 +26,7 @@ func (s *SlaveStore) List(ctx context.Context) ([]model.Slave, error) {
 	if err != nil {
 		return nil, fmt.Errorf("list slaves: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	slaves := make([]model.Slave, 0)
 	for rows.Next() {

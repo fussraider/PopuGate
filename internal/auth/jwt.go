@@ -42,6 +42,8 @@ func GenerateTokenPair(jwtSecret, username string) (accessToken, refreshToken st
 // GenerateJTI creates a cryptographically random unique token identifier.
 func GenerateJTI() string {
 	b := make([]byte, 16)
-	_, _ = rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		panic("crypto/rand.Read failed: " + err.Error())
+	}
 	return hex.EncodeToString(b)
 }

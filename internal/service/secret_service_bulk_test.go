@@ -13,10 +13,10 @@ func TestSecretService_BulkToggle_Enable(t *testing.T) {
 	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
-	svc.Add(ctx, "u1", "")
-	svc.Add(ctx, "u2", "")
-	svc.Toggle(ctx, "u1", false) // disable u1
-	svc.Toggle(ctx, "u2", false) // disable u2
+	_, _ = svc.Add(ctx, "u1", "")
+	_, _ = svc.Add(ctx, "u2", "")
+	_ = svc.Toggle(ctx, "u1", false) // disable u1
+	_ = svc.Toggle(ctx, "u2", false) // disable u2
 
 	n, err := svc.BulkToggle(ctx, []string{"u1", "u2"}, true)
 	if err != nil {
@@ -36,7 +36,7 @@ func TestSecretService_BulkToggle_DisableAll_Rejected(t *testing.T) {
 	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
-	svc.Add(ctx, "only", "")
+	_, _ = svc.Add(ctx, "only", "")
 	// "only" is the sole enabled secret — disabling it must be rejected.
 	_, err := svc.BulkToggle(ctx, []string{"only"}, false)
 	if err == nil {
@@ -48,9 +48,9 @@ func TestSecretService_BulkToggle_DisablePartial(t *testing.T) {
 	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
-	svc.Add(ctx, "a", "")
-	svc.Add(ctx, "b", "")
-	svc.Add(ctx, "c", "")
+	_, _ = svc.Add(ctx, "a", "")
+	_, _ = svc.Add(ctx, "b", "")
+	_, _ = svc.Add(ctx, "c", "")
 
 	// Disable a & b while c remains enabled — should succeed.
 	n, err := svc.BulkToggle(ctx, []string{"a", "b"}, false)
@@ -80,8 +80,8 @@ func TestSecretService_BulkSetLimits(t *testing.T) {
 	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
-	svc.Add(ctx, "m1", "")
-	svc.Add(ctx, "m2", "")
+	_, _ = svc.Add(ctx, "m1", "")
+	_, _ = svc.Add(ctx, "m2", "")
 
 	n, err := svc.BulkSetLimits(ctx, []string{"m1", "m2"}, 5, 3, 1<<20, "")
 	if err != nil {

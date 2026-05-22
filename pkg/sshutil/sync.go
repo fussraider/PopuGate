@@ -47,7 +47,7 @@ func Sync(ctx context.Context, cfg SyncConfig) (*SyncResult, error) {
 		result.Error = err.Error()
 		return result, err
 	}
-	defer sshClient.Close()
+	defer func() { _ = sshClient.Close() }()
 
 	// Open SFTP session
 	sftpClient, err := sftp.NewClient(sshClient)
@@ -55,7 +55,7 @@ func Sync(ctx context.Context, cfg SyncConfig) (*SyncResult, error) {
 		result.Error = err.Error()
 		return result, err
 	}
-	defer sftpClient.Close()
+	defer func() { _ = sftpClient.Close() }()
 
 	// Walk local directory and sync files
 	excludeSet := make(map[string]bool)
@@ -106,7 +106,7 @@ func Sync(ctx context.Context, cfg SyncConfig) (*SyncResult, error) {
 	}
 
 	// Delete extra files on remote
-	if cfg.DeleteExtra && result.FilesSent > 0 {
+	if cfg.DeleteExtra {
 		deleted, _ := deleteExtraFiles(sftpClient, cfg.SourceDir, excludeSet)
 		result.FilesDel = deleted
 	}
@@ -125,14 +125,16 @@ func RestartRemote(ctx context.Context, cfg SyncConfig, containerName string) er
 	if err != nil {
 		return err
 	}
-	defer sshClient.Close()
+	defer func() { _ = sshClient.Close() }()
 
 	session, err := sshClient.NewSession()
 	if err != nil {
 		return err
 	}
-	defer session.Close()
+	defer func() { _ = session.Close() }()
 
+	// containerName is validated by isSafeContainerName (alphanumeric + dash + underscore only),
+	// which prevents shell injection through session.Run.
 	return session.Run(fmt.Sprintf("docker restart %s", containerName))
 }
 
@@ -142,13 +144,13 @@ func TestSSH(ctx context.Context, cfg SyncConfig) error {
 	if err != nil {
 		return err
 	}
-	defer sshClient.Close()
+	defer func() { _ = sshClient.Close() }()
 
 	session, err := sshClient.NewSession()
 	if err != nil {
 		return err
 	}
-	defer session.Close()
+	defer func() { _ = session.Close() }()
 
 	return session.Run("echo ok")
 }
@@ -222,7 +224,7 @@ func saveHostKey(path, hostname string, key ssh.PublicKey) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	_, err = fmt.Fprintf(f, "%s\n", line)
 	return err
@@ -245,45 +247,83 @@ func uploadFile(sftpClient *sftp.Client, localPath, relPath string) error {
 	if err != nil {
 		return err
 	}
-	defer localFile.Close()
+	defer func() { _ = localFile.Close() }()
 
 	remotePath := "/" + relPath
 	remoteFile, err := sftpClient.Create(remotePath)
 	if err != nil {
 		return err
 	}
-	defer remoteFile.Close()
+	defer func() { _ = remoteFile.Close() }()
 
 	_, err = io.Copy(remoteFile, localFile)
 	return err
 }
 
 func deleteExtraFiles(sftpClient *sftp.Client, sourceDir string, excludeSet map[string]bool) (int, error) {
-	// Walk remote and remove files not present locally
+	localRelPaths := collectLocalPaths(sourceDir, excludeSet)
+	if len(localRelPaths) == 0 {
+		return 0, nil
+	}
+
+	remoteDirs := make(map[string]bool)
+	for p := range localRelPaths {
+		top := strings.SplitN(p, "/", 2)[0]
+		remoteDirs["/"+top] = true
+	}
+
 	var deleted int
-	walker := sftpClient.Walk(sourceDir)
+	for remoteDir := range remoteDirs {
+		deleted += removeMissingRemote(sftpClient, remoteDir, localRelPaths, excludeSet)
+	}
+	return deleted, nil
+}
+
+func collectLocalPaths(sourceDir string, excludeSet map[string]bool) map[string]bool {
+	localRelPaths := make(map[string]bool)
+	_ = filepath.Walk(sourceDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil
+		}
+		relPath, relErr := filepath.Rel(sourceDir, path)
+		if relErr != nil || relPath == "." {
+			return nil
+		}
+		for exc := range excludeSet {
+			if strings.Contains(relPath, exc) {
+				if info.IsDir() {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+		}
+		if !info.IsDir() {
+			localRelPaths[filepath.ToSlash(relPath)] = true
+		}
+		return nil
+	})
+	return localRelPaths
+}
+
+func removeMissingRemote(sftpClient *sftp.Client, remoteDir string, localRelPaths map[string]bool, excludeSet map[string]bool) int {
+	var deleted int
+	walker := sftpClient.Walk(remoteDir)
 	for walker.Step() {
 		if err := walker.Err(); err != nil {
 			continue
 		}
 		path := walker.Path()
 		relPath := strings.TrimPrefix(path, "/")
-
-		if relPath == "" {
+		if relPath == "" || isExcluded(relPath, excludeSet) {
 			continue
 		}
-
-		if isExcluded(relPath, excludeSet) {
-			continue
-		}
-
-		localPath := sourceDir + string(os.PathSeparator) + relPath
-		if _, err := os.Stat(localPath); os.IsNotExist(err) {
-			_ = sftpClient.Remove(path)
-			deleted++
+		if !localRelPaths[relPath] {
+			if err := sftpClient.Remove(path); err == nil {
+				deleted++
+			}
 		}
 	}
-	return deleted, nil
+	return deleted
 }
 
 // isExcluded checks whether relPath matches any exclusion pattern.

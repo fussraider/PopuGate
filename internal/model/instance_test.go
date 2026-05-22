@@ -261,3 +261,47 @@ func TestInstanceValidate_TLSFrontingWithFakeTLS(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+func TestGetTags_Empty(t *testing.T) {
+	inst := Instance{Tags: ""}
+	if tags := inst.GetTags(); tags != nil {
+		t.Fatalf("expected nil for empty tags, got %v", tags)
+	}
+}
+
+func TestGetTags_EmptyArray(t *testing.T) {
+	inst := Instance{Tags: "[]"}
+	if tags := inst.GetTags(); tags != nil {
+		t.Fatalf("expected nil for empty array, got %v", tags)
+	}
+}
+
+func TestGetTags_Valid(t *testing.T) {
+	inst := Instance{Tags: `["vip","paid"]`}
+	tags := inst.GetTags()
+	if len(tags) != 2 || tags[0] != "vip" || tags[1] != "paid" {
+		t.Fatalf("expected [vip paid], got %v", tags)
+	}
+}
+
+func TestGetTags_InvalidJSON(t *testing.T) {
+	inst := Instance{Tags: "not-json"}
+	tags := inst.GetTags()
+	if tags != nil {
+		t.Fatalf("expected nil for invalid JSON, got %v", tags)
+	}
+}
+
+func TestGetMaskHost_Fallback(t *testing.T) {
+	inst := Instance{TLSDomain: "cloudflare.com"}
+	if h := inst.GetMaskHost(); h != "cloudflare.com" {
+		t.Fatalf("expected TLSDomain fallback, got %s", h)
+	}
+}
+
+func TestGetMaskHost_Custom(t *testing.T) {
+	inst := Instance{TLSDomain: "cloudflare.com", MaskHost: "custom.host.com"}
+	if h := inst.GetMaskHost(); h != "custom.host.com" {
+		t.Fatalf("expected custom mask host, got %s", h)
+	}
+}

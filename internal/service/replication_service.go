@@ -34,15 +34,21 @@ func (s *ReplicationService) SyncAll(ctx context.Context) []sshutil.SyncResult {
 	// Acquire lock to prevent concurrent sync
 	lockFile, err := os.OpenFile(syncLockPath, os.O_CREATE|os.O_RDWR, 0644)
 	if err == nil {
-		defer lockFile.Close()
+		defer func() { _ = lockFile.Close() }()
 		if err := syscall.Flock(int(lockFile.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
 			return []sshutil.SyncResult{{Error: "another sync already running"}}
 		}
-		defer syscall.Flock(int(lockFile.Fd()), syscall.LOCK_UN)
+		defer func() { _ = syscall.Flock(int(lockFile.Fd()), syscall.LOCK_UN) }()
 	}
 
-	settings, _ := s.settings.Load(ctx)
-	slaves, _ := s.slaves.List(ctx)
+	settings, err := s.settings.Load(ctx)
+	if err != nil {
+		return []sshutil.SyncResult{{Error: fmt.Sprintf("load settings: %v", err)}}
+	}
+	slaves, errS := s.slaves.List(ctx)
+	if errS != nil {
+		return []sshutil.SyncResult{{Error: fmt.Sprintf("list slaves: %v", errS)}}
+	}
 
 	var results []sshutil.SyncResult
 	for _, sl := range slaves {
@@ -76,7 +82,10 @@ func (s *ReplicationService) SyncAll(ctx context.Context) []sshutil.SyncResult {
 
 // SyncSlave syncs to a specific slave.
 func (s *ReplicationService) SyncSlave(ctx context.Context, host string) (*sshutil.SyncResult, error) {
-	settings, _ := s.settings.Load(ctx)
+	settings, err := s.settings.Load(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("load settings: %w", err)
+	}
 	slave, err := s.slaves.GetByHost(ctx, host)
 	if err != nil {
 		return nil, err
@@ -100,7 +109,10 @@ func (s *ReplicationService) SyncSlave(ctx context.Context, host string) (*sshut
 
 // TestSSH tests connectivity to a slave.
 func (s *ReplicationService) TestSSH(ctx context.Context, host string) (*model.SlaveTestResult, error) {
-	settings, _ := s.settings.Load(ctx)
+	settings, err := s.settings.Load(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("load settings: %w", err)
+	}
 	slave, err := s.slaves.GetByHost(ctx, host)
 	if err != nil {
 		return nil, err
@@ -133,9 +145,9 @@ func (s *ReplicationService) TestSSH(ctx context.Context, host string) (*model.S
 			if err := session.Run(fmt.Sprintf("docker ps --filter name=%s --format '{{.Status}}'", shellescape(containerFilter))); err == nil {
 				result.DockerStatus = strings.TrimSpace(buf.String())
 			}
-			session.Close()
+			_ = session.Close()
 		}
-		sshClient.Close()
+		_ = sshClient.Close()
 	}
 
 	return result, nil
@@ -143,13 +155,19 @@ func (s *ReplicationService) TestSSH(ctx context.Context, host string) (*model.S
 
 // GenerateSSHKey generates an ed25519 key pair for replication.
 func (s *ReplicationService) GenerateSSHKey(ctx context.Context) (string, error) {
-	settings, _ := s.settings.Load(ctx)
+	settings, err := s.settings.Load(ctx)
+	if err != nil {
+		return "", fmt.Errorf("load settings: %w", err)
+	}
 	return sshutil.GenerateEd25519Key(settings.SSHKeyPath())
 }
 
 // GetSSHPublicKey reads the existing public key from disk.
 func (s *ReplicationService) GetSSHPublicKey(ctx context.Context) (string, error) {
-	settings, _ := s.settings.Load(ctx)
+	settings, err := s.settings.Load(ctx)
+	if err != nil {
+		return "", fmt.Errorf("load settings: %w", err)
+	}
 	return sshutil.ReadPublicKey(settings.SSHKeyPath())
 }
 

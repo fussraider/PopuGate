@@ -105,7 +105,7 @@ async function handleRemove(filename: string) {
   try {
     await backupStore.remove(filename)
     toast.success(t('backups.removed_success', { label: filename }))
-  } catch (e: any) { toast.error(e.response?.data?.error ?? e.message) }
+  } catch { /* interceptor handles error toast */ }
 }
 
 async function handleRestore(filename: string) {
@@ -113,14 +113,14 @@ async function handleRestore(filename: string) {
   try {
     await backupStore.restore(filename)
     toast.info(t('backups.restored_success'))
-  } catch (e: any) { toast.error(e.response?.data?.error ?? e.message) }
+  } catch { /* interceptor handles error toast */ }
 }
 
 async function handleCreate() {
   try {
     await backupStore.create()
     toast.success(t('backups.created_success'))
-  } catch (e: any) { toast.error(e.response?.data?.error ?? e.message) }
+  } catch { /* interceptor handles error toast */ }
 }
 
 async function handleDownload(filename: string) {
@@ -134,7 +134,7 @@ async function handleDownload(filename: string) {
     link.click()
     link.remove()
     window.URL.revokeObjectURL(url)
-  } catch (e: any) { toast.error(t('backups.download_failed')) }
+  } catch { /* interceptor handles error toast */ }
 }
 
 onMounted(() => backupStore.load())

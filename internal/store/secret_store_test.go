@@ -264,63 +264,6 @@ func TestSecretStore_UpdateTrafficCumulative(t *testing.T) {
 	}
 }
 
-func TestSecretStore_ResetTraffic(t *testing.T) {
-	db := testutil.OpenTestDB(t)
-	s := NewSecretStore(db)
-	ctx := context.Background()
-
-	if err := s.Create(ctx, &model.Secret{
-		Label: "user1", SecretKey: "aa000000000000000000000000000000", Enabled: true,
-	}); err != nil {
-		t.Fatalf("Create: %v", err)
-	}
-
-	testutil.SeedTraffic(t, db, "user1", 500, 600)
-
-	if err := s.ResetTraffic(ctx, "user1"); err != nil {
-		t.Fatalf("ResetTraffic: %v", err)
-	}
-
-	got, err := s.GetByLabel(ctx, "user1")
-	if err != nil {
-		t.Fatalf("GetByLabel: %v", err)
-	}
-	if got.TrafficIn != 0 || got.TrafficOut != 0 {
-		t.Fatalf("expected zero traffic after reset, got in=%d out=%d", got.TrafficIn, got.TrafficOut)
-	}
-}
-
-func TestSecretStore_ResetAllTraffic(t *testing.T) {
-	db := testutil.OpenTestDB(t)
-	s := NewSecretStore(db)
-	ctx := context.Background()
-
-	for _, label := range []string{"user1", "user2"} {
-		if err := s.Create(ctx, &model.Secret{
-			Label: label, SecretKey: "aa" + label + "0000000000000000000000000", Enabled: true,
-		}); err != nil {
-			t.Fatalf("Create %s: %v", label, err)
-		}
-	}
-
-	testutil.SeedTraffic(t, db, "user1", 100, 200)
-	testutil.SeedTraffic(t, db, "user2", 300, 400)
-
-	if err := s.ResetAllTraffic(ctx); err != nil {
-		t.Fatalf("ResetAllTraffic: %v", err)
-	}
-
-	for _, label := range []string{"user1", "user2"} {
-		got, err := s.GetByLabel(ctx, label)
-		if err != nil {
-			t.Fatalf("GetByLabel %s: %v", label, err)
-		}
-		if got.TrafficIn != 0 || got.TrafficOut != 0 {
-			t.Fatalf("%s: expected zero traffic, got in=%d out=%d", label, got.TrafficIn, got.TrafficOut)
-		}
-	}
-}
-
 func TestSecretStore_GetByLabelNonexistent(t *testing.T) {
 	db := testutil.OpenTestDB(t)
 	s := NewSecretStore(db)
@@ -459,8 +402,8 @@ func TestSecretStore_Search(t *testing.T) {
 	s := NewSecretStore(db)
 	ctx := context.Background()
 
-	s.Create(ctx, &model.Secret{Label: "alice", SecretKey: "aa000000000000000000000000000000", Enabled: true, Notes: "VIP"})
-	s.Create(ctx, &model.Secret{Label: "bob", SecretKey: "bb000000000000000000000000000000", Enabled: true})
+	_ = s.Create(ctx, &model.Secret{Label: "alice", SecretKey: "aa000000000000000000000000000000", Enabled: true, Notes: "VIP"})
+	_ = s.Create(ctx, &model.Secret{Label: "bob", SecretKey: "bb000000000000000000000000000000", Enabled: true})
 
 	results, err := s.Search(ctx, "ali")
 	if err != nil {
@@ -484,8 +427,8 @@ func TestSecretStore_Top(t *testing.T) {
 	s := NewSecretStore(db)
 	ctx := context.Background()
 
-	s.Create(ctx, &model.Secret{Label: "low", SecretKey: "aa000000000000000000000000000000", Enabled: true})
-	s.Create(ctx, &model.Secret{Label: "high", SecretKey: "bb000000000000000000000000000000", Enabled: true})
+	_ = s.Create(ctx, &model.Secret{Label: "low", SecretKey: "aa000000000000000000000000000000", Enabled: true})
+	_ = s.Create(ctx, &model.Secret{Label: "high", SecretKey: "bb000000000000000000000000000000", Enabled: true})
 	testutil.SeedTraffic(t, db, "high", 10000, 5000)
 	testutil.SeedTraffic(t, db, "low", 100, 50)
 
@@ -516,50 +459,12 @@ func TestSecretStore_Top_DefaultLimit(t *testing.T) {
 	}
 }
 
-func TestSecretStore_CloneSecret(t *testing.T) {
-	db := testutil.OpenTestDB(t)
-	s := NewSecretStore(db)
-	ctx := context.Background()
-
-	s.Create(ctx, &model.Secret{
-		Label: "src", SecretKey: "aa000000000000000000000000000000",
-		Enabled: true, MaxConns: 10, Tags: `["vip"]`,
-	})
-
-	clone, err := s.CloneSecret(ctx, "src", "dst", "bb000000000000000000000000000000")
-	if err != nil {
-		t.Fatalf("CloneSecret: %v", err)
-	}
-	if clone.Label != "dst" {
-		t.Errorf("Label = %q, want dst", clone.Label)
-	}
-	if clone.SecretKey != "bb000000000000000000000000000000" {
-		t.Errorf("SecretKey not set correctly")
-	}
-	if clone.MaxConns != 10 {
-		t.Errorf("MaxConns = %d, want 10", clone.MaxConns)
-	}
-	if clone.Tags != `["vip"]` {
-		t.Errorf("Tags = %q, want [\"vip\"]", clone.Tags)
-	}
-}
-
-func TestSecretStore_CloneSecret_SourceNotFound(t *testing.T) {
-	db := testutil.OpenTestDB(t)
-	s := NewSecretStore(db)
-
-	_, err := s.CloneSecret(context.Background(), "ghost", "dst", "bb000000000000000000000000000000")
-	if err == nil {
-		t.Fatal("expected error for nonexistent source")
-	}
-}
-
 func TestSecretStore_UpdateTags(t *testing.T) {
 	db := testutil.OpenTestDB(t)
 	s := NewSecretStore(db)
 	ctx := context.Background()
 
-	s.Create(ctx, &model.Secret{Label: "user1", SecretKey: "aa000000000000000000000000000000", Enabled: true})
+	_ = s.Create(ctx, &model.Secret{Label: "user1", SecretKey: "aa000000000000000000000000000000", Enabled: true})
 
 	if err := s.UpdateTags(ctx, "user1", `["vip","paid"]`); err != nil {
 		t.Fatalf("UpdateTags: %v", err)
@@ -576,9 +481,9 @@ func TestSecretStore_ListByTag(t *testing.T) {
 	s := NewSecretStore(db)
 	ctx := context.Background()
 
-	s.Create(ctx, &model.Secret{Label: "vip1", SecretKey: "aa000000000000000000000000000000", Enabled: true, Tags: `["vip","paid"]`})
-	s.Create(ctx, &model.Secret{Label: "vip2", SecretKey: "bb000000000000000000000000000000", Enabled: true, Tags: `["vip"]`})
-	s.Create(ctx, &model.Secret{Label: "free1", SecretKey: "cc000000000000000000000000000000", Enabled: true, Tags: `["free"]`})
+	_ = s.Create(ctx, &model.Secret{Label: "vip1", SecretKey: "aa000000000000000000000000000000", Enabled: true, Tags: `["vip","paid"]`})
+	_ = s.Create(ctx, &model.Secret{Label: "vip2", SecretKey: "bb000000000000000000000000000000", Enabled: true, Tags: `["vip"]`})
+	_ = s.Create(ctx, &model.Secret{Label: "free1", SecretKey: "cc000000000000000000000000000000", Enabled: true, Tags: `["free"]`})
 
 	results, err := s.ListByTag(ctx, "vip")
 	if err != nil {
@@ -594,7 +499,7 @@ func TestSecretStore_Archive_Unarchive(t *testing.T) {
 	s := NewSecretStore(db)
 	ctx := context.Background()
 
-	s.Create(ctx, &model.Secret{Label: "user1", SecretKey: "aa000000000000000000000000000000", Enabled: true})
+	_ = s.Create(ctx, &model.Secret{Label: "user1", SecretKey: "aa000000000000000000000000000000", Enabled: true})
 
 	if err := s.Archive(ctx, "user1"); err != nil {
 		t.Fatalf("Archive: %v", err)
@@ -620,8 +525,8 @@ func TestSecretStore_BulkExtendExpiry(t *testing.T) {
 	s := NewSecretStore(db)
 	ctx := context.Background()
 
-	s.Create(ctx, &model.Secret{Label: "user1", SecretKey: "aa000000000000000000000000000000", Enabled: true})
-	s.Create(ctx, &model.Secret{Label: "user2", SecretKey: "bb000000000000000000000000000000", Enabled: true})
+	_ = s.Create(ctx, &model.Secret{Label: "user1", SecretKey: "aa000000000000000000000000000000", Enabled: true})
+	_ = s.Create(ctx, &model.Secret{Label: "user2", SecretKey: "bb000000000000000000000000000000", Enabled: true})
 
 	updated, err := s.BulkExtendExpiry(ctx, []string{"user1", "user2", "ghost"}, "2030-01-01T00:00:00Z", true)
 	if err != nil {
@@ -637,7 +542,7 @@ func TestSecretStore_BulkRotateKeys(t *testing.T) {
 	s := NewSecretStore(db)
 	ctx := context.Background()
 
-	s.Create(ctx, &model.Secret{Label: "user1", SecretKey: "aa000000000000000000000000000000", Enabled: true})
+	_ = s.Create(ctx, &model.Secret{Label: "user1", SecretKey: "aa000000000000000000000000000000", Enabled: true})
 
 	keys := map[string]string{"user1": "ff000000000000000000000000000000"}
 	updated, err := s.BulkRotateKeys(ctx, []string{"user1"}, keys)
@@ -659,7 +564,7 @@ func TestSecretStore_RenameLabel_WithTraffic(t *testing.T) {
 	s := NewSecretStore(db)
 	ctx := context.Background()
 
-	s.Create(ctx, &model.Secret{Label: "old", SecretKey: "aa000000000000000000000000000000", Enabled: true})
+	_ = s.Create(ctx, &model.Secret{Label: "old", SecretKey: "aa000000000000000000000000000000", Enabled: true})
 	testutil.SeedTraffic(t, db, "old", 1000, 500)
 
 	if err := s.RenameLabel(ctx, "old", "new"); err != nil {
@@ -699,17 +604,180 @@ func TestSecretStore_UpdatePreservesTags(t *testing.T) {
 	s := NewSecretStore(db)
 	ctx := context.Background()
 
-	s.Create(ctx, &model.Secret{
+	_ = s.Create(ctx, &model.Secret{
 		Label: "user1", SecretKey: "aa000000000000000000000000000000",
 		Enabled: true, Tags: `["test"]`,
 	})
 
 	got, _ := s.GetByLabel(ctx, "user1")
 	got.Notes = "updated"
-	s.Update(ctx, got)
+	_ = s.Update(ctx, got)
 
 	got2, _ := s.GetByLabel(ctx, "user1")
 	if got2.Tags != `["test"]` {
 		t.Errorf("Tags = %q, want '[\"test\"]' (preserved after Update)", got2.Tags)
+	}
+}
+
+func TestSecretStore_CountEnabledByLabels(t *testing.T) {
+	db := testutil.OpenTestDB(t)
+	s := NewSecretStore(db)
+	ctx := context.Background()
+
+	_ = s.Create(ctx, &model.Secret{Label: "a", SecretKey: "aa000000000000000000000000000000", Enabled: true})
+	_ = s.Create(ctx, &model.Secret{Label: "b", SecretKey: "bb000000000000000000000000000000", Enabled: true})
+	_ = s.Create(ctx, &model.Secret{Label: "c", SecretKey: "cc000000000000000000000000000000", Enabled: false})
+
+	count, err := s.CountEnabledByLabels(ctx, []string{"a", "b", "c"})
+	if err != nil {
+		t.Fatalf("CountEnabledByLabels: %v", err)
+	}
+	if count != 2 {
+		t.Fatalf("expected 2 enabled among [a,b,c], got %d", count)
+	}
+
+	// Empty labels returns 0
+	count, err = s.CountEnabledByLabels(ctx, nil)
+	if err != nil || count != 0 {
+		t.Fatalf("empty labels: count=%d err=%v", count, err)
+	}
+}
+
+func TestSecretStore_ListAllTags(t *testing.T) {
+	db := testutil.OpenTestDB(t)
+	s := NewSecretStore(db)
+	ctx := context.Background()
+
+	_ = s.Create(ctx, &model.Secret{Label: "u1", SecretKey: "aa000000000000000000000000000000", Enabled: true, Tags: `["vip","paid"]`})
+	_ = s.Create(ctx, &model.Secret{Label: "u2", SecretKey: "bb000000000000000000000000000000", Enabled: true, Tags: `["vip","free"]`})
+	_ = s.Create(ctx, &model.Secret{Label: "u3", SecretKey: "cc000000000000000000000000000000", Enabled: true, Tags: ""})
+
+	tags, err := s.ListAllTags(ctx)
+	if err != nil {
+		t.Fatalf("ListAllTags: %v", err)
+	}
+	if len(tags) != 3 {
+		t.Fatalf("expected 3 unique tags, got %d: %v", len(tags), tags)
+	}
+
+	tagSet := make(map[string]bool)
+	for _, tag := range tags {
+		tagSet[tag] = true
+	}
+	if !tagSet["vip"] || !tagSet["paid"] || !tagSet["free"] {
+		t.Fatalf("missing expected tags, got %v", tags)
+	}
+}
+
+func TestSecretStore_LabelsByTag(t *testing.T) {
+	db := testutil.OpenTestDB(t)
+	s := NewSecretStore(db)
+	ctx := context.Background()
+
+	_ = s.Create(ctx, &model.Secret{Label: "vip1", SecretKey: "aa000000000000000000000000000000", Enabled: true, Tags: `["vip"]`})
+	_ = s.Create(ctx, &model.Secret{Label: "vip2", SecretKey: "bb000000000000000000000000000000", Enabled: true, Tags: `["vip"]`})
+	_ = s.Create(ctx, &model.Secret{Label: "free1", SecretKey: "cc000000000000000000000000000000", Enabled: true, Tags: `["free"]`})
+
+	labels, err := s.LabelsByTag(ctx, "vip")
+	if err != nil {
+		t.Fatalf("LabelsByTag: %v", err)
+	}
+	if len(labels) != 2 {
+		t.Fatalf("expected 2 labels with tag 'vip', got %d", len(labels))
+	}
+	if labels[0] != "vip1" || labels[1] != "vip2" {
+		t.Fatalf("expected [vip1, vip2], got %v", labels)
+	}
+
+	// Non-existent tag returns empty
+	empty, err := s.LabelsByTag(ctx, "ghost")
+	if err != nil || len(empty) != 0 {
+		t.Fatalf("nonexistent tag: labels=%v err=%v", empty, err)
+	}
+}
+
+func TestSecretStore_BulkToggleEnabled(t *testing.T) {
+	db := testutil.OpenTestDB(t)
+	s := NewSecretStore(db)
+	ctx := context.Background()
+
+	_ = s.Create(ctx, &model.Secret{Label: "a", SecretKey: "aa000000000000000000000000000000", Enabled: true})
+	_ = s.Create(ctx, &model.Secret{Label: "b", SecretKey: "bb000000000000000000000000000000", Enabled: true})
+	_ = s.Create(ctx, &model.Secret{Label: "c", SecretKey: "cc000000000000000000000000000000", Enabled: true})
+
+	// Disable two — should work (one remains enabled)
+	updated, err := s.BulkToggleEnabled(ctx, []string{"a", "b"}, false)
+	if err != nil {
+		t.Fatalf("BulkToggleEnabled disable: %v", err)
+	}
+	if updated != 2 {
+		t.Fatalf("expected 2 disabled, got %d", updated)
+	}
+
+	// Try to disable remaining — should fail
+	_, err = s.BulkToggleEnabled(ctx, []string{"c"}, false)
+	if err == nil {
+		t.Fatal("expected error when disabling last enabled secret")
+	}
+
+	// Re-enable one
+	updated, err = s.BulkToggleEnabled(ctx, []string{"a"}, true)
+	if err != nil {
+		t.Fatalf("BulkToggleEnabled enable: %v", err)
+	}
+	if updated != 1 {
+		t.Fatalf("expected 1 enabled, got %d", updated)
+	}
+}
+
+func TestSecretStore_BulkSetLimits(t *testing.T) {
+	db := testutil.OpenTestDB(t)
+	s := NewSecretStore(db)
+	ctx := context.Background()
+
+	_ = s.Create(ctx, &model.Secret{Label: "a", SecretKey: "aa000000000000000000000000000000", Enabled: true, MaxConns: 5, MaxIPs: 3})
+	_ = s.Create(ctx, &model.Secret{Label: "b", SecretKey: "bb000000000000000000000000000000", Enabled: true, MaxConns: 10})
+
+	updated, err := s.BulkSetLimits(ctx, []string{"a", "b"}, 20, 10, -1, "")
+	if err != nil {
+		t.Fatalf("BulkSetLimits: %v", err)
+	}
+	if updated != 2 {
+		t.Fatalf("expected 2 updated, got %d", updated)
+	}
+
+	a, _ := s.GetByLabel(ctx, "a")
+	if a.MaxConns != 20 || a.MaxIPs != 10 {
+		t.Fatalf("a: expected max_conns=20 max_ips=10, got %d/%d", a.MaxConns, a.MaxIPs)
+	}
+
+	b, _ := s.GetByLabel(ctx, "b")
+	if b.MaxConns != 20 || b.MaxIPs != 10 {
+		t.Fatalf("b: expected max_conns=20 max_ips=10, got %d/%d", b.MaxConns, b.MaxIPs)
+	}
+
+	// Negative values should not change existing
+	_, err = s.BulkSetLimits(ctx, []string{"a"}, -1, -1, 5000, "2030-01-01T00:00:00Z")
+	if err != nil {
+		t.Fatalf("BulkSetLimits partial: %v", err)
+	}
+	a, _ = s.GetByLabel(ctx, "a")
+	if a.MaxConns != 20 {
+		t.Fatalf("max_conns should not change with -1, got %d", a.MaxConns)
+	}
+	if a.QuotaBytes != 5000 {
+		t.Fatalf("expected quota=5000, got %d", a.QuotaBytes)
+	}
+	if a.ExpiresAt != "2030-01-01T00:00:00Z" {
+		t.Fatalf("expected new expiry, got %s", a.ExpiresAt)
+	}
+
+	// Nonexistent label is skipped
+	updated, err = s.BulkSetLimits(ctx, []string{"ghost"}, 5, 5, 0, "")
+	if err != nil {
+		t.Fatalf("BulkSetLimits nonexistent: %v", err)
+	}
+	if updated != 0 {
+		t.Fatalf("expected 0 updated for nonexistent, got %d", updated)
 	}
 }

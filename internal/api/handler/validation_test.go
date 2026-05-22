@@ -68,7 +68,7 @@ func TestHandleBindError_Required(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	details, ok := resp["details"].(map[string]interface{})
 	if !ok {
 		t.Fatalf("expected details, got: %v", resp)
@@ -99,7 +99,7 @@ func TestHandleBindError_Min(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	details := resp["details"].(map[string]interface{})
 	msg := details["Count"].(string)
 	if !strings.Contains(msg, "at least 5") {
@@ -127,7 +127,7 @@ func TestHandleBindError_Max(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	details := resp["details"].(map[string]interface{})
 	msg := details["Count"].(string)
 	if !strings.Contains(msg, "at most 10") {
@@ -155,7 +155,7 @@ func TestHandleBindError_Oneof(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	details := resp["details"].(map[string]interface{})
 	msg := details["Type"].(string)
 	if !strings.Contains(msg, "one of") {
@@ -183,7 +183,7 @@ func TestHandleBindError_Len(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	details := resp["details"].(map[string]interface{})
 	msg := details["Code"].(string)
 	if !strings.Contains(msg, "exactly 6 characters") {
@@ -226,7 +226,7 @@ func TestHandleBindError_Alpha(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	details := resp["details"].(map[string]interface{})
 	msg := details["Code"].(string)
 	if !strings.Contains(msg, "only letters") {
@@ -254,7 +254,7 @@ func TestHandleBindError_Numeric(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	details := resp["details"].(map[string]interface{})
 	msg := details["Num"].(string)
 	if !strings.Contains(msg, "numeric") {
@@ -282,7 +282,7 @@ func TestHandleBindError_Hexadecimal(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	details := resp["details"].(map[string]interface{})
 	msg := details["Hex"].(string)
 	if !strings.Contains(msg, "hex") {
@@ -314,7 +314,7 @@ func TestHandleBindError_UnknownTag(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	details := resp["details"].(map[string]interface{})
 	msg := details["Val"].(string)
 	if !strings.Contains(msg, "failed validation") {
@@ -346,7 +346,7 @@ func TestHandleBindError_NonValidationError(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	if _, hasDetails := resp["details"]; hasDetails {
 		t.Error("non-validation error should not have 'details' key")
 	}

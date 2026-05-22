@@ -442,8 +442,8 @@ async function proxyAction(action: 'start' | 'stop' | 'restart' | 'reload') {
       reload: t('dashboard.reloaded')
     }
     toast.success(labels[action])
-  } catch (e: any) {
-    toast.error(e.response?.data?.error ?? e.message)
+  } catch {
+    // interceptor handles error toast
   }
 }
 

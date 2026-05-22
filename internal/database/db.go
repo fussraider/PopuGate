@@ -12,8 +12,11 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/fussraider/PopuGate/pkg/logger"
 	_ "modernc.org/sqlite"
 )
+
+var dbLog = logger.WithScope("database")
 
 //go:embed migrations/*.sql
 var migrationsFS embed.FS
@@ -69,12 +72,12 @@ func openDB(cfg Config) (*sql.DB, error) {
 	db.SetMaxOpenConns(1)
 
 	if err := runMigrations(db); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, err
 	}
 
 	if err := migrateSecretTagsToJSON(db); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, err
 	}
 
@@ -87,13 +90,12 @@ func runMigrations(db *sql.DB) error {
 	if err != nil {
 		return fmt.Errorf("load migrations: %w", err)
 	}
-	fmt.Printf("Loaded %d migrations\n", len(migrations))
+	dbLog.Infof("Loaded %d migrations", len(migrations))
 
 	if len(migrations) == 0 {
 		return nil
 	}
 
-	// Ensure schema_version table exists
 	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS schema_version (
 		version    INTEGER PRIMARY KEY,
 		name       TEXT    NOT NULL,
@@ -102,87 +104,96 @@ func runMigrations(db *sql.DB) error {
 		return fmt.Errorf("create schema_version: %w", err)
 	}
 
-	// Get applied versions
-	applied := make(map[int]bool)
-	rows, err := db.Query("SELECT version FROM schema_version")
+	applied, err := loadAppliedVersions(db)
 	if err != nil {
-		return fmt.Errorf("read schema_version: %w", err)
+		return err
 	}
-	for rows.Next() {
-		var v int
-		if err := rows.Scan(&v); err != nil {
-			rows.Close()
-			return err
-		}
-		applied[v] = true
-	}
-	rows.Close()
 
-	// Apply pending migrations
 	for _, m := range migrations {
 		if applied[m.version] {
 			continue
 		}
-
-		fmt.Printf("Applying migration %d (%s)\n", m.version, m.name)
-		tx, err := db.Begin()
-		if err != nil {
-			return fmt.Errorf("begin migration %d: %w", m.version, err)
+		dbLog.Infof("Applying migration %d (%s)", m.version, m.name)
+		if err := applyMigration(db, m); err != nil {
+			return err
 		}
+	}
+	return nil
+}
 
-		content := m.content
-		// Parse the migration content to get only the "Up" part.
-		// We look for "-- +migrate Up:" and "-- +migrate Down:" markers.
-		upIdx := strings.Index(content, "-- +migrate Up:")
-		downIdx := strings.Index(content, "-- +migrate Down:")
-
-		var sqlToRun string
-		if upIdx != -1 {
-			if downIdx != -1 && downIdx > upIdx {
-				sqlToRun = content[upIdx+len("-- +migrate Up:") : downIdx]
-			} else {
-				sqlToRun = content[upIdx+len("-- +migrate Up:"):]
-			}
-		} else {
-			// Fallback: if no markers, run everything (legacy)
-			if downIdx != -1 {
-				sqlToRun = content[:downIdx]
-			} else {
-				sqlToRun = content
-			}
+func loadAppliedVersions(db *sql.DB) (map[int]bool, error) {
+	rows, err := db.Query("SELECT version FROM schema_version")
+	if err != nil {
+		return nil, fmt.Errorf("read schema_version: %w", err)
+	}
+	applied := make(map[int]bool)
+	for rows.Next() {
+		var v int
+		if err := rows.Scan(&v); err != nil {
+			_ = rows.Close()
+			return nil, err
 		}
+		applied[v] = true
+	}
+	_ = rows.Close()
+	return applied, nil
+}
 
-		sqlToRun = strings.TrimSpace(sqlToRun)
-		if sqlToRun != "" {
-			// Split by semicolon and run each statement individually.
-			// This is because Exec() might not support multiple ALTER TABLE statements in one call depending on driver.
-			statements := strings.Split(sqlToRun, ";")
-			for _, stmt := range statements {
-				stmt = strings.TrimSpace(stmt)
-				if stmt == "" {
-					continue
-				}
-				if _, err := tx.Exec(stmt); err != nil {
-					// If column already exists, we can ignore this error for ADD COLUMN statements
-					if strings.Contains(strings.ToUpper(stmt), "ADD COLUMN") && strings.Contains(err.Error(), "duplicate column name") {
-						continue
-					}
-					tx.Rollback()
-					return fmt.Errorf("run migration %d (%s) statement [%s]: %w", m.version, m.name, stmt, err)
-				}
-			}
-		}
+func applyMigration(db *sql.DB, m migration) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return fmt.Errorf("begin migration %d: %w", m.version, err)
+	}
 
-		if _, err := tx.Exec("INSERT INTO schema_version (version, name) VALUES (?, ?)", m.version, m.name); err != nil {
-			tx.Rollback()
-			return fmt.Errorf("record migration %d: %w", m.version, err)
-		}
-
-		if err := tx.Commit(); err != nil {
-			return fmt.Errorf("commit migration %d: %w", m.version, err)
+	sqlToRun := extractUpSQL(m.content)
+	if sqlToRun != "" {
+		if err := execMigrationStatements(tx, sqlToRun, m); err != nil {
+			_ = tx.Rollback()
+			return err
 		}
 	}
 
+	if _, err := tx.Exec("INSERT INTO schema_version (version, name) VALUES (?, ?)", m.version, m.name); err != nil {
+		_ = tx.Rollback()
+		return fmt.Errorf("record migration %d: %w", m.version, err)
+	}
+	return tx.Commit()
+}
+
+func extractUpSQL(content string) string {
+	upIdx := strings.Index(content, "-- +migrate Up:")
+	downIdx := strings.Index(content, "-- +migrate Down:")
+
+	var sqlToRun string
+	if upIdx != -1 {
+		if downIdx != -1 && downIdx > upIdx {
+			sqlToRun = content[upIdx+len("-- +migrate Up:") : downIdx]
+		} else {
+			sqlToRun = content[upIdx+len("-- +migrate Up:"):]
+		}
+	} else {
+		if downIdx != -1 {
+			sqlToRun = content[:downIdx]
+		} else {
+			sqlToRun = content
+		}
+	}
+	return strings.TrimSpace(sqlToRun)
+}
+
+func execMigrationStatements(tx *sql.Tx, sqlToRun string, m migration) error {
+	for _, stmt := range strings.Split(sqlToRun, ";") {
+		stmt = strings.TrimSpace(stmt)
+		if stmt == "" {
+			continue
+		}
+		if _, err := tx.Exec(stmt); err != nil {
+			if strings.Contains(strings.ToUpper(stmt), "ADD COLUMN") && strings.Contains(err.Error(), "duplicate column name") {
+				continue
+			}
+			return fmt.Errorf("run migration %d (%s) statement [%s]: %w", m.version, m.name, stmt, err)
+		}
+	}
 	return nil
 }
 
@@ -251,7 +262,7 @@ func migrateSecretTagsToJSON(db *sql.DB) error {
 	if err != nil {
 		return fmt.Errorf("migrate secret tags: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	type row struct {
 		rowid int64
@@ -278,7 +289,10 @@ func migrateSecretTagsToJSON(db *sql.DB) error {
 				clean = append(clean, p)
 			}
 		}
-		jsonTags, _ := json.Marshal(clean)
+		jsonTags, jsonErr := json.Marshal(clean)
+		if jsonErr != nil {
+			dbLog.Warnf("marshal tags for row %d: %v", r.rowid, jsonErr)
+		}
 		if _, err := db.Exec("UPDATE secrets SET tags = ? WHERE rowid = ?", string(jsonTags), r.rowid); err != nil {
 			return fmt.Errorf("migrate secret tags row %d: %w", r.rowid, err)
 		}

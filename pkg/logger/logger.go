@@ -114,23 +114,23 @@ func write(l Level, scope string, format string, args ...any) {
 	mu.Lock()
 	if noColor {
 		if scope != "" {
-			fmt.Fprintf(out, "%-5s %s [%s] %s\n", l.String(), ts, scope, msg)
+			_, _ = fmt.Fprintf(out, "%-5s %s [%s] %s\n", l.String(), ts, scope, msg)
 		} else {
-			fmt.Fprintf(out, "%-5s %s %s\n", l.String(), ts, msg)
+			_, _ = fmt.Fprintf(out, "%-5s %s %s\n", l.String(), ts, msg)
 		}
 	} else {
 		emoji := levelEmoji(l)
 		clr := colorize(l)
 		if scope != "" {
-			fmt.Fprintf(out, "%s %s%s [%s] %s\n", emoji, clr, ts, scope, msg)
+			_, _ = fmt.Fprintf(out, "%s %s%s [%s] %s\n", emoji, clr, ts, scope, msg)
 		} else {
-			fmt.Fprintf(out, "%s %s%s %s\n", emoji, clr, ts, msg)
+			_, _ = fmt.Fprintf(out, "%s %s%s %s\n", emoji, clr, ts, msg)
 		}
 	}
 	mu.Unlock()
 
 	if l == LevelFatal {
-		panic(msg)
+		os.Exit(1)
 	}
 }
 

@@ -10,7 +10,7 @@ func TestOpenMemory_CreatesSchemaVersionTable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	// Verify schema_version table exists
 	var count int
@@ -31,7 +31,7 @@ func TestOpenMemory_AllTablesExist(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	tables := []string{
 		"settings", "secrets", "upstreams", "instances", "slaves",
@@ -54,7 +54,7 @@ func TestMigrations_Idempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open first: %v", err)
 	}
-	db.Close()
+	_ = db.Close()
 
 	// Re-opening should not re-apply migrations
 	Reset()
@@ -62,7 +62,7 @@ func TestMigrations_Idempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open second: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	var count int
 	err = db.QueryRow("SELECT COUNT(*) FROM schema_version").Scan(&count)
@@ -80,12 +80,12 @@ func TestReset_AllowsReopening(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open first: %v", err)
 	}
-	db1.Close()
+	_ = db1.Close()
 
 	Reset()
 	db2, err := Open(Config{Path: ":memory:"})
 	if err != nil {
 		t.Fatalf("Open after Reset: %v", err)
 	}
-	db2.Close()
+	_ = db2.Close()
 }

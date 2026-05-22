@@ -13,7 +13,7 @@ func TestOpenMemory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	// Verify settings table was created
 	var count int
@@ -55,7 +55,7 @@ func TestOpen_RetriesOnTransientFailure(t *testing.T) {
 	if err != nil {
 		t.Fatalf("retry Open should succeed, got: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	var val int
 	if err := db.QueryRow("SELECT 1").Scan(&val); err != nil {
@@ -86,7 +86,7 @@ func TestOpen_Singleton(t *testing.T) {
 	}
 
 	Reset()
-	db1.Close()
+	_ = db1.Close()
 }
 
 func TestOpen_CreatesDirectory(t *testing.T) {
@@ -98,7 +98,7 @@ func TestOpen_CreatesDirectory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open with nested dir: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
 		t.Error("expected database file to be created")

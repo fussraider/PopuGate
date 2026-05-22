@@ -45,7 +45,7 @@ func (s *AuditStore) List(ctx context.Context, limit, offset int) ([]model.Audit
 	if err != nil {
 		return nil, fmt.Errorf("list audit: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var entries []model.AuditEntry
 	for rows.Next() {

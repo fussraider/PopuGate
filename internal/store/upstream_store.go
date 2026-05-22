@@ -29,7 +29,7 @@ func (s *UpstreamStore) List(ctx context.Context) ([]model.Upstream, error) {
 	if err != nil {
 		return nil, fmt.Errorf("list upstreams: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	upstreams := make([]model.Upstream, 0)
 	for rows.Next() {
@@ -90,7 +90,7 @@ func (s *UpstreamStore) ListEnabled(ctx context.Context) ([]model.Upstream, erro
 	if err != nil {
 		return nil, fmt.Errorf("list enabled upstreams: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	upstreams := make([]model.Upstream, 0)
 	for rows.Next() {
@@ -108,6 +108,9 @@ func (s *UpstreamStore) ListEnabled(ctx context.Context) ([]model.Upstream, erro
 			u.LastCheckOK = &v
 		}
 		upstreams = append(upstreams, u)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate enabled upstreams: %w", err)
 	}
 	return upstreams, nil
 }

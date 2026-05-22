@@ -76,7 +76,7 @@ func TestGeoblockHandler_Get_AfterAdd(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp["countries"] != "ru" {
 		t.Errorf("expected countries 'ru', got %v", resp["countries"])
 	}
@@ -98,7 +98,7 @@ func TestGeoblockAdd_ValidCountry(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp["ok"] != true {
 		t.Error("expected ok=true")
 	}
@@ -136,7 +136,7 @@ func TestGeoblockAdd_MultipleCountries(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	countries := resp["countries"].(string)
 	if countries != "ru,us" {
 		t.Errorf("expected countries 'ru,us', got %q", countries)
@@ -228,7 +228,7 @@ func TestGeoblockRemove_ValidCountry(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp["ok"] != true {
 		t.Error("expected ok=true")
 	}
@@ -242,7 +242,7 @@ func TestGeoblockRemove_ValidCountry(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	var getResp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &getResp)
+	_ = json.Unmarshal(w.Body.Bytes(), &getResp)
 	if getResp["countries"] != "us" {
 		t.Errorf("expected countries 'us', got %v", getResp["countries"])
 	}
@@ -290,7 +290,7 @@ func TestGeoblockRemove_NonexistentCountry(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp["countries"] != "ru" {
 		t.Errorf("expected 'ru' to remain, got %v", resp["countries"])
 	}
@@ -320,7 +320,7 @@ func TestGeoblockHandler_Clear(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp["ok"] != true {
 		t.Error("expected ok=true")
 	}
@@ -331,7 +331,7 @@ func TestGeoblockHandler_Clear(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	var getResp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &getResp)
+	_ = json.Unmarshal(w.Body.Bytes(), &getResp)
 	if getResp["countries"] != "" {
 		t.Errorf("expected empty countries after clear, got %v", getResp["countries"])
 	}
@@ -353,7 +353,7 @@ func TestGeoblockHandler_SetMode_ValidBlacklist(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp["ok"] != true {
 		t.Error("expected ok=true")
 	}
@@ -376,7 +376,7 @@ func TestGeoblockHandler_SetMode_ValidWhitelist(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp["mode"] != "whitelist" {
 		t.Errorf("expected mode 'whitelist', got %v", resp["mode"])
 	}
@@ -387,7 +387,7 @@ func TestGeoblockHandler_SetMode_ValidWhitelist(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	var getResp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &getResp)
+	_ = json.Unmarshal(w.Body.Bytes(), &getResp)
 	if getResp["mode"] != "whitelist" {
 		t.Errorf("expected mode 'whitelist' persisted, got %v", getResp["mode"])
 	}
@@ -463,5 +463,48 @@ func TestStringsJoinComma(t *testing.T) {
 				t.Errorf("stringsJoinComma(%v) = %q, want %q", tt.parts, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestGeoblockAdd_SettingsLoadFailure(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db := testutil.OpenTestDB(t)
+	settingsStore := store.NewSettingsStore(db)
+	// Close DB to cause settings.Load to fail
+	_ = db.Close()
+
+	handler := NewGeoblockHandler(settingsStore, nil)
+	r := gin.New()
+	r.POST("/geoblock/add", handler.Add)
+
+	body, _ := json.Marshal(map[string]string{"country": "ru"})
+	req := httptest.NewRequest(http.MethodPost, "/geoblock/add", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500 when settings.Load fails, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestGeoblockRemove_SettingsLoadFailure(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db := testutil.OpenTestDB(t)
+	settingsStore := store.NewSettingsStore(db)
+	_ = db.Close()
+
+	handler := NewGeoblockHandler(settingsStore, nil)
+	r := gin.New()
+	r.POST("/geoblock/remove", handler.Remove)
+
+	body, _ := json.Marshal(map[string]string{"country": "ru"})
+	req := httptest.NewRequest(http.MethodPost, "/geoblock/remove", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500 when settings.Load fails, got %d: %s", w.Code, w.Body.String())
 	}
 }

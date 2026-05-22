@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/fussraider/PopuGate/internal/store"
@@ -21,10 +22,12 @@ type TelemtUpdateService struct {
 	dockerSvc    *DockerService
 	containerSvc *ContainerService
 	telemtCfg    *DBTelemtConfig
-	notify       NotifyFunc
+	notify       atomic.Value
 
 	mu          sync.RWMutex
 	subscribers map[chan *TelemtUpdateStatus]struct{}
+
+	applyMu sync.Mutex
 }
 
 // TelemtReleaseInfo holds information about a remote telemt release.
@@ -102,7 +105,7 @@ func (s *TelemtUpdateService) broadcast(status *TelemtUpdateStatus) {
 }
 
 // SetNotify sets the notification callback.
-func (s *TelemtUpdateService) SetNotify(fn NotifyFunc) { s.notify = fn }
+func (s *TelemtUpdateService) SetNotify(fn NotifyFunc) { s.notify.Store(fn) }
 
 // ResetStaleUpdate clears a stale "updating" flag left from a crash/restart.
 // Should be called once at server startup.
@@ -110,7 +113,7 @@ func (s *TelemtUpdateService) ResetStaleUpdate(ctx context.Context) {
 	updatingFlag, _ := s.settings.Get(ctx, "telemt_updating")
 	if updatingFlag == "true" {
 		logger.WithScope("telemt-update").Warnf("clearing stale telemt update flag (server restarted mid-update)")
-		s.settings.Save(ctx, map[string]string{
+		_ = s.settings.Save(ctx, map[string]string{
 			"telemt_updating":    "false",
 			"telemt_updating_to": "",
 		})
@@ -134,7 +137,7 @@ func (s *TelemtUpdateService) CheckRemote(ctx context.Context) (*TelemtReleaseIn
 	if err != nil {
 		return nil, fmt.Errorf("check telemt release: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != 200 {
 		return nil, fmt.Errorf("GitHub API returned %d", resp.StatusCode)
@@ -200,6 +203,9 @@ func (s *TelemtUpdateService) GetStatus(ctx context.Context) (*TelemtUpdateStatu
 // Apply performs the engine update: save version -> build image -> restart proxy.
 // The proxy is NOT stopped during the build.
 func (s *TelemtUpdateService) Apply(ctx context.Context, version, commit string) error {
+	s.applyMu.Lock()
+	defer s.applyMu.Unlock()
+
 	log := logger.WithScope("telemt-update")
 
 	if !IsSafeGitRef(version) {
@@ -210,7 +216,7 @@ func (s *TelemtUpdateService) Apply(ctx context.Context, version, commit string)
 	}
 
 	updatingTo := fmt.Sprintf("%s-%s", version, commit)
-	s.settings.Save(ctx, map[string]string{
+	_ = s.settings.Save(ctx, map[string]string{
 		"telemt_updating":    "true",
 		"telemt_updating_to": updatingTo,
 	})
@@ -225,7 +231,7 @@ func (s *TelemtUpdateService) Apply(ctx context.Context, version, commit string)
 	prevCommit, _ := s.settings.Get(ctx, "telemt_commit")
 
 	defer func() {
-		s.settings.Save(ctx, map[string]string{
+		_ = s.settings.Save(ctx, map[string]string{
 			"telemt_updating":    "false",
 			"telemt_updating_to": "",
 		})
@@ -248,7 +254,7 @@ func (s *TelemtUpdateService) Apply(ctx context.Context, version, commit string)
 	result, err := s.dockerSvc.BuildEngine(ctx, true)
 	if err != nil {
 		log.Errorf("build failed, reverting version: %v", err)
-		s.settings.Save(ctx, map[string]string{
+		_ = s.settings.Save(ctx, map[string]string{
 			"telemt_version": prevVersion,
 			"telemt_commit":  prevCommit,
 		})
@@ -298,7 +304,7 @@ func (s *TelemtUpdateService) fetchAndCacheReleases(ctx context.Context, client 
 		logger.WithScope("telemt-update").Warnf("fetch releases list: %v", err)
 		return
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != 200 {
 		logger.WithScope("telemt-update").Warnf("fetch releases list: status %d", resp.StatusCode)
@@ -335,7 +341,7 @@ func (s *TelemtUpdateService) fetchAndCacheReleases(ctx context.Context, client 
 	if err != nil {
 		return
 	}
-	s.settings.Save(ctx, map[string]string{
+	_ = s.settings.Save(ctx, map[string]string{
 		"telemt_releases_cache": string(data),
 	})
 }
@@ -359,8 +365,7 @@ func (s *TelemtUpdateService) cacheRelease(ctx context.Context, info *TelemtRele
 }
 
 func (s *TelemtUpdateService) notifyUpdate(ctx context.Context, format string, args ...any) {
-	if s.notify == nil {
-		return
+	if v := s.notify.Load(); v != nil {
+		v.(NotifyFunc)(ctx, format, args...)
 	}
-	s.notify(ctx, format, args...)
 }

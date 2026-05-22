@@ -1073,37 +1073,6 @@ paths:
       summary: Update settings
       tags:
       - config
-  /config/{key}:
-    get:
-      consumes:
-      - application/json
-      description: Returns the value of a specific setting by key name
-      parameters:
-      - description: Setting key
-        in: path
-        name: key
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      security:
-      - BearerAuth: []
-      summary: Get a single setting
-      tags:
-      - config
   /docker/install:
     post:
       consumes:

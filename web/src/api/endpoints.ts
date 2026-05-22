@@ -46,9 +46,9 @@ export const authApi = {
     api.post<LoginResponse>('/auth/login', data).then((r) => r.data),
 
   refresh: (refreshToken: string) =>
-    api.post<LoginResponse>('/auth/refresh', { refresh_token: refreshToken }).then((r) => r.data),
+    api.post<LoginResponse>('/auth/refresh', { refresh_token: refreshToken }, { _noRetry: true } as any).then((r) => r.data),
 
-  logout: () => api.post('/auth/logout'),
+  logout: () => api.post('/auth/logout', {}, { _noRetry: true } as any),
 
   changePassword: (currentPassword: string, newPassword: string) =>
     api.put('/auth/password', { current: currentPassword, new: newPassword }),
@@ -166,7 +166,7 @@ export const secretsApi = {
     api.get<Secret[]>('/secrets/export').then((r) => r.data),
 
   importSecrets: (secrets: SecretImportItem[]) =>
-    api.post<{ ok: boolean; imported: number; created: string[] }>('/secrets/import', { secrets }).then((r) => r.data),
+    api.post<{ ok: boolean; imported: string[]; skipped: string[]; errors: string[] }>('/secrets/import', { secrets }).then((r) => r.data),
 }
 
 // ─── Upstreams ─────────────────────────────────────────────────

@@ -41,7 +41,7 @@ func (h *SystemHandler) StreamResources(c *gin.Context) {
 	if err != nil {
 		return
 	}
-	defer ws.Close()
+	defer func() { _ = ws.Close() }()
 
 	monitor := service.GetResourceMonitor()
 	ch, unsubscribe := monitor.Subscribe()

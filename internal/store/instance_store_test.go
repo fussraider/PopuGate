@@ -21,74 +21,6 @@ func TestInstanceStore_CountEmpty(t *testing.T) {
 	}
 }
 
-func TestInstanceStore_EnsureDefaultInstanceSeeds(t *testing.T) {
-	db := testutil.OpenTestDB(t)
-	s := NewInstanceStore(db)
-	ctx := context.Background()
-
-	if err := s.EnsureDefaultInstance(ctx, 443, 9090, "cloudflare.com", "", true); err != nil {
-		t.Fatalf("EnsureDefaultInstance: %v", err)
-	}
-
-	count, err := s.Count(ctx)
-	if err != nil {
-		t.Fatalf("Count: %v", err)
-	}
-	if count != 1 {
-		t.Fatalf("expected 1 instance after seeding, got %d", count)
-	}
-
-	got, err := s.GetByPort(ctx, 443)
-	if err != nil {
-		t.Fatalf("GetByPort: %v", err)
-	}
-	if got == nil {
-		t.Fatal("expected instance, got nil")
-	}
-	if got.Port != 443 {
-		t.Fatalf("expected port 443, got %d", got.Port)
-	}
-	if got.MetricsPort != 9090 {
-		t.Fatalf("expected metrics_port 9090, got %d", got.MetricsPort)
-	}
-	if !got.Enabled {
-		t.Fatal("expected enabled=true for default instance")
-	}
-	if got.Label != "Default" {
-		t.Fatalf("expected label 'Default', got %s", got.Label)
-	}
-}
-
-func TestInstanceStore_EnsureDefaultInstanceNoOpIfPopulated(t *testing.T) {
-	db := testutil.OpenTestDB(t)
-	s := NewInstanceStore(db)
-	ctx := context.Background()
-
-	if err := s.EnsureDefaultInstance(ctx, 443, 9090, "cloudflare.com", "", true); err != nil {
-		t.Fatalf("EnsureDefaultInstance first: %v", err)
-	}
-	if err := s.EnsureDefaultInstance(ctx, 8090, 9091, "cloudflare.com", "", true); err != nil {
-		t.Fatalf("EnsureDefaultInstance second: %v", err)
-	}
-
-	count, err := s.Count(ctx)
-	if err != nil {
-		t.Fatalf("Count: %v", err)
-	}
-	if count != 1 {
-		t.Fatalf("expected 1 instance (no-op), got %d", count)
-	}
-
-	// Verify original data was not overwritten
-	got, err := s.GetByPort(ctx, 443)
-	if err != nil {
-		t.Fatalf("GetByPort: %v", err)
-	}
-	if got.Port != 443 {
-		t.Fatalf("expected original port 443, got %d", got.Port)
-	}
-}
-
 func TestInstanceStore_CreateAndGetByPort(t *testing.T) {
 	db := testutil.OpenTestDB(t)
 	s := NewInstanceStore(db)
@@ -288,6 +220,32 @@ func TestInstanceStore_UpdateTCPMSS(t *testing.T) {
 	}
 }
 
+func TestInstanceStore_DeleteByID(t *testing.T) {
+	db := testutil.OpenTestDB(t)
+	s := NewInstanceStore(db)
+	ctx := context.Background()
+
+	inst := &model.Instance{
+		Port: 7777, MetricsPort: 9077, Enabled: true, Label: "byid",
+	}
+	if err := s.Create(ctx, inst); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	id := inst.ID
+
+	if err := s.DeleteByID(ctx, id); err != nil {
+		t.Fatalf("DeleteByID: %v", err)
+	}
+
+	got, err := s.GetByID(ctx, id)
+	if err != nil {
+		t.Fatalf("GetByID: %v", err)
+	}
+	if got != nil {
+		t.Fatal("expected nil after DeleteByID")
+	}
+}
+
 func TestInstanceStore_DefaultAntiBlock(t *testing.T) {
 	db := testutil.OpenTestDB(t)
 	s := NewInstanceStore(db)
@@ -300,7 +258,7 @@ func TestInstanceStore_DefaultAntiBlock(t *testing.T) {
 		Label:       "defaults",
 		TLSDomain:   "example.com",
 	}
-	inst.Validate()
+	_ = inst.Validate()
 	if err := s.Create(ctx, inst); err != nil {
 		t.Fatalf("Create: %v", err)
 	}

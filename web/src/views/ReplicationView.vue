@@ -187,24 +187,24 @@ async function handleSetupRole() {
   try {
     await replicationStore.setup(roleForm.value.role, roleForm.value.interval)
     toast.success(t('replication.setup_success'))
-  } catch (e: any) { toast.error(e.response?.data?.error ?? e.message) }
+  } catch { /* interceptor handles error toast */ }
 }
 
 async function handleSSHKeygen() {
   try { publicKey.value = await replicationStore.sshKeygen() }
-  catch (e: any) { toast.error(e.response?.data?.error ?? e.message) }
+  catch { /* interceptor handles error toast */ }
 }
 
 function copyKey() { navigator.clipboard.writeText(publicKey.value) }
 
 async function testSlave(host: string) {
   try { testResult.value = await replicationStore.test(host) }
-  catch (e: any) { toast.error(e.response?.data?.error ?? e.message) }
+  catch { /* interceptor handles error toast */ }
 }
 
 async function handleRemove(host: string) {
   if (!await confirm({ title: t('replication.remove_slave_title'), message: t('replication.confirm_remove', { label: host }), confirmText: t('replication.remove') })) return
-  try { await replicationStore.removeSlave(host) } catch (e: any) { toast.error(e.response?.data?.error ?? e.message) }
+  try { await replicationStore.removeSlave(host) } catch { /* interceptor handles error toast */ }
 }
 
 onMounted(async () => {

@@ -61,9 +61,9 @@ func TestAlertStore_ClearForLabel(t *testing.T) {
 	s := NewQuotaAlertStore(db)
 	ctx := context.Background()
 
-	s.MarkAlerted(ctx, "user1", 80)
-	s.MarkAlerted(ctx, "user1", 90)
-	s.MarkAlerted(ctx, "user2", 80)
+	_ = s.MarkAlerted(ctx, "user1", 80)
+	_ = s.MarkAlerted(ctx, "user1", 90)
+	_ = s.MarkAlerted(ctx, "user2", 80)
 
 	if err := s.ClearForLabel(ctx, "user1"); err != nil {
 		t.Fatalf("ClearForLabel: %v", err)

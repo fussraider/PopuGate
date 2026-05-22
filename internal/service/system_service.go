@@ -38,6 +38,13 @@ func checkResourcesWithStats(ctx context.Context, res *model.SystemResources, no
 	now := time.Now()
 	const alertCooldown = 30 * time.Minute
 
+	// Cleanup entries older than 24 hours to prevent unbounded map growth.
+	for k, t := range lastAlertTime {
+		if now.Sub(t) > 24*time.Hour {
+			delete(lastAlertTime, k)
+		}
+	}
+
 	// Memory > 95%
 	if res.MemoryTotal > 0 {
 		memPct := float64(res.MemoryUsed) / float64(res.MemoryTotal) * 100
@@ -207,7 +214,7 @@ func UninstallSystemdService() error {
 	if err := exec.Command("systemctl", "disable", "popugate").Run(); err != nil {
 		logger.WithScope("system").Warnf("disable service: %v", err)
 	}
-	os.Remove("/etc/systemd/system/popugate.service")
+	_ = os.Remove("/etc/systemd/system/popugate.service")
 	if err := exec.Command("systemctl", "daemon-reload").Run(); err != nil {
 		logger.WithScope("system").Warnf("daemon-reload: %v", err)
 	}

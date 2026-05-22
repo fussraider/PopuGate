@@ -1,6 +1,7 @@
 package netutil
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -93,7 +94,7 @@ func GetPublicIPFromServices(services []string) (string, error) {
 		}
 
 		body, readErr := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		if readErr != nil {
 			continue
 		}
@@ -106,5 +107,5 @@ func GetPublicIPFromServices(services []string) (string, error) {
 		}
 	}
 
-	return "", io.EOF
+	return "", fmt.Errorf("no public IP address found: all %d services failed", len(services))
 }

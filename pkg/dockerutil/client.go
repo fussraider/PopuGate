@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -21,6 +22,7 @@ import (
 type DockerClient struct {
 	cli          *client.Client
 	hostPath     string
+	dataDir      string
 	hostPathOnce sync.Once
 }
 
@@ -316,13 +318,8 @@ func (d *DockerClient) ResolveHostPath(path string) string {
 		return path
 	}
 
-	dataDir := os.Getenv("POPUGATE_DATA_DIR")
-	if dataDir == "" {
-		dataDir = "/data"
-	}
-
-	if strings.HasPrefix(path, dataDir) {
-		rel, err := filepath.Rel(dataDir, path)
+	if strings.HasPrefix(path, d.dataDir) {
+		rel, err := filepath.Rel(d.dataDir, path)
 		if err != nil {
 			return path
 		}
@@ -332,9 +329,9 @@ func (d *DockerClient) ResolveHostPath(path string) string {
 }
 
 func (d *DockerClient) detectHostPath(ctx context.Context) {
-	dataDir := os.Getenv("POPUGATE_DATA_DIR")
-	if dataDir == "" {
-		dataDir = "/data"
+	d.dataDir = os.Getenv("POPUGATE_DATA_DIR")
+	if d.dataDir == "" {
+		d.dataDir = "/data"
 	}
 
 	for _, nameOrID := range detectSelfContainerIDs() {
@@ -343,7 +340,7 @@ func (d *DockerClient) detectHostPath(ctx context.Context) {
 			continue
 		}
 		for _, m := range containerInfo.Mounts {
-			if m.Destination == dataDir {
+			if m.Destination == d.dataDir {
 				d.hostPath = m.Source
 				return
 			}
@@ -406,7 +403,10 @@ func parseCPUs(s string) int64 {
 		return 0
 	}
 	var cpus float64
-	fmt.Sscanf(s, "%f", &cpus)
+	n, err := fmt.Sscanf(s, "%f", &cpus)
+	if err != nil || n != 1 || cpus <= 0 {
+		return 0
+	}
 	return int64(cpus * 1e9)
 }
 
@@ -416,7 +416,7 @@ func parseMemory(s string) int64 {
 	}
 	var amount int64
 	var unit string
-	fmt.Sscanf(s, "%d%s", &amount, &unit)
+	_, _ = fmt.Sscanf(s, "%d%s", &amount, &unit)
 	switch unit {
 	case "g", "G":
 		return amount * 1024 * 1024 * 1024
@@ -437,7 +437,7 @@ func RestartPolicyNo() container.RestartPolicy {
 
 // EnsureDockerInstalled installs Docker if not present.
 func EnsureDockerInstalled(ctx context.Context) error {
-	if _, err := os.Stat("/usr/bin/docker"); err == nil {
+	if _, err := exec.LookPath("docker"); err == nil {
 		return nil
 	}
 	return fmt.Errorf("docker not installed; use the installation wizard")

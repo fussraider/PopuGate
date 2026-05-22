@@ -20,6 +20,6 @@ func (t *SecretTemplate) GetTags() []string {
 		return nil
 	}
 	var tags []string
-	json.Unmarshal([]byte(t.Tags), &tags)
+	_ = json.Unmarshal([]byte(t.Tags), &tags)
 	return tags
 }

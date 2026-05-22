@@ -14,7 +14,10 @@ import (
 	"github.com/fussraider/PopuGate/internal/service"
 	"github.com/fussraider/PopuGate/internal/store"
 	"github.com/fussraider/PopuGate/pkg/dockerutil"
+	"github.com/fussraider/PopuGate/pkg/logger"
 )
+
+var instanceLog = logger.WithScope("instance")
 
 // InstanceHandler handles instance endpoints.
 type InstanceHandler struct {
@@ -89,55 +92,12 @@ func (h *InstanceHandler) Add(c *gin.Context) {
 		return
 	}
 
-	// Validate tls_domains is valid JSON if provided
-	if req.TLSDomains != "" && req.TLSDomains != "[]" {
-		var domains []string
-		if err := json.Unmarshal([]byte(req.TLSDomains), &domains); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "tls_domains must be a valid JSON array"})
-			return
-		}
+	if err := validateAddRequest(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
 	}
 
-	// Validate tags is valid JSON if provided
-	if req.Tags != "" && req.Tags != "[]" {
-		if err := model.ValidateTags(req.Tags); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
-		}
-	}
-
-	fakeTLS := true // default
-	if req.FakeTLS != nil {
-		fakeTLS = *req.FakeTLS
-	}
-	tcpMSSEnabled := false
-	if req.TCPMSSEnabled != nil {
-		tcpMSSEnabled = *req.TCPMSSEnabled
-	}
-	tcpMSS := 88
-	if req.TCPMSS > 0 {
-		tcpMSS = req.TCPMSS
-	}
-	tlsFronting := false
-	if req.TLSFronting != nil {
-		tlsFronting = *req.TLSFronting
-	}
-
-	inst := &model.Instance{
-		Port:          req.Port,
-		MetricsPort:   req.MetricsPort,
-		Enabled:       true,
-		Label:         req.Label,
-		TLSDomain:     req.TLSDomain,
-		TLSDomains:    req.TLSDomains,
-		FakeTLS:       fakeTLS,
-		MaskHost:      req.MaskHost,
-		MaskPort:      req.MaskPort,
-		Tags:          req.Tags,
-		TCPMSSEnabled: tcpMSSEnabled,
-		TCPMSS:        tcpMSS,
-		TLSFronting:   tlsFronting,
-	}
+	inst := buildInstanceFromRequest(&req)
 
 	if inst.MetricsPort == 0 {
 		inst.MetricsPort = h.nextMetricsPort(c)
@@ -159,6 +119,54 @@ func (h *InstanceHandler) Add(c *gin.Context) {
 	}
 	auditLog(c, "instance.create", fmt.Sprintf("port=%d label=%s domain=%s", req.Port, req.Label, req.TLSDomain))
 	c.JSON(http.StatusCreated, inst)
+}
+
+func validateAddRequest(req *addInstanceRequest) error {
+	if req.TLSDomains != "" && req.TLSDomains != "[]" {
+		var domains []string
+		if err := json.Unmarshal([]byte(req.TLSDomains), &domains); err != nil {
+			return fmt.Errorf("tls_domains must be a valid JSON array")
+		}
+	}
+	if req.Tags != "" && req.Tags != "[]" {
+		return model.ValidateTags(req.Tags)
+	}
+	return nil
+}
+
+func buildInstanceFromRequest(req *addInstanceRequest) *model.Instance {
+	fakeTLS := true
+	if req.FakeTLS != nil {
+		fakeTLS = *req.FakeTLS
+	}
+	tcpMSSEnabled := false
+	if req.TCPMSSEnabled != nil {
+		tcpMSSEnabled = *req.TCPMSSEnabled
+	}
+	tcpMSS := 88
+	if req.TCPMSS > 0 {
+		tcpMSS = req.TCPMSS
+	}
+	tlsFronting := false
+	if req.TLSFronting != nil {
+		tlsFronting = *req.TLSFronting
+	}
+
+	return &model.Instance{
+		Port:          req.Port,
+		MetricsPort:   req.MetricsPort,
+		Enabled:       true,
+		Label:         req.Label,
+		TLSDomain:     req.TLSDomain,
+		TLSDomains:    req.TLSDomains,
+		FakeTLS:       fakeTLS,
+		MaskHost:      req.MaskHost,
+		MaskPort:      req.MaskPort,
+		Tags:          req.Tags,
+		TCPMSSEnabled: tcpMSSEnabled,
+		TCPMSS:        tcpMSS,
+		TLSFronting:   tlsFronting,
+	}
 }
 
 type updateInstanceRequest struct {
@@ -235,9 +243,7 @@ func (h *InstanceHandler) applyInstanceUpdates(c *gin.Context, inst *model.Insta
 		inst.Label = *req.Label
 	}
 	if req.Enabled != nil && !*req.Enabled && inst.Enabled {
-		if h.containerSvc != nil {
-			_ = h.containerSvc.StopInstance(c.Request.Context(), inst.ID)
-		}
+		h.stopInstanceSafe(c, inst.ID)
 	}
 	if req.Enabled != nil {
 		inst.Enabled = *req.Enabled
@@ -252,6 +258,22 @@ func (h *InstanceHandler) applyInstanceUpdates(c *gin.Context, inst *model.Insta
 		}
 		inst.TLSDomains = *req.TLSDomains
 	}
+	if !h.applySimpleFields(c, inst, req) {
+		return false
+	}
+	return true
+}
+
+func (h *InstanceHandler) stopInstanceSafe(c *gin.Context, instID int64) {
+	if h.containerSvc == nil {
+		return
+	}
+	if err := h.containerSvc.StopInstance(c.Request.Context(), instID); err != nil {
+		instanceLog.Warnf("stop instance %d before disable: %v", instID, err)
+	}
+}
+
+func (h *InstanceHandler) applySimpleFields(c *gin.Context, inst *model.Instance, req *updateInstanceRequest) bool {
 	if req.FakeTLS != nil {
 		inst.FakeTLS = *req.FakeTLS
 	}
@@ -664,6 +686,6 @@ func isPortFree(port int) bool {
 	if err != nil {
 		return false
 	}
-	ln.Close()
+	_ = ln.Close()
 	return true
 }

@@ -12,7 +12,7 @@ func TestGetPublicIPFromServices_Success(t *testing.T) {
 	wantIP := "203.0.113.42"
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(wantIP))
+		_, _ = w.Write([]byte(wantIP))
 	}))
 	defer ts.Close()
 
@@ -30,7 +30,7 @@ func TestGetPublicIPFromServices_TrimmedOutput(t *testing.T) {
 	wantIP := "198.51.100.7"
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(wantIP + "\n"))
+		_, _ = w.Write([]byte(wantIP + "\n"))
 	}))
 	defer ts.Close()
 
@@ -52,7 +52,7 @@ func TestGetPublicIPFromServices_FirstServiceSucceeds(t *testing.T) {
 
 	okServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(wantIP))
+		_, _ = w.Write([]byte(wantIP))
 	}))
 	defer okServer.Close()
 
@@ -124,7 +124,7 @@ func TestGetPublicIPFromServices_EmptyResponseBody(t *testing.T) {
 func TestGetPublicIPFromServices_WhitespaceOnlyBody(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("   \n\t  "))
+		_, _ = w.Write([]byte("   \n\t  "))
 	}))
 	defer ts.Close()
 
@@ -144,7 +144,7 @@ func TestGetPublicIP_CachesResult(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		callCount++
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(wantIP))
+		_, _ = w.Write([]byte(wantIP))
 	}))
 	defer ts.Close()
 
@@ -181,7 +181,7 @@ func TestInvalidatePublicIPCache_ForceRefresh(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		callCount++
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("1.2.3.4"))
+		_, _ = w.Write([]byte("1.2.3.4"))
 	}))
 	defer ts.Close()
 
@@ -189,9 +189,9 @@ func TestInvalidatePublicIPCache_ForceRefresh(t *testing.T) {
 	defaultServices = []string{ts.URL}
 	defer func() { defaultServices = origServices }()
 
-	GetPublicIP() // cache
+	_, _ = GetPublicIP() // cache
 	InvalidatePublicIPCache()
-	GetPublicIP() // fresh
+	_, _ = GetPublicIP() // fresh
 
 	if callCount != 2 {
 		t.Errorf("expected 2 calls after invalidation, got %d", callCount)
@@ -207,7 +207,7 @@ func TestGetPublicIP_ReturnsStaleOnError(t *testing.T) {
 		callCount++
 		if callCount == 1 {
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(firstIP))
+			_, _ = w.Write([]byte(firstIP))
 		} else {
 			w.WriteHeader(http.StatusInternalServerError)
 		}
@@ -246,7 +246,7 @@ func TestGetPublicIP_ConcurrentCalls(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		callCount++
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("192.0.2.1"))
+		_, _ = w.Write([]byte("192.0.2.1"))
 	}))
 	defer ts.Close()
 

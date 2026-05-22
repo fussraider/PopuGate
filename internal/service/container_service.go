@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/fussraider/PopuGate/internal/model"
@@ -21,7 +22,7 @@ import (
 	"github.com/fussraider/PopuGate/pkg/telemt"
 )
 
-const stopFlagPath = "/tmp/.popugate_stopped"
+const stopFlagFile = ".popugate_stopped"
 
 var statusLog = logger.WithScope("status")
 
@@ -30,6 +31,7 @@ var ErrNoMatchingSecrets = errors.New("no matching secrets: add a secret with a 
 
 // ContainerService manages proxy container lifecycle.
 type ContainerService struct {
+	dataDir        string
 	docker         *dockerutil.DockerClient
 	secrets        *store.SecretStore
 	upstreams      *store.UpstreamStore
@@ -38,14 +40,15 @@ type ContainerService struct {
 	settings       *store.SettingsStore
 	trafficSvc     *TrafficService
 	iptables       *netutil.IptablesManager
-	notify         NotifyFunc
-	notifyWithBtns NotifyWithButtonsFunc
+	notify         atomic.Value
+	notifyWithBtns atomic.Value
 	client         *http.Client
 	frontClient    *http.Client
 }
 
 // NewContainerService creates a new ContainerService.
 func NewContainerService(
+	dataDir string,
 	docker *dockerutil.DockerClient,
 	secrets *store.SecretStore,
 	upstreams *store.UpstreamStore,
@@ -55,6 +58,7 @@ func NewContainerService(
 	trafficSvc *TrafficService,
 ) *ContainerService {
 	return &ContainerService{
+		dataDir:     dataDir,
 		docker:      docker,
 		secrets:     secrets,
 		upstreams:   upstreams,
@@ -69,13 +73,27 @@ func NewContainerService(
 }
 
 // SetNotify sets the notification callback.
-func (s *ContainerService) SetNotify(fn NotifyFunc) { s.notify = fn }
+func (s *ContainerService) SetNotify(fn NotifyFunc) { s.notify.Store(fn) }
 
-func (s *ContainerService) SetNotifyWithButtons(fn NotifyWithButtonsFunc) { s.notifyWithBtns = fn }
+func (s *ContainerService) SetNotifyWithButtons(fn NotifyWithButtonsFunc) { s.notifyWithBtns.Store(fn) }
+
+func (s *ContainerService) getNotify() NotifyFunc {
+	if v := s.notify.Load(); v != nil {
+		return v.(NotifyFunc)
+	}
+	return nil
+}
+
+func (s *ContainerService) getNotifyWithBtns() NotifyWithButtonsFunc {
+	if v := s.notifyWithBtns.Load(); v != nil {
+		return v.(NotifyWithButtonsFunc)
+	}
+	return nil
+}
 
 // Start starts all enabled proxy instances.
 func (s *ContainerService) Start(ctx context.Context) error {
-	os.Remove(stopFlagPath)
+	_ = os.Remove(filepath.Join(s.dataDir, stopFlagFile))
 
 	settings, err := s.settings.Load(ctx)
 	if err != nil {
@@ -104,7 +122,7 @@ func (s *ContainerService) Stop(ctx context.Context) error {
 		statusLog.Warnf("traffic flush before stop: %v", err)
 	}
 
-	if err := os.WriteFile(stopFlagPath, fmt.Appendf(nil, "%d", time.Now().Unix()), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(s.dataDir, stopFlagFile), fmt.Appendf(nil, "%d", time.Now().Unix()), 0644); err != nil {
 		statusLog.Warnf("write stop flag: %v", err)
 	}
 
@@ -117,6 +135,11 @@ func (s *ContainerService) Stop(ctx context.Context) error {
 		if inst.Enabled {
 			wg.Add(1)
 			go func(inst model.Instance) {
+				defer func() {
+					if r := recover(); r != nil {
+						statusLog.Warnf("goroutine panic (stop instance %s): %v", inst.ContainerName(), r)
+					}
+				}()
 				defer wg.Done()
 				stopCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 				defer cancel()
@@ -257,8 +280,11 @@ func (s *ContainerService) Reload(ctx context.Context) error {
 	return nil
 }
 
-func (s *ContainerService) buildSecretCounts(ctx context.Context, insts []model.Instance) map[int64]int {
-	dbSecrets, _ := s.secrets.List(ctx)
+func (s *ContainerService) buildSecretCounts(ctx context.Context, insts []model.Instance) (map[int64]int, error) {
+	dbSecrets, err := s.secrets.List(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list secrets: %w", err)
+	}
 	counts := make(map[int64]int, len(insts))
 	for _, inst := range insts {
 		instanceTags := inst.GetTags()
@@ -270,7 +296,7 @@ func (s *ContainerService) buildSecretCounts(ctx context.Context, insts []model.
 		}
 		counts[inst.ID] = count
 	}
-	return counts
+	return counts, nil
 }
 
 func buildInstanceStatus(inst model.Instance, running bool, matchingSecrets int) model.InstanceStatus {
@@ -323,7 +349,10 @@ func (s *ContainerService) Status(ctx context.Context) (*model.ProxyStatus, erro
 		return status, nil
 	}
 
-	secretCounts := s.buildSecretCounts(ctx, insts)
+	secretCounts, _ := s.buildSecretCounts(ctx, insts)
+	if secretCounts == nil {
+		secretCounts = make(map[int64]int)
+	}
 
 	var firstRunningInst *model.Instance
 	for i, inst := range insts {
@@ -372,11 +401,11 @@ func (s *ContainerService) InstanceStatus(ctx context.Context, id int64) (string
 	resp, err := s.client.Get(fmt.Sprintf("http://%s:%d/metrics", addr, inst.MetricsPort))
 	if err != nil || resp.StatusCode != 200 {
 		if resp != nil {
-			resp.Body.Close()
+			_ = resp.Body.Close()
 		}
 		return "unhealthy", nil
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 
 	return "healthy", nil
 }
@@ -406,6 +435,11 @@ func (s *ContainerService) RevalidateAllInstances(ctx context.Context) {
 		statusLog.Warnf("revalidate: list instances: %v", err)
 		return
 	}
+	secretCounts, err := s.buildSecretCounts(ctx, insts)
+	if err != nil {
+		statusLog.Warnf("revalidate: build secret counts: %v", err)
+		return
+	}
 	for _, inst := range insts {
 		if !inst.Enabled {
 			continue
@@ -414,23 +448,18 @@ func (s *ContainerService) RevalidateAllInstances(ctx context.Context) {
 		if !running {
 			continue
 		}
-		count, err := s.matchingSecretCount(ctx, inst.GetTags())
-		if err != nil {
-			statusLog.Warnf("revalidate: check instance %d: %v", inst.ID, err)
-			continue
-		}
-		if count == 0 {
+		if secretCounts[inst.ID] == 0 {
 			statusLog.Infof("stopping instance %d (%s): no matching secrets after secret change", inst.Port, inst.Label)
 			stopCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 			if err := s.docker.StopInstance(stopCtx, inst.ContainerName(), 10); err != nil {
 				statusLog.Warnf("revalidate: stop instance %s: %v", inst.ContainerName(), err)
 			}
 			cancel()
-			if s.notifyWithBtns != nil {
-				s.notifyWithBtns(ctx, "⚠️ *%s* Instance \"%s\" (port %d) stopped: no matching secrets",
+			if fn := s.getNotifyWithBtns(); fn != nil {
+				fn(ctx, "⚠️ *%s* Instance \"%s\" (port %d) stopped: no matching secrets",
 					[]KeyboardButton{dashboardButton(ctx, s.settings)}, inst.Label, inst.Port)
-			} else if s.notify != nil {
-				s.notify(ctx, "⚠️ *%s* Instance \"%s\" (port %d) stopped: no matching secrets", inst.Label, inst.Port)
+			} else if fn := s.getNotify(); fn != nil {
+				fn(ctx, "⚠️ *%s* Instance \"%s\" (port %d) stopped: no matching secrets", inst.Label, inst.Port)
 			}
 		}
 	}
@@ -446,28 +475,56 @@ func (s *ContainerService) RevalidateInstance(ctx context.Context, id int64) {
 	if !running {
 		return
 	}
-	count, err := s.matchingSecretCount(ctx, inst.GetTags())
+	counts, err := s.buildSecretCounts(ctx, []model.Instance{*inst})
 	if err != nil {
 		statusLog.Warnf("revalidate instance %d: %v", id, err)
 		return
 	}
-	if count == 0 {
+	if counts[inst.ID] == 0 {
 		statusLog.Infof("stopping instance %d (%s): no matching secrets after instance change", inst.Port, inst.Label)
 		stopCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		if err := s.docker.StopInstance(stopCtx, inst.ContainerName(), 10); err != nil {
 			statusLog.Warnf("revalidate: stop instance %s: %v", inst.ContainerName(), err)
 		}
 		cancel()
-		if s.notifyWithBtns != nil {
-			s.notifyWithBtns(ctx, "⚠️ *%s* Instance stopped: no matching secrets",
+		if fn := s.getNotifyWithBtns(); fn != nil {
+			fn(ctx, "⚠️ *%s* Instance stopped: no matching secrets",
 				[]KeyboardButton{dashboardButton(ctx, s.settings)})
-		} else if s.notify != nil {
-			s.notify(ctx, "⚠️ *%s* Instance stopped: no matching secrets")
+		} else if fn := s.getNotify(); fn != nil {
+			fn(ctx, "⚠️ *%s* Instance stopped: no matching secrets")
 		}
 	}
 }
 
+func (s *ContainerService) listUpstreamEntries(ctx context.Context) ([]telemt.UpstreamEntry, error) {
+	dbUpstreams, err := s.upstreams.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	entries := make([]telemt.UpstreamEntry, 0, len(dbUpstreams))
+	for _, u := range dbUpstreams {
+		entries = append(entries, telemt.UpstreamEntry{
+			Type:     model.UpstreamType(u.Type),
+			Address:  u.Address,
+			Username: u.Username,
+			Password: u.Password,
+			Weight:   u.Weight,
+			Iface:    u.Iface,
+			Enabled:  u.Enabled,
+		})
+	}
+	return entries, nil
+}
+
 func (s *ContainerService) generateInstanceConfig(ctx context.Context, settings *model.Settings, inst *model.Instance) error {
+	upstreamEntries, err := s.listUpstreamEntries(ctx)
+	if err != nil {
+		return err
+	}
+	return s.generateInstanceConfigWith(ctx, settings, inst, upstreamEntries)
+}
+
+func (s *ContainerService) generateInstanceConfigWith(ctx context.Context, settings *model.Settings, inst *model.Instance, upstreamEntries []telemt.UpstreamEntry) error {
 	// Gather secrets, filtering by tag match
 	dbSecrets, err := s.secrets.List(ctx)
 	if err != nil {
@@ -491,24 +548,6 @@ func (s *ContainerService) generateInstanceConfig(ctx context.Context, settings 
 			MaxIPs:     sec.MaxIPs,
 			QuotaBytes: sec.QuotaBytes,
 			ExpiresAt:  sec.ExpiresAt,
-		})
-	}
-
-	// Gather upstreams (global)
-	dbUpstreams, err := s.upstreams.List(ctx)
-	if err != nil {
-		return err
-	}
-	var upstreamEntries []telemt.UpstreamEntry
-	for _, u := range dbUpstreams {
-		upstreamEntries = append(upstreamEntries, telemt.UpstreamEntry{
-			Type:     model.UpstreamType(u.Type),
-			Address:  u.Address,
-			Username: u.Username,
-			Password: u.Password,
-			Weight:   u.Weight,
-			Iface:    u.Iface,
-			Enabled:  u.Enabled,
 		})
 	}
 
@@ -544,19 +583,28 @@ func (s *ContainerService) startInstances(ctx context.Context, settings *model.S
 		return err
 	}
 
-	// Generate configs sequentially, skipping instances without matching secrets
+	secretCounts, err := s.buildSecretCounts(ctx, insts)
+	if err != nil {
+		return fmt.Errorf("count matching secrets: %w", err)
+	}
+	upstreamEntries, err := s.listUpstreamEntries(ctx)
+	if err != nil {
+		return fmt.Errorf("list upstreams: %w", err)
+	}
+
+	frontingOK, err := s.prepareInstanceConfigs(ctx, insts, secretCounts, upstreamEntries, settings)
+	if err != nil {
+		return err
+	}
+
+	return s.startContainersParallel(ctx, insts, secretCounts, frontingOK, settings)
+}
+
+func (s *ContainerService) prepareInstanceConfigs(ctx context.Context, insts []model.Instance, secretCounts map[int64]int, upstreamEntries []telemt.UpstreamEntry, settings *model.Settings) (map[int]bool, error) {
 	frontingOK := make(map[int]bool)
 	for i := range insts {
 		inst := &insts[i]
-		if !inst.Enabled {
-			continue
-		}
-		count, err := s.matchingSecretCount(ctx, inst.GetTags())
-		if err != nil {
-			return fmt.Errorf("check secrets for instance %d: %w", inst.Port, err)
-		}
-		if count == 0 {
-			statusLog.Warnf("skipping instance %d (%s): no matching secrets", inst.Port, inst.Label)
+		if !inst.Enabled || secretCounts[inst.ID] == 0 {
 			continue
 		}
 		if inst.TLSFronting && inst.FakeTLS {
@@ -566,12 +614,14 @@ func (s *ContainerService) startInstances(ctx context.Context, settings *model.S
 				frontingOK[inst.Port] = true
 			}
 		}
-		if err := s.generateInstanceConfig(ctx, settings, inst); err != nil {
-			return fmt.Errorf("generate config for instance %d: %w", inst.Port, err)
+		if err := s.generateInstanceConfigWith(ctx, settings, inst, upstreamEntries); err != nil {
+			return nil, fmt.Errorf("generate config for instance %d: %w", inst.Port, err)
 		}
 	}
+	return frontingOK, nil
+}
 
-	// Start containers in parallel
+func (s *ContainerService) startContainersParallel(ctx context.Context, insts []model.Instance, secretCounts map[int64]int, frontingOK map[int]bool, settings *model.Settings) error {
 	var (
 		wg   sync.WaitGroup
 		mu   sync.Mutex
@@ -579,16 +629,16 @@ func (s *ContainerService) startInstances(ctx context.Context, settings *model.S
 	)
 
 	for _, inst := range insts {
-		if !inst.Enabled {
+		if !inst.Enabled || secretCounts[inst.ID] == 0 {
 			continue
 		}
-		count, _ := s.matchingSecretCount(ctx, inst.GetTags())
-		if count == 0 {
-			continue
-		}
-
 		wg.Add(1)
 		go func(inst model.Instance) {
+			defer func() {
+				if r := recover(); r != nil {
+					statusLog.Warnf("goroutine panic (start instance %d): %v", inst.Port, r)
+				}
+			}()
 			defer wg.Done()
 
 			if err := s.applyTCPMSSRules(&inst); err != nil {
@@ -640,10 +690,11 @@ func (s *ContainerService) flushTraffic(ctx context.Context) error {
 }
 
 func (s *ContainerService) notifyEngineState(ctx context.Context, format string) {
-	if s.notify == nil {
+	if fn := s.getNotify(); fn == nil {
 		return
+	} else {
+		fn(ctx, format)
 	}
-	s.notify(ctx, format)
 }
 
 func formatDuration(d time.Duration) string {
@@ -784,7 +835,7 @@ func (s *ContainerService) downloadFrontingContent(ctx context.Context, domain, 
 	if err != nil {
 		return fmt.Errorf("fetch %s: %w", frontURL, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != 200 {
 		return fmt.Errorf("fetch %s: HTTP %d", frontURL, resp.StatusCode)
@@ -815,4 +866,29 @@ func (s *ContainerService) RefreshFrontingContent(ctx context.Context, id int64)
 		return fmt.Errorf("TLS fronting is not enabled for instance %d", id)
 	}
 	return s.downloadFrontingContent(ctx, inst.TLSDomain, inst.TLSFrontDirPath())
+}
+
+// EnsureDefaultInstance seeds the instances table with a default instance if empty.
+func (s *ContainerService) EnsureDefaultInstance(ctx context.Context, proxyPort, metricsPort int, proxyDomain, maskingHost string, maskingEnabled bool) error {
+	count, err := s.instances.Count(ctx)
+	if err != nil {
+		return fmt.Errorf("count instances: %w", err)
+	}
+	if count > 0 {
+		return nil
+	}
+
+	fakeTLS := maskingEnabled
+	inst := &model.Instance{
+		Port:        proxyPort,
+		MetricsPort: metricsPort,
+		Enabled:     true,
+		Label:       "Default",
+		TLSDomain:   proxyDomain,
+		FakeTLS:     fakeTLS,
+		MaskHost:    maskingHost,
+		MaskPort:    443,
+		TCPMSS:      88,
+	}
+	return s.instances.Create(ctx, inst)
 }

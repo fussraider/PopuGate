@@ -37,7 +37,7 @@ func TestSetup_RetryAfterTransientError(t *testing.T) {
 	}
 
 	var resp1 map[string]interface{}
-	json.Unmarshal(w1.Body.Bytes(), &resp1)
+	_ = json.Unmarshal(w1.Body.Bytes(), &resp1)
 	if resp1["access_token"] == "" {
 		t.Error("first setup: expected non-empty access_token")
 	}
@@ -62,7 +62,7 @@ func TestSetup_FastRejectOnDone(t *testing.T) {
 
 	// Pre-set password hash to simulate setup already done
 	hash, _ := bcrypt.GenerateFromPassword([]byte("existing"), bcrypt.MinCost)
-	settingsStore.SetAuthPasswordHash(context.Background(), string(hash))
+	_ = settingsStore.SetAuthPasswordHash(context.Background(), string(hash))
 
 	h := NewAuthHandler(settingsStore, blocklistStore)
 	r := gin.New()

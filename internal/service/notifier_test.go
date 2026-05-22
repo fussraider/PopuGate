@@ -33,7 +33,8 @@ func TestContainerService_Notify_Start(t *testing.T) {
 	db := testutil.OpenTestDB(t)
 	fn, called, cap := captureNotify()
 
-	svc := &ContainerService{settings: store.NewSettingsStore(db), notify: fn}
+	svc := NewContainerService(t.TempDir(), nil, nil, nil, nil, nil, store.NewSettingsStore(db), nil)
+	svc.SetNotify(fn)
 	svc.notifyEngineState(context.Background(), "🟢 *%s* Proxy engine started")
 
 	if called.Load() != 1 {
@@ -51,7 +52,8 @@ func TestContainerService_Notify_Stop(t *testing.T) {
 	db := testutil.OpenTestDB(t)
 	fn, called, _ := captureNotify()
 
-	svc := &ContainerService{settings: store.NewSettingsStore(db), notify: fn}
+	svc := NewContainerService(t.TempDir(), nil, nil, nil, nil, nil, store.NewSettingsStore(db), nil)
+	svc.SetNotify(fn)
 	svc.notifyEngineState(context.Background(), "🔴 *%s* Proxy engine stopped")
 
 	if called.Load() != 1 {
@@ -61,7 +63,7 @@ func TestContainerService_Notify_Stop(t *testing.T) {
 
 func TestContainerService_Notify_NilDoesNotPanic(t *testing.T) {
 	db := testutil.OpenTestDB(t)
-	svc := &ContainerService{settings: store.NewSettingsStore(db), notify: nil}
+	svc := NewContainerService(t.TempDir(), nil, nil, nil, nil, nil, store.NewSettingsStore(db), nil)
 	svc.notifyEngineState(context.Background(), "🟢 *%s* Proxy engine started")
 }
 
@@ -71,7 +73,8 @@ func TestTelemtUpdateService_Notify_UpdateStart(t *testing.T) {
 	db := testutil.OpenTestDB(t)
 	fn, called, cap := captureNotify()
 
-	svc := &TelemtUpdateService{settings: store.NewSettingsStore(db), notify: fn}
+	svc := &TelemtUpdateService{settings: store.NewSettingsStore(db)}
+	svc.SetNotify(fn)
 	svc.notifyUpdate(context.Background(), "⏳ *%s* Updating telemt engine to %s...", "4.0.0-abcd")
 
 	if called.Load() != 1 {
@@ -89,7 +92,8 @@ func TestTelemtUpdateService_Notify_Success(t *testing.T) {
 	db := testutil.OpenTestDB(t)
 	fn, _, cap := captureNotify()
 
-	svc := &TelemtUpdateService{settings: store.NewSettingsStore(db), notify: fn}
+	svc := &TelemtUpdateService{settings: store.NewSettingsStore(db)}
+	svc.SetNotify(fn)
 	svc.notifyUpdate(context.Background(), "✅ *%s* Telemt engine updated to %s", "4.0.0-abcd")
 
 	if !strings.Contains(cap.format, "updated") {
@@ -104,7 +108,8 @@ func TestTelemtUpdateService_Notify_Failure(t *testing.T) {
 	db := testutil.OpenTestDB(t)
 	fn, _, cap := captureNotify()
 
-	svc := &TelemtUpdateService{settings: store.NewSettingsStore(db), notify: fn}
+	svc := &TelemtUpdateService{settings: store.NewSettingsStore(db)}
+	svc.SetNotify(fn)
 	svc.notifyUpdate(context.Background(), "❌ *%s* Telemt engine update failed: %s", "build error")
 
 	if !strings.Contains(cap.format, "failed") {
@@ -117,7 +122,7 @@ func TestTelemtUpdateService_Notify_Failure(t *testing.T) {
 
 func TestTelemtUpdateService_Notify_NilDoesNotPanic(t *testing.T) {
 	db := testutil.OpenTestDB(t)
-	svc := &TelemtUpdateService{settings: store.NewSettingsStore(db), notify: nil}
+	svc := &TelemtUpdateService{settings: store.NewSettingsStore(db)}
 	svc.notifyUpdate(context.Background(), "⏳ *%s* Updating to %s", "4.0.0")
 }
 
@@ -125,7 +130,7 @@ func TestTelemtUpdateService_Notify_NilDoesNotPanic(t *testing.T) {
 
 func TestContainerService_SetNotify(t *testing.T) {
 	db := testutil.OpenTestDB(t)
-	svc := NewContainerService(nil, nil, nil, nil, nil, store.NewSettingsStore(db), nil)
+	svc := NewContainerService(t.TempDir(), nil, nil, nil, nil, nil, store.NewSettingsStore(db), nil)
 
 	var called atomic.Int32
 	svc.SetNotify(func(_ context.Context, _ string, _ ...any) { called.Add(1) })

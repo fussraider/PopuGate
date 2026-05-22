@@ -112,7 +112,7 @@ func (h *ConfigHandler) Update(c *gin.Context) {
 		case bool:
 			strUpdates[k] = strconv.FormatBool(val)
 		case float64:
-			strUpdates[k] = strconv.FormatInt(int64(val), 10)
+			strUpdates[k] = strconv.FormatFloat(val, 'f', -1, 64)
 		case string:
 			strUpdates[k] = val
 		default:
@@ -151,8 +151,18 @@ func (h *ConfigHandler) Update(c *gin.Context) {
 // @Failure      500  {object}  map[string]string
 // @Security     BearerAuth
 // @Router       /config/{key} [get]
+// sensitiveKeys are settings that must never be exposed via the API.
+var sensitiveKeys = map[string]bool{
+	"jwt_secret":         true,
+	"auth_password_hash": true,
+}
+
 func (h *ConfigHandler) GetKey(c *gin.Context) {
 	key := c.Param("key")
+	if sensitiveKeys[key] {
+		HandleError(c, http.StatusForbidden, "access denied for this key", nil)
+		return
+	}
 	value, err := h.settings.Get(c.Request.Context(), key)
 	if err != nil {
 		HandleError(c, http.StatusInternalServerError, "failed to get setting", err)

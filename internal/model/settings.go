@@ -139,40 +139,42 @@ func DefaultSettings() Settings {
 }
 
 // Validate corrects invalid/missing values to defaults.
+func validPort(port, fallback int) int {
+	if port < 1 || port > 65535 {
+		return fallback
+	}
+	return port
+}
+
+func validEnum(val string, allowed []string, fallback string) string {
+	for _, a := range allowed {
+		if val == a {
+			return val
+		}
+	}
+	return fallback
+}
+
 func (s *Settings) Validate() {
-	if s.ProxyPort < 1 || s.ProxyPort > 65535 {
-		s.ProxyPort = 443
-	}
-	if s.ProxyMetricsPort < 1 || s.ProxyMetricsPort > 65535 {
-		s.ProxyMetricsPort = 9090
-	}
+	s.ProxyPort = validPort(s.ProxyPort, 443)
+	s.ProxyMetricsPort = validPort(s.ProxyMetricsPort, 9090)
 	if s.ProxyConcurrency < 1 {
 		s.ProxyConcurrency = 8192
 	}
 	if s.FakeCertLen < 512 {
 		s.FakeCertLen = 2048
 	}
-	if s.MaskingPort < 1 || s.MaskingPort > 65535 {
-		s.MaskingPort = 443
-	}
-	if s.UnknownSNIAction != "drop" {
-		s.UnknownSNIAction = "mask"
-	}
-	if s.GeoblockMode != "whitelist" {
-		s.GeoblockMode = "blacklist"
-	}
+	s.MaskingPort = validPort(s.MaskingPort, 443)
+	s.UnknownSNIAction = validEnum(s.UnknownSNIAction, []string{"drop", "mask"}, "mask")
+	s.GeoblockMode = validEnum(s.GeoblockMode, []string{"whitelist", "blacklist"}, "blacklist")
 	if s.TelegramInterval < 1 {
 		s.TelegramInterval = 6
 	}
-	if s.ReplicationRole != "standalone" && s.ReplicationRole != "master" && s.ReplicationRole != "slave" {
-		s.ReplicationRole = "standalone"
-	}
+	s.ReplicationRole = validEnum(s.ReplicationRole, []string{"standalone", "master", "slave"}, "standalone")
 	if s.ReplicationSyncInterval < 10 {
 		s.ReplicationSyncInterval = 60
 	}
-	if s.ReplicationSSHPort < 1 || s.ReplicationSSHPort > 65535 {
-		s.ReplicationSSHPort = 22
-	}
+	s.ReplicationSSHPort = validPort(s.ReplicationSSHPort, 22)
 	if s.BackupRetentionDays < 1 {
 		s.BackupRetentionDays = 7
 	}

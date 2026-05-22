@@ -192,6 +192,8 @@
     "import_select": "Выберите JSON файл",
     "import_preview": "Будет импортировано {count} секретов",
     "imported_success": "Импортировано {count} секретов",
+    "imported_skipped": "Пропущено {count} (уже существуют)",
+    "imported_errors": "Ошибки при импорте {count} секретов",
     "import_failed": "Ошибка импорта секретов",
     "edit_tags": "Изменить теги",
     "tags_placeholder": "тег1, тег2, тег3",

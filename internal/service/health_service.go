@@ -167,6 +167,11 @@ func (h *HealthService) AutoRecover(ctx context.Context) error {
 	for _, id := range toRecover {
 		wg.Add(1)
 		go func(instID int64) {
+			defer func() {
+				if r := recover(); r != nil {
+					healthLog.Warnf("goroutine panic (recovery instance %d): %v", instID, r)
+				}
+			}()
 			defer wg.Done()
 			healthLog.Infof("attempting recovery for instance %d...", instID)
 			if err := h.containerSvc.StartInstance(ctx, instID); err != nil {
@@ -193,7 +198,7 @@ func (h *HealthService) isPortListening(port int) bool {
 	if err != nil {
 		return false
 	}
-	conn.Close()
+	_ = conn.Close()
 	return true
 }
 
@@ -205,7 +210,7 @@ func (h *HealthService) isMetricsResponding(port int) bool {
 		healthLog.Debugf("metrics check %s: %v", url, err)
 		return false
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 	if resp.StatusCode != 200 {
 		healthLog.Debugf("metrics check %s: status %d", url, resp.StatusCode)
 	}

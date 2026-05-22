@@ -49,7 +49,7 @@ func TestGeoblockStore_SetCacheUpdatesExisting(t *testing.T) {
 	s := NewGeoblockCacheStore(db)
 	ctx := context.Background()
 
-	s.SetCache(ctx, "DE", "/old/path")
+	_ = s.SetCache(ctx, "DE", "/old/path")
 
 	// Small delay to ensure different timestamp in seconds
 	// Update with new path

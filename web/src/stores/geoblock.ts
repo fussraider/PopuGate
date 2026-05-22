@@ -1,7 +1,7 @@
-import { defineStore } from 'pinia'
-import { ref } from 'vue'
-import { geoblockApi } from '@/api/endpoints'
-import type { Settings } from '@/types/models'
+import {defineStore} from 'pinia'
+import {ref} from 'vue'
+import {geoblockApi} from '@/api/endpoints'
+import type {Settings} from '@/types/models'
 
 export const useGeoblockStore = defineStore('geoblock', () => {
   const mode = ref<'blacklist' | 'whitelist'>('blacklist')
@@ -21,6 +21,8 @@ export const useGeoblockStore = defineStore('geoblock', () => {
       await geoblockApi.add(code.toUpperCase())
       const upper = code.toUpperCase()
       if (!countries.value.includes(upper)) countries.value.push(upper)
+    } catch {
+      // Error toast is shown by the API client interceptor
     } finally {
       loading.value = false
     }

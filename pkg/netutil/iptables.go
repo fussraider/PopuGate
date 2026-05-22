@@ -19,6 +19,9 @@ var ipsetNameRe = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
 // allowedActions is the whitelist of valid iptables actions.
 var allowedActions = map[string]bool{"DROP": true, "ACCEPT": true, "REJECT": true}
 
+// validChains are the chains we expect when parsing iptables-save output.
+var validChains = map[string]bool{"INPUT": true, "OUTPUT": true, "FORWARD": true, "POSTROUTING": true, "PREROUTING": true}
+
 // IptablesManager wraps iptables/ipset commands.
 type IptablesManager struct{}
 
@@ -124,7 +127,7 @@ func (m *IptablesManager) RestoreIPSet(name string, cidrs []string) error {
 		if _, _, err := net.ParseCIDR(cidr); err != nil {
 			return fmt.Errorf("invalid CIDR %q: %w", cidr, err)
 		}
-		b.WriteString(fmt.Sprintf("add %s %s\n", name, cidr))
+		fmt.Fprintf(&b, "add %s %s\n", name, cidr)
 	}
 	cmd := exec.Command("ipset", "restore", "-exist")
 	cmd.Stdin = strings.NewReader(b.String())
@@ -225,12 +228,14 @@ func (m *IptablesManager) RemoveGeoBlockRules() error {
 		}
 		rule := strings.Replace(line, "-A ", "-D ", 1)
 		parts := strings.Fields(rule)
-		if len(parts) > 1 && parts[0] == "-D" {
-			if err := runCmd("iptables", parts...); err != nil {
-				iptablesLog.Warnf("failed to remove geoblock rule: %v", err)
-			} else {
-				removed++
-			}
+		if len(parts) < 3 || parts[0] != "-D" || !validChains[parts[1]] {
+			iptablesLog.Warnf("skipping unexpected geoblock rule: %s", line)
+			continue
+		}
+		if err := runCmd("iptables", parts...); err != nil {
+			iptablesLog.Warnf("failed to remove geoblock rule: %v", err)
+		} else {
+			removed++
 		}
 	}
 	iptablesLog.Infof("removed %d geoblock rules", removed)
@@ -299,13 +304,15 @@ func (m *IptablesManager) RemoveTCPMSSRules(port int) error {
 		}
 		rule := strings.Replace(line, "-A ", "-D ", 1)
 		parts := strings.Fields(rule)
-		if len(parts) > 1 && parts[0] == "-D" {
-			args := append([]string{"-t", "mangle"}, parts...)
-			if err := runCmd("iptables", args...); err != nil {
-				iptablesLog.Warnf("failed to remove tcpmss rule: %v", err)
-			} else {
-				removed++
-			}
+		if len(parts) < 3 || parts[0] != "-D" || !validChains[parts[1]] {
+			iptablesLog.Warnf("skipping unexpected tcpmss rule: %s", line)
+			continue
+		}
+		args := append([]string{"-t", "mangle"}, parts...)
+		if err := runCmd("iptables", args...); err != nil {
+			iptablesLog.Warnf("failed to remove tcpmss rule: %v", err)
+		} else {
+			removed++
 		}
 	}
 	if removed > 0 || port > 0 {

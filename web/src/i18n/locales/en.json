@@ -192,6 +192,8 @@
     "import_select": "Select JSON file",
     "import_preview": "{count} secrets will be imported",
     "imported_success": "Imported {count} secrets",
+    "imported_skipped": "Skipped {count} (already exist)",
+    "imported_errors": "Errors importing {count} secrets",
     "import_failed": "Failed to import secrets",
     "edit_tags": "Edit Tags",
     "tags_placeholder": "tag1, tag2, tag3",

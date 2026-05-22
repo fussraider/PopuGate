@@ -198,8 +198,9 @@ export const useSecretsStore = defineStore('secrets', () => {
   }
 
   async function importSecrets(items: SecretImportItem[]) {
-    await secretsApi.importSecrets(items)
+    const result = await secretsApi.importSecrets(items)
     await load()
+    return result
   }
 
   const enabledCount = computed(() => secrets.value.filter((s) => s.enabled).length)

@@ -543,24 +543,69 @@ func TestSortedKeys(t *testing.T) {
 
 func TestSortedKeysInt(t *testing.T) {
 	m := map[string]int{"c": 3, "a": 1, "b": 2}
-	keys := sortedKeysInt(m)
+	keys := sortedKeys(m)
 	if len(keys) != 3 || keys[0] != "a" || keys[1] != "b" || keys[2] != "c" {
-		t.Errorf("sortedKeysInt = %v, want [a b c]", keys)
+		t.Errorf("sortedKeys[int] = %v, want [a b c]", keys)
 	}
 }
 
 func TestSortedKeysInt64(t *testing.T) {
 	m := map[string]int64{"c": 3, "a": 1, "b": 2}
-	keys := sortedKeysInt64(m)
+	keys := sortedKeys(m)
 	if len(keys) != 3 || keys[0] != "a" || keys[1] != "b" || keys[2] != "c" {
-		t.Errorf("sortedKeysInt64 = %v, want [a b c]", keys)
+		t.Errorf("sortedKeys[int64] = %v, want [a b c]", keys)
 	}
 }
 
 func TestSortedKeysStr(t *testing.T) {
 	m := map[string]string{"c": "3", "a": "1", "b": "2"}
-	keys := sortedKeysStr(m)
+	keys := sortedKeys(m)
 	if len(keys) != 3 || keys[0] != "a" || keys[1] != "b" || keys[2] != "c" {
-		t.Errorf("sortedKeysStr = %v, want [a b c]", keys)
+		t.Errorf("sortedKeys[string] = %v, want [a b c]", keys)
+	}
+}
+
+func TestRenderTOML_SkipsInvalidLabels(t *testing.T) {
+	cfg := &TelemtConfig{
+		General: GeneralConfig{
+			Modes: ModesConfig{Secure: true},
+		},
+		Server: ServerConfig{Port: 443, MetricsListen: "127.0.0.1:9091"},
+		Timeouts: TimeoutsConfig{
+			ClientHandshake: 30, TGConnect: 10,
+			ClientKeepalive: 15, ClientAck: 90,
+		},
+		Access: AccessConfig{
+			ReplayCheckLen:   65536,
+			ReplayWindowSecs: 1800,
+			Users: map[string]string{
+				"good_user": "aa11bb22cc33dd44ee55ff6677889900",
+				"bad\nkey":  "should_be_skipped",
+				"=injected": "should_be_skipped",
+				"also_good": "11223344556677889900aabbccddeeff",
+			},
+			UserMaxTCPConns: map[string]int{
+				"good_user": 10,
+				"bad key":   20,
+			},
+		},
+	}
+
+	toml := renderTOML(cfg)
+
+	if !strings.Contains(toml, `good_user = "aa11bb22cc33dd44ee55ff6677889900"`) {
+		t.Error("valid label good_user should appear in TOML")
+	}
+	if !strings.Contains(toml, `also_good = "11223344556677889900aabbccddeeff"`) {
+		t.Error("valid label also_good should appear in TOML")
+	}
+	if strings.Contains(toml, "bad\\nkey") || strings.Contains(toml, "bad\nkey") {
+		t.Error("invalid label with newline should be skipped")
+	}
+	if strings.Contains(toml, "=injected") {
+		t.Error("invalid label with = should be skipped")
+	}
+	if strings.Contains(toml, "bad key") {
+		t.Error("invalid label with space should be skipped in UserMaxTCPConns")
 	}
 }

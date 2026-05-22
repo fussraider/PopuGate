@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 func TestTelegramAPIURL_ContainsToken(t *testing.T) {
@@ -111,10 +112,10 @@ func TestHandleUpdate_AuthorizedHelpCommand(t *testing.T) {
 
 	// cmdHelp is a pure function with no deps — test it directly
 	got := b.cmdHelp()
-	if got == "" {
+	if got.text == "" {
 		t.Error("cmdHelp returned empty string")
 	}
-	if !strings.Contains(got, "/status") {
+	if !strings.Contains(got.text, "/status") {
 		t.Error("cmdHelp output should contain bot commands")
 	}
 }
@@ -232,14 +233,24 @@ func TestIsKnownCommand(t *testing.T) {
 		{"/restart", true},
 		{"/enable", true},
 		{"/disable", true},
-		{"/health", true},
 		{"/traffic", true},
 		{"/update", true},
-		{"/limits", true},
 		{"/setlimit", true},
 		{"/upstreams", true},
 		{"/tasks", true},
 		{"/help", true},
+		{"/instances", true},
+		{"/info", true},
+		{"/geoblock", true},
+		{"/replication", true},
+		{"/backup", true},
+		{"/resetquota", true},
+		{"/start", true},
+		{"/stop", true},
+
+		// Removed commands
+		{"/health", false},
+		{"/limits", false},
 
 		// Unknown commands
 		{"/unknown", false},
@@ -326,4 +337,114 @@ func TestStop_NilCancel(t *testing.T) {
 
 	// cancel is nil on a freshly constructed Bot — Stop must not panic
 	b.Stop()
+}
+
+func TestSplitMessage_ShortMessage(t *testing.T) {
+	text := "short message"
+	chunks := splitMessage(text)
+	if len(chunks) != 1 {
+		t.Fatalf("expected 1 chunk, got %d", len(chunks))
+	}
+	if chunks[0] != text {
+		t.Errorf("chunk = %q, want %q", chunks[0], text)
+	}
+}
+
+func TestSplitMessage_LongMessageByParagraphs(t *testing.T) {
+	// Build a message that exceeds 4000 chars
+	var parts []string
+	for i := range 50 {
+		parts = append(parts, fmt.Sprintf("Line %d: %s", i, strings.Repeat("x", 80)))
+	}
+	text := strings.Join(parts, "\n\n")
+
+	chunks := splitMessage(text)
+	if len(chunks) < 2 {
+		t.Fatalf("expected multiple chunks for %d char message, got %d", len(text), len(chunks))
+	}
+
+	// Verify no chunk exceeds limit
+	for i, chunk := range chunks {
+		if utf8.RuneCountInString(chunk) > maxMessageLen {
+			t.Errorf("chunk %d exceeds max: %d runes", i, utf8.RuneCountInString(chunk))
+		}
+	}
+
+	// Verify reconstruction matches original
+	reconstructed := strings.Join(chunks, "\n\n")
+	if reconstructed != text {
+		t.Error("reconstructed text doesn't match original")
+	}
+}
+
+func TestSplitMessage_SingleOversizedParagraph(t *testing.T) {
+	// A single paragraph with many lines, no double newlines
+	lines := make([]string, 200)
+	for i := range lines {
+		lines[i] = fmt.Sprintf("line %04d: %s", i, strings.Repeat("ab", 20))
+	}
+	text := strings.Join(lines, "\n")
+
+	chunks := splitMessage(text)
+	if len(chunks) < 2 {
+		t.Fatalf("expected multiple chunks, got %d", len(chunks))
+	}
+
+	for i, chunk := range chunks {
+		if utf8.RuneCountInString(chunk) > maxMessageLen {
+			t.Errorf("chunk %d exceeds max: %d runes", i, utf8.RuneCountInString(chunk))
+		}
+	}
+}
+
+func TestSplitMessage_PreservesSemanticBlocks(t *testing.T) {
+	block1 := "Secret: user1\nStatus: active\nTraffic: 1GB"
+	block2 := "Secret: user2\nStatus: disabled\nTraffic: 0"
+	text := block1 + "\n\n" + block2
+
+	chunks := splitMessage(text)
+	// Should be single chunk since total is short
+	if len(chunks) != 1 {
+		t.Fatalf("expected 1 chunk for short message, got %d", len(chunks))
+	}
+
+	// Now make each block large enough that combined they exceed limit
+	bigBlock1 := "Secret: user1\n" + strings.Repeat("x", 2500)
+	bigBlock2 := "Secret: user2\n" + strings.Repeat("y", 2500)
+	text = bigBlock1 + "\n\n" + bigBlock2
+
+	chunks = splitMessage(text)
+	if len(chunks) != 2 {
+		t.Fatalf("expected 2 chunks, got %d", len(chunks))
+	}
+
+	// Each chunk should contain one complete block
+	if !strings.Contains(chunks[0], "user1") {
+		t.Error("chunk 0 should contain user1 data")
+	}
+	if !strings.Contains(chunks[1], "user2") {
+		t.Error("chunk 1 should contain user2 data")
+	}
+}
+
+func TestFormatDuration(t *testing.T) {
+	tests := []struct {
+		d    time.Duration
+		want string
+	}{
+		{30 * time.Second, "30s"},
+		{90 * time.Second, "1m"},
+		{5 * time.Minute, "5m"},
+		{2 * time.Hour, "2h0m"},
+		{25 * time.Hour, "1d1h"},
+		{48 * time.Hour, "2d"},
+		{7*24*time.Hour + 3*time.Hour, "7d3h"},
+	}
+
+	for _, tt := range tests {
+		got := formatDuration(tt.d)
+		if got != tt.want {
+			t.Errorf("formatDuration(%v) = %q, want %q", tt.d, got, tt.want)
+		}
+	}
 }

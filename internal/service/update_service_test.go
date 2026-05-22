@@ -16,17 +16,17 @@ import (
 
 func TestIsDockerEnvironment(t *testing.T) {
 	orig := os.Getenv("POPUGATE_DEPLOYMENT")
-	t.Cleanup(func() { os.Setenv("POPUGATE_DEPLOYMENT", orig) })
+	t.Cleanup(func() { _ = os.Setenv("POPUGATE_DEPLOYMENT", orig) })
 
 	t.Run("env set to docker", func(t *testing.T) {
-		os.Setenv("POPUGATE_DEPLOYMENT", "docker")
+		_ = os.Setenv("POPUGATE_DEPLOYMENT", "docker")
 		if !IsDockerEnvironment() {
 			t.Error("expected true when POPUGATE_DEPLOYMENT=docker")
 		}
 	})
 
 	t.Run("env not set", func(t *testing.T) {
-		os.Setenv("POPUGATE_DEPLOYMENT", "")
+		_ = os.Setenv("POPUGATE_DEPLOYMENT", "")
 		IsDockerEnvironment()
 	})
 }
@@ -36,8 +36,8 @@ func TestSelfContainerName(t *testing.T) {
 
 	t.Run("HOSTNAME env takes priority", func(t *testing.T) {
 		orig := os.Getenv("HOSTNAME")
-		t.Cleanup(func() { os.Setenv("HOSTNAME", orig) })
-		os.Setenv("HOSTNAME", "my-container")
+		t.Cleanup(func() { _ = os.Setenv("HOSTNAME", orig) })
+		_ = os.Setenv("HOSTNAME", "my-container")
 		if got := svc.selfContainerName(); got != "my-container" {
 			t.Errorf("got %q, want %q", got, "my-container")
 		}
@@ -45,8 +45,8 @@ func TestSelfContainerName(t *testing.T) {
 
 	t.Run("fallback when HOSTNAME empty", func(t *testing.T) {
 		orig := os.Getenv("HOSTNAME")
-		t.Cleanup(func() { os.Setenv("HOSTNAME", orig) })
-		os.Setenv("HOSTNAME", "")
+		t.Cleanup(func() { _ = os.Setenv("HOSTNAME", orig) })
+		_ = os.Setenv("HOSTNAME", "")
 		got := svc.selfContainerName()
 		if got == "" {
 			t.Error("expected non-empty container name")
@@ -56,31 +56,31 @@ func TestSelfContainerName(t *testing.T) {
 
 func TestWebContainerName(t *testing.T) {
 	orig := os.Getenv("POPUGATE_WEB_CONTAINER")
-	t.Cleanup(func() { os.Setenv("POPUGATE_WEB_CONTAINER", orig) })
+	t.Cleanup(func() { _ = os.Setenv("POPUGATE_WEB_CONTAINER", orig) })
 
 	t.Run("env override", func(t *testing.T) {
-		os.Setenv("POPUGATE_WEB_CONTAINER", "custom-web")
+		_ = os.Setenv("POPUGATE_WEB_CONTAINER", "custom-web")
 		if got := webContainerName("popugate-backend"); got != "custom-web" {
 			t.Errorf("got %q, want %q", got, "custom-web")
 		}
 	})
 
 	t.Run("strip -backend suffix", func(t *testing.T) {
-		os.Setenv("POPUGATE_WEB_CONTAINER", "")
+		_ = os.Setenv("POPUGATE_WEB_CONTAINER", "")
 		if got := webContainerName("popugate-backend"); got != "popugate-web" {
 			t.Errorf("got %q, want %q", got, "popugate-web")
 		}
 	})
 
 	t.Run("no suffix", func(t *testing.T) {
-		os.Setenv("POPUGATE_WEB_CONTAINER", "")
+		_ = os.Setenv("POPUGATE_WEB_CONTAINER", "")
 		if got := webContainerName("popugate"); got != "popugate-web" {
 			t.Errorf("got %q, want %q", got, "popugate-web")
 		}
 	})
 
 	t.Run("custom name without suffix", func(t *testing.T) {
-		os.Setenv("POPUGATE_WEB_CONTAINER", "")
+		_ = os.Setenv("POPUGATE_WEB_CONTAINER", "")
 		if got := webContainerName("myapp"); got != "myapp-web" {
 			t.Errorf("got %q, want %q", got, "myapp-web")
 		}
@@ -89,17 +89,17 @@ func TestWebContainerName(t *testing.T) {
 
 func TestWebRootDir(t *testing.T) {
 	orig := os.Getenv("POPUGATE_WEB_DIR")
-	t.Cleanup(func() { os.Setenv("POPUGATE_WEB_DIR", orig) })
+	t.Cleanup(func() { _ = os.Setenv("POPUGATE_WEB_DIR", orig) })
 
 	t.Run("env override", func(t *testing.T) {
-		os.Setenv("POPUGATE_WEB_DIR", "/var/www/html")
+		_ = os.Setenv("POPUGATE_WEB_DIR", "/var/www/html")
 		if got := webRootDir(); got != "/var/www/html" {
 			t.Errorf("got %q, want %q", got, "/var/www/html")
 		}
 	})
 
 	t.Run("default from InstallDir", func(t *testing.T) {
-		os.Setenv("POPUGATE_WEB_DIR", "")
+		_ = os.Setenv("POPUGATE_WEB_DIR", "")
 		got := webRootDir()
 		if !strings.HasSuffix(got, filepath.Join("web", "dist")) {
 			t.Errorf("expected path ending in web/dist, got %q", got)
@@ -467,18 +467,18 @@ func TestExtractWebDist(t *testing.T) {
 	if err := tw.WriteHeader(hdr); err != nil {
 		t.Fatal(err)
 	}
-	tw.Write([]byte("hello"))
+	_, _ = tw.Write([]byte("hello"))
 
 	// Add a nested file
 	hdr2 := &tar.Header{Name: "assets/app.js", Mode: 0644, Size: int64(len("js"))}
 	if err := tw.WriteHeader(hdr2); err != nil {
 		t.Fatal(err)
 	}
-	tw.Write([]byte("js"))
+	_, _ = tw.Write([]byte("js"))
 
-	tw.Close()
-	gw.Close()
-	f.Close()
+	_ = tw.Close()
+	_ = gw.Close()
+	_ = f.Close()
 
 	if err := extractWebDist(archivePath, targetDir); err != nil {
 		t.Fatalf("extractWebDist failed: %v", err)
@@ -501,6 +501,34 @@ func TestExtractWebDist(t *testing.T) {
 	}
 }
 
+func TestExtractWebDist_RejectsPathTraversal(t *testing.T) {
+	tmpDir := t.TempDir()
+	archivePath := filepath.Join(tmpDir, "evil.tar.gz")
+	targetDir := filepath.Join(tmpDir, "dist")
+
+	f, err := os.Create(archivePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gw := gzip.NewWriter(f)
+	tw := tar.NewWriter(gw)
+
+	hdr := &tar.Header{Name: "../../../etc/evil.txt", Mode: 0644, Size: int64(len("pwned"))}
+	if err := tw.WriteHeader(hdr); err != nil {
+		t.Fatal(err)
+	}
+	_, _ = tw.Write([]byte("pwned"))
+
+	_ = tw.Close()
+	_ = gw.Close()
+	_ = f.Close()
+
+	err = extractWebDist(archivePath, targetDir)
+	if err == nil {
+		t.Fatal("expected error for path traversal attempt")
+	}
+}
+
 func TestNewUpdateService(t *testing.T) {
 	svc := NewUpdateService(nil)
 	if svc == nil {
@@ -510,10 +538,10 @@ func TestNewUpdateService(t *testing.T) {
 
 func TestApplyDispatchesByMode(t *testing.T) {
 	orig := os.Getenv("POPUGATE_DEPLOYMENT")
-	t.Cleanup(func() { os.Setenv("POPUGATE_DEPLOYMENT", orig) })
+	t.Cleanup(func() { _ = os.Setenv("POPUGATE_DEPLOYMENT", orig) })
 
 	t.Run("docker mode", func(t *testing.T) {
-		os.Setenv("POPUGATE_DEPLOYMENT", "docker")
+		_ = os.Setenv("POPUGATE_DEPLOYMENT", "docker")
 		svc := NewUpdateService(nil)
 		if !svc.isDocker {
 			t.Error("expected isDocker=true")
@@ -521,7 +549,7 @@ func TestApplyDispatchesByMode(t *testing.T) {
 	})
 
 	t.Run("binary mode", func(t *testing.T) {
-		os.Setenv("POPUGATE_DEPLOYMENT", "")
+		_ = os.Setenv("POPUGATE_DEPLOYMENT", "")
 		svc := NewUpdateService(nil)
 		if svc.isDocker {
 			t.Error("expected isDocker=false")

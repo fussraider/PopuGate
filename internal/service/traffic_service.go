@@ -12,6 +12,7 @@ import (
 	"github.com/fussraider/PopuGate/pkg/dockerutil"
 	"github.com/fussraider/PopuGate/pkg/logger"
 	"github.com/fussraider/PopuGate/pkg/promutil"
+	"golang.org/x/sync/singleflight"
 )
 
 var (
@@ -33,6 +34,7 @@ type TrafficService struct {
 	lastTime   time.Time
 	client     *http.Client
 	dockerAddr string
+	sf         singleflight.Group
 }
 
 // NewTrafficService creates a new TrafficService.
@@ -86,6 +88,17 @@ func (s *TrafficService) GetLiveMetrics(ctx context.Context) (*model.LiveMetrics
 	}
 	s.mu.Unlock()
 
+	v, err, _ := s.sf.Do("live", func() (interface{}, error) {
+		return s.fetchLiveMetrics(ctx)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return v.(*model.LiveMetrics), nil
+}
+
+func (s *TrafficService) fetchLiveMetrics(ctx context.Context) (*model.LiveMetrics, error) {
+
 	instances, err := s.instances.List(ctx)
 	if err != nil {
 		return nil, err
@@ -110,7 +123,7 @@ func (s *TrafficService) GetLiveMetrics(ctx context.Context) (*model.LiveMetrics
 		}
 
 		live, err := promutil.FetchAndParse(resp.Body)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		if err != nil {
 			trafficLog.Warnf("failed to parse metrics from %s: %v", url, err)
 			continue
@@ -165,7 +178,10 @@ func (s *TrafficService) Flush(ctx context.Context) error {
 		return err
 	}
 
-	globalSnap, _ := s.traffic.GetGlobal(ctx)
+	globalSnap, err := s.traffic.GetGlobal(ctx)
+	if err != nil {
+		return fmt.Errorf("get global snapshot: %w", err)
+	}
 	acc := flushAccumulator{
 		histUsers: make(map[string][2]int64),
 	}
@@ -231,7 +247,7 @@ func (s *TrafficService) flushInstance(ctx context.Context, inst model.Instance,
 		return
 	}
 	live, err := promutil.FetchAndParse(resp.Body)
-	resp.Body.Close()
+	_ = resp.Body.Close()
 	if err != nil {
 		return
 	}
@@ -397,10 +413,10 @@ func (s *TrafficService) CheckExpirations(ctx context.Context) {
 
 // ResetAllQuotas resets traffic counters for all users (monthly quota reset).
 func (s *TrafficService) ResetAllQuotas(ctx context.Context) {
-	if s.secrets == nil {
+	if s.traffic == nil {
 		return
 	}
-	if err := s.secrets.ResetAllTraffic(ctx); err != nil {
+	if err := s.traffic.ResetAllTraffic(ctx); err != nil {
 		quotaLog.Warnf("failed to reset all quotas: %v", err)
 	}
 }

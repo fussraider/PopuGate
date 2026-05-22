@@ -132,7 +132,10 @@ func (s *GeoblockService) Clear(ctx context.Context) error {
 		return err
 	}
 
-	settings, _ := s.settings.Load(ctx)
+	settings, err := s.settings.Load(ctx)
+	if err != nil {
+		return fmt.Errorf("load settings: %w", err)
+	}
 	if settings.BlocklistCountries != "" {
 		for _, code := range strings.Split(settings.BlocklistCountries, ",") {
 			code = strings.TrimSpace(strings.ToLower(code))
@@ -165,7 +168,7 @@ func (s *GeoblockService) getCountryCIDRs(ctx context.Context, code string) ([]s
 	if err != nil {
 		return nil, fmt.Errorf("download %s: %w", code, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != 200 {
 		return nil, fmt.Errorf("download %s: HTTP %d", code, resp.StatusCode)

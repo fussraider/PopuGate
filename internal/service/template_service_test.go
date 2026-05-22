@@ -105,7 +105,7 @@ func TestTemplateService_ApplyToSecret(t *testing.T) {
 		QuotaBytes: 10 * 1024 * 1024 * 1024, ExpiresDays: 90,
 	})
 
-	secrets.Create(ctx, &model.Secret{
+	_ = secrets.Create(ctx, &model.Secret{
 		Label: "user1", SecretKey: "aa000000000000000000000000000000",
 		Enabled: true, MaxConns: 5,
 	})
@@ -134,7 +134,7 @@ func TestTemplateService_ApplyToSecret_TemplateNotFound(t *testing.T) {
 	svc, secrets := newTestTemplateService(t)
 	ctx := context.Background()
 
-	secrets.Create(ctx, &model.Secret{
+	_ = secrets.Create(ctx, &model.Secret{
 		Label: "user1", SecretKey: "aa000000000000000000000000000000", Enabled: true,
 	})
 
@@ -165,7 +165,7 @@ func TestTemplateService_ApplyToSecret_CopiesTags(t *testing.T) {
 		Tags: `["premium","vip"]`,
 	})
 
-	secrets.Create(ctx, &model.Secret{
+	_ = secrets.Create(ctx, &model.Secret{
 		Label: "user1", SecretKey: "aa000000000000000000000000000000",
 		Enabled: true, Tags: `["old"]`,
 	})
@@ -189,7 +189,7 @@ func TestTemplateService_ApplyToSecret_EmptyTagsPreservesSecretTags(t *testing.T
 		Tags: "[]",
 	})
 
-	secrets.Create(ctx, &model.Secret{
+	_ = secrets.Create(ctx, &model.Secret{
 		Label: "user1", SecretKey: "aa000000000000000000000000000000",
 		Enabled: true, Tags: `["existing"]`,
 	})
@@ -213,7 +213,7 @@ func TestTemplateService_ApplyToSecret_OverwritesLimitsOnly(t *testing.T) {
 		ExpiresDays: 0, Tags: "[]",
 	})
 
-	secrets.Create(ctx, &model.Secret{
+	_ = secrets.Create(ctx, &model.Secret{
 		Label: "user1", SecretKey: "aa000000000000000000000000000000",
 		Enabled: true, MaxConns: 2, Tags: `["mytag"]`,
 	})

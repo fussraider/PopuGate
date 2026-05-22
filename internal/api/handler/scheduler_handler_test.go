@@ -137,7 +137,7 @@ func TestSchedulerHandler_Update_NothingToUpdate(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp["error"] != "nothing to update" {
 		t.Errorf("expected 'nothing to update', got %v", resp["error"])
 	}
@@ -188,7 +188,7 @@ func TestSchedulerHandler_RunNow(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp["task_name"] != "traffic-flush" {
 		t.Errorf("expected task_name 'traffic-flush', got %v", resp["task_name"])
 	}
@@ -221,7 +221,7 @@ func TestSchedulerHandler_History(t *testing.T) {
 	}
 
 	var records []map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &records)
+	_ = json.Unmarshal(w.Body.Bytes(), &records)
 	// May be empty, but should be a valid array
 	if records == nil {
 		t.Error("expected non-nil array")
@@ -240,7 +240,7 @@ func TestSchedulerHandler_AllHistory(t *testing.T) {
 	}
 
 	var records []map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &records)
+	_ = json.Unmarshal(w.Body.Bytes(), &records)
 	if records == nil {
 		t.Error("expected non-nil array")
 	}

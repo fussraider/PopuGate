@@ -70,7 +70,7 @@ func TestUpstreamHandler_Add_ValidDirect(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp["name"] != "mydirect" {
 		t.Errorf("expected name 'mydirect', got %v", resp["name"])
 	}
@@ -218,7 +218,7 @@ func TestUpstreamHandler_Remove(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp["ok"] != true {
 		t.Error("expected ok=true")
 	}
@@ -260,7 +260,7 @@ func TestUpstreamHandler_Toggle(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp["ok"] != true {
 		t.Error("expected ok=true")
 	}
@@ -321,7 +321,7 @@ func TestUpstreamHandler_Update(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp["type"] != "socks5" {
 		t.Errorf("expected type 'socks5', got %v", resp["type"])
 	}

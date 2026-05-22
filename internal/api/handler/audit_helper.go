@@ -15,7 +15,7 @@ func SetAuditSvc(c *gin.Context, svc *service.AuditService) {
 // HandleError logs the error to Gin context and sends a JSON response.
 func HandleError(c *gin.Context, status int, message string, err error) {
 	if err != nil {
-		c.Error(err) // Record error for GinLogger
+		_ = c.Error(err) // Record error for GinLogger
 		if message != "" {
 			c.JSON(status, gin.H{"error": fmt.Sprintf("%s: %v", message, err)})
 		} else {

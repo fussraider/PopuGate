@@ -18,7 +18,7 @@ func newTestSecretService(t *testing.T) (*SecretService, *store.SecretStore, *sq
 	secrets := store.NewSecretStore(db)
 	instances := store.NewInstanceStore(db)
 	settings := store.NewSettingsStore(db)
-	return NewSecretService(secrets, instances, settings), secrets, db
+	return NewSecretService(secrets, instances, settings, store.NewTrafficStore(db)), secrets, db
 }
 
 func TestSecretService_Add_Valid(t *testing.T) {
@@ -642,7 +642,7 @@ func TestSecretService_DisableExpired(t *testing.T) {
 	ctx := context.Background()
 
 	// Create secret with past expiry
-	store.Create(ctx, &model.Secret{
+	_ = store.Create(ctx, &model.Secret{
 		Label: "expired", SecretKey: "aa000000000000000000000000000000",
 		Enabled: true, ExpiresAt: "2020-01-01T00:00:00Z",
 	})
@@ -799,7 +799,7 @@ func TestSecretService_BulkExtend_ZeroDays(t *testing.T) {
 	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
-	svc.Add(ctx, "user1", "0123456789abcdef0123456789abcdef")
+	_, _ = svc.Add(ctx, "user1", "0123456789abcdef0123456789abcdef")
 	_, err := svc.BulkExtend(ctx, []string{"user1"}, 0)
 	if err == nil {
 		t.Fatal("expected error for zero days")
@@ -929,15 +929,18 @@ func TestSecretService_ImportSecrets(t *testing.T) {
 		{Label: "imported2"},
 	}
 
-	imported, created, err := svc.ImportSecrets(ctx, entries)
+	result, err := svc.ImportSecrets(ctx, entries)
 	if err != nil {
 		t.Fatalf("ImportSecrets: %v", err)
 	}
-	if imported != 2 {
-		t.Errorf("imported = %d, want 2", imported)
+	if len(result.Imported) != 2 {
+		t.Errorf("len(Imported) = %d, want 2", len(result.Imported))
 	}
-	if len(created) != 2 {
-		t.Errorf("len(created) = %d, want 2", len(created))
+	if len(result.Skipped) != 0 {
+		t.Errorf("len(Skipped) = %d, want 0", len(result.Skipped))
+	}
+	if len(result.Errors) != 0 {
+		t.Errorf("len(Errors) = %d, want 0", len(result.Errors))
 	}
 
 	sec, _ := svc.Get(ctx, "imported1")
@@ -968,15 +971,15 @@ func TestSecretService_ImportSecrets_SkipsDuplicates(t *testing.T) {
 		{Label: "newuser"},
 	}
 
-	imported, created, err := svc.ImportSecrets(ctx, entries)
+	result, err := svc.ImportSecrets(ctx, entries)
 	if err != nil {
 		t.Fatalf("ImportSecrets: %v", err)
 	}
-	if imported != 1 {
-		t.Errorf("imported = %d, want 1 (duplicate skipped)", imported)
+	if len(result.Imported) != 1 || result.Imported[0] != "newuser" {
+		t.Errorf("Imported = %v, want [newuser]", result.Imported)
 	}
-	if len(created) != 1 || created[0] != "newuser" {
-		t.Errorf("created = %v, want [newuser]", created)
+	if len(result.Skipped) != 1 || result.Skipped[0] != "existing" {
+		t.Errorf("Skipped = %v, want [existing]", result.Skipped)
 	}
 }
 
@@ -989,12 +992,15 @@ func TestSecretService_ImportSecrets_SkipsInvalidKeys(t *testing.T) {
 		{Label: "goodkey", SecretKey: "aa000000000000000000000000000000"},
 	}
 
-	imported, _, err := svc.ImportSecrets(ctx, entries)
+	result, err := svc.ImportSecrets(ctx, entries)
 	if err != nil {
 		t.Fatalf("ImportSecrets: %v", err)
 	}
-	if imported != 1 {
-		t.Errorf("imported = %d, want 1 (bad key skipped)", imported)
+	if len(result.Imported) != 1 {
+		t.Errorf("len(Imported) = %d, want 1 (bad key skipped)", len(result.Imported))
+	}
+	if len(result.Errors) != 1 {
+		t.Errorf("len(Errors) = %d, want 1", len(result.Errors))
 	}
 }
 
@@ -1003,7 +1009,7 @@ func TestSecretService_DisableExpired_LastEnabledGuard(t *testing.T) {
 	ctx := context.Background()
 
 	// Only one secret, and it's expired — should NOT be disabled
-	store.Create(ctx, &model.Secret{
+	_ = store.Create(ctx, &model.Secret{
 		Label: "only", SecretKey: "aa000000000000000000000000000000",
 		Enabled: true, ExpiresAt: "2020-01-01T00:00:00Z",
 	})

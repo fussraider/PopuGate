@@ -72,7 +72,7 @@ func (i *Instance) GetTLSDomains() []string {
 		return nil
 	}
 	var domains []string
-	json.Unmarshal([]byte(i.TLSDomains), &domains)
+	_ = json.Unmarshal([]byte(i.TLSDomains), &domains)
 	return domains
 }
 
@@ -91,7 +91,7 @@ func (i *Instance) GetTags() []string {
 		return nil
 	}
 	var tags []string
-	json.Unmarshal([]byte(i.Tags), &tags)
+	_ = json.Unmarshal([]byte(i.Tags), &tags)
 	return tags
 }
 

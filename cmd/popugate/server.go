@@ -81,7 +81,7 @@ func runServer(cmd *cobra.Command, args []string) {
 	if err != nil {
 		logger.Fatalf("Failed to open database: %v", err)
 	}
-	defer database.Close()
+	defer func() { _ = database.Close() }()
 
 	stores := initStores(db, dataDir)
 	svcs := initServices(stores, dataDir)
@@ -93,6 +93,7 @@ func runServer(cmd *cobra.Command, args []string) {
 
 	var activeBot *bot.Bot
 	var botMu sync.Mutex
+	registerBotCommands(botCtx, stores.settings)
 	startBotIfNeeded(botCtx, stores.settings, botDeps, &activeBot, &botMu)
 
 	notifyFn := makeNotifyFn(&activeBot, &botMu, stores.settings)
@@ -104,7 +105,7 @@ func runServer(cmd *cobra.Command, args []string) {
 	if err != nil {
 		srvLog.Warnf("Failed to load settings: %v", err)
 	}
-	seedDefaultInstance(ctx, stores, settings)
+	seedDefaultInstance(ctx, svcs.container, settings)
 
 	isDebug := resolveDebugMode(settings)
 
@@ -247,7 +248,7 @@ func initServices(s appStores, dataDir string) appServices {
 
 	svcs := appServices{
 		dockerCli: dockerClient,
-		secret:    service.NewSecretService(s.secret, s.instance, s.settings),
+		secret:    service.NewSecretService(s.secret, s.instance, s.settings, s.traffic),
 		upstream:  service.NewUpstreamService(s.upstream),
 		traffic:   service.NewTrafficService(s.traffic, s.settings, dockerClient, s.instance),
 		geoblock:  service.NewGeoblockService(s.settings, s.instance, s.geoblock),
@@ -259,7 +260,7 @@ func initServices(s appStores, dataDir string) appServices {
 	if dockerClient != nil {
 		svcs.docker = service.NewDockerService(dockerClient, svcs.telemtCfg)
 		svcs.container = service.NewContainerService(
-			dockerClient, s.secret, s.upstream, s.instance, s.traffic, s.settings, svcs.traffic,
+			dataDir, dockerClient, s.secret, s.upstream, s.instance, s.traffic, s.settings, svcs.traffic,
 		)
 		svcs.health = service.NewHealthService(dockerClient, s.settings, s.instance)
 		svcs.health.SetContainerSvc(svcs.container)
@@ -278,6 +279,9 @@ func buildBotDeps(s appStores, svcs appServices) *bot.Dependencies {
 		Upstreams: s.upstream,
 		Traffic:   s.traffic,
 		Instances: s.instance,
+		Slaves:    s.slave,
+		Backups:   s.backup,
+		Geoblock:  s.geoblock,
 	}
 	if svcs.container != nil {
 		deps.RestartProxy = func(ctx context.Context) error { return svcs.container.Restart(ctx) }
@@ -308,6 +312,12 @@ func buildBotDeps(s appStores, svcs appServices) *bot.Dependencies {
 	}
 	deps.GenerateQR = func(ctx context.Context, link string) ([]byte, error) {
 		return qrutil.GeneratePNG(link, 256)
+	}
+	deps.CreateBackup = func(ctx context.Context) (store.Backup, error) {
+		return s.backup.Create(ctx)
+	}
+	deps.ResetTraffic = func(ctx context.Context, label string) error {
+		return s.traffic.ResetTraffic(ctx, label)
 	}
 	return deps
 }
@@ -390,11 +400,11 @@ func wireNotifyCallbacks(svcs appServices, notify service.NotifyFunc, notifyWith
 	}
 }
 
-func seedDefaultInstance(ctx context.Context, s appStores, settings *model.Settings) {
-	if settings == nil {
+func seedDefaultInstance(ctx context.Context, svc *service.ContainerService, settings *model.Settings) {
+	if settings == nil || svc == nil {
 		return
 	}
-	if err := s.instance.EnsureDefaultInstance(ctx, settings.ProxyPort, settings.ProxyMetricsPort, settings.ProxyDomain, settings.MaskingHost, settings.MaskingEnabled); err != nil {
+	if err := svc.EnsureDefaultInstance(ctx, settings.ProxyPort, settings.ProxyMetricsPort, settings.ProxyDomain, settings.MaskingHost, settings.MaskingEnabled); err != nil {
 		srvLog.Warnf("Failed to seed default instance: %v", err)
 	}
 }
@@ -488,6 +498,26 @@ func runHTTPServer(port int, router http.Handler, botCancel context.CancelFunc, 
 	srvLog.Infof("Server stopped")
 }
 
+// registerBotCommands registers the bot command list via Telegram setMyCommands API.
+// Runs on every server startup so the command list stays in sync after updates.
+// Silently skips if the bot is not configured (no token/chat ID).
+func registerBotCommands(ctx context.Context, settingsStore *store.SettingsStore) {
+	settings, err := settingsStore.Load(ctx)
+	if err != nil {
+		srvLog.Warnf("bot commands: cannot read settings, skipping registration: %v", err)
+		return
+	}
+	if settings.TelegramBotToken == "" {
+		srvLog.Infof("bot commands: Telegram bot token not configured, skipping command registration")
+		return
+	}
+	if err := bot.SetCommandsForToken(ctx, settings.TelegramBotToken); err != nil {
+		srvLog.Warnf("bot commands: failed to register commands: %v", err)
+		return
+	}
+	srvLog.Infof("bot commands: registered via setMyCommands")
+}
+
 func startBotIfNeeded(ctx context.Context, settingsStore *store.SettingsStore, deps *bot.Dependencies, activeBot **bot.Bot, mu *sync.Mutex) {
 	settings, err := settingsStore.Load(ctx)
 	if err != nil {
@@ -541,40 +571,28 @@ func prepareSchedulerTasks(p schedulerTaskParams) (*scheduler.Scheduler, []sched
 }
 
 func buildTaskFn(name string, p schedulerTaskParams) func(context.Context) error {
-	switch name {
-	case "traffic-flush":
-		return buildTrafficFlush(p)
-	case "quota-check":
-		return buildQuotaCheck(p)
-	case "expiry-check":
-		return buildExpiryCheck(p)
-	case "health-check":
-		return buildHealthCheck(p)
-	case "replication-sync":
-		return buildReplicationSync(p)
-	case "token-cleanup":
-		return buildTokenCleanup(p)
-	case "daily-backup":
-		return buildDailyBackup(p)
-	case "backup-cleanup":
-		return buildBackupCleanup(p)
-	case "telegram-report":
-		return buildTelegramReport(p)
-	case "update-check":
-		return buildUpdateCheck(p)
-	case "telemt-check":
-		return buildTelemtCheck(p)
-	case "history-cleanup":
-		return buildHistoryCleanup(p)
-	case "quota-reset":
-		return buildQuotaReset(p)
-	case "auto-rotate":
-		return buildAutoRotate(p)
-	case "upstream-health":
-		return buildUpstreamHealth(p)
-	default:
+	builders := map[string]func(schedulerTaskParams) func(context.Context) error{
+		"traffic-flush":    buildTrafficFlush,
+		"quota-check":      buildQuotaCheck,
+		"expiry-check":     buildExpiryCheck,
+		"health-check":     buildHealthCheck,
+		"replication-sync": buildReplicationSync,
+		"token-cleanup":    buildTokenCleanup,
+		"daily-backup":     buildDailyBackup,
+		"backup-cleanup":   buildBackupCleanup,
+		"telegram-report":  buildTelegramReport,
+		"update-check":     buildUpdateCheck,
+		"telemt-check":     buildTelemtCheck,
+		"history-cleanup":  buildHistoryCleanup,
+		"quota-reset":      buildQuotaReset,
+		"auto-rotate":      buildAutoRotate,
+		"upstream-health":  buildUpstreamHealth,
+	}
+	fn, ok := builders[name]
+	if !ok {
 		return nil
 	}
+	return fn(p)
 }
 
 func buildTrafficFlush(p schedulerTaskParams) func(context.Context) error {
@@ -737,7 +755,7 @@ func buildQuotaReset(p schedulerTaskParams) func(context.Context) error {
 	return func(ctx context.Context) error {
 		p.trafficSvc.ResetAllQuotas(ctx)
 		if p.auditSvc != nil {
-			p.auditSvc.Log(ctx, "system", "quota-reset", "monthly quota reset completed")
+			_ = p.auditSvc.Log(ctx, "system", "quota-reset", "monthly quota reset completed")
 		}
 		return nil
 	}
@@ -766,7 +784,7 @@ func buildAutoRotate(p schedulerTaskParams) func(context.Context) error {
 			}
 		}
 		if rotated > 0 && p.auditSvc != nil {
-			p.auditSvc.Log(ctx, "system", "auto-rotate", fmt.Sprintf("rotated %d secret(s)", rotated))
+			_ = p.auditSvc.Log(ctx, "system", "auto-rotate", fmt.Sprintf("rotated %d secret(s)", rotated))
 		}
 		return nil
 	}

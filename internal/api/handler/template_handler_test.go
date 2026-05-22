@@ -219,7 +219,7 @@ func TestTemplateHandler_Apply(t *testing.T) {
 	ctx := context.Background()
 
 	// Create a secret
-	secStore.Create(ctx, &model.Secret{
+	_ = secStore.Create(ctx, &model.Secret{
 		Label: "user1", SecretKey: "aa000000000000000000000000000000", Enabled: true,
 	})
 
@@ -255,7 +255,7 @@ func TestTemplateHandler_Apply_WithTags(t *testing.T) {
 	r, secStore := setupTemplateTestRouter(t)
 	ctx := context.Background()
 
-	secStore.Create(ctx, &model.Secret{
+	_ = secStore.Create(ctx, &model.Secret{
 		Label: "user1", SecretKey: "aa000000000000000000000000000000",
 		Enabled: true, Tags: `["old"]`,
 	})
@@ -293,7 +293,7 @@ func TestTemplateHandler_Apply_TemplateNotFound(t *testing.T) {
 	r, secStore := setupTemplateTestRouter(t)
 	ctx := context.Background()
 
-	secStore.Create(ctx, &model.Secret{
+	_ = secStore.Create(ctx, &model.Secret{
 		Label: "user1", SecretKey: "aa000000000000000000000000000000", Enabled: true,
 	})
 

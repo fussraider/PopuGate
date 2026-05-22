@@ -5,6 +5,43 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-05-23
+
+### Added
+- **Bot: auto-registration of commands** via Telegram `setMyCommands` API — commands appear as autocomplete suggestions in Telegram clients
+- **Bot: `/backup create`** — trigger backup creation directly from Telegram
+- **Bot: `/resetquota <label>`** — reset traffic counters for a specific user
+- **Bot: `/status` expanded** — now shows engine version, uptime, per-instance status, and traffic summary
+- **Bot: `/instances` command** — list all instances with config details (FakeTLS, TCPMSS, TLS fronting, masking)
+- **Bot: `/info <label>` command** — detailed secret card with masked key, limits, traffic, tags, and notes
+- **Bot: `/geoblock` command** — show geo-blocking mode, countries, and cache freshness
+- **Bot: `/replication` command** — show replication role, sync config, and slave list
+- **Bot: `/upstreams` command** — list configured upstreams with status and weight
+- **Bot: `/tasks` command** — show scheduled tasks status
+- **Bot: `/update` command** — show PopuGate and engine version info
+- **Bot: message chunking** — long responses split at paragraph boundaries to respect Telegram's 4096-char limit
+- **Bot: inline keyboard buttons** — Dashboard and page links in command responses
+- **Store: transaction support** — bulk secret operations (`BulkExtendExpiry`, `BulkToggleEnabled`, `BulkSetLimits`) now run inside database transactions
+- **Store: prevent disabling last secret** — `cmdDisable` refuses to disable the only active secret
+- **Tests: 55 new bot command tests** — comprehensive coverage of all bot commands using in-memory SQLite stores
+
+### Changed
+- **Structured logging** — replace `fmt.Printf`/`log.Printf` with scoped logger (`pkg/logger`) across database, bot, services, and stores
+- **Database migration system refactored** — split into `loadAppliedVersions`, `extractUpSQL`, `applyMigration`, `execMigrationStatements` for clarity
+- **Secret store refactored** — modular methods, consistent error wrapping, proper resource cleanup with `defer`
+- **Backup store refactored** — split backup creation into `writeManifest`, `addToArchive`, `extractEntry`; path traversal protection
+- **Update service rewritten** — improved error handling, SHA256 and size verification for downloaded assets, separate functions for container recreation
+- **Telemt config generation** — regex validation for TOML keys, switch from `fmt.Sprintf` to `fmt.Fprintf`
+- **SSH sync** — improved error handling and reporting in `sync.go`
+- **Prometheus parser** — refactored for clarity
+- **Error handling** — consistent `defer { _ = res.Close() }` pattern, panic recovery in goroutines, suppressed close errors where appropriate
+- **Frontend: AuthLayout component** — new shared layout for login/register views
+- **Frontend: UI refinements** — DockerView, InstancesView, SecretsView, SystemView, GeoblockView updates
+
+### Fixed
+- **Rate limiter** — refactored with improved correctness, added comprehensive tests
+- **Resource leaks** — HTTP response bodies, database rows, and file handles now consistently closed on all error paths
+
 ## [0.1.10] - 2026-05-15
 
 ### Fixed

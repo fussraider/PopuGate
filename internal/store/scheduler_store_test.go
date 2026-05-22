@@ -220,7 +220,7 @@ func TestSchedulerStore_ListHistory(t *testing.T) {
 	now := time.Now().Unix()
 	tasks := []string{"task-a", "task-b", "task-c"}
 	for i, name := range tasks {
-		s.InsertHistory(ctx, &scheduler.ExecutionRecord{
+		_ = s.InsertHistory(ctx, &scheduler.ExecutionRecord{
 			TaskName:   name,
 			StartedAt:  now - int64(len(tasks)-i)*60,
 			FinishedAt: now - int64(len(tasks)-i)*60 + 1,
@@ -250,7 +250,7 @@ func TestSchedulerStore_ListHistory_Pagination(t *testing.T) {
 
 	now := time.Now().Unix()
 	for i := 0; i < 5; i++ {
-		s.InsertHistory(ctx, &scheduler.ExecutionRecord{
+		_ = s.InsertHistory(ctx, &scheduler.ExecutionRecord{
 			TaskName:   "pag-task",
 			StartedAt:  now - int64(5-i)*10,
 			FinishedAt: now - int64(5-i)*10 + 1,

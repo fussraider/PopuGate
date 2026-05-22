@@ -89,7 +89,7 @@ func TestConfigUpdate_RejectsInternalKeys(t *testing.T) {
 			r.ServeHTTP(w, req)
 
 			var resp map[string]interface{}
-			json.Unmarshal(w.Body.Bytes(), &resp)
+			_ = json.Unmarshal(w.Body.Bytes(), &resp)
 
 			if tt.wantOK {
 				if w.Code != http.StatusOK {
@@ -146,7 +146,7 @@ func TestConfigUpdate_BoolType(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 
 	applied := resp["applied"].([]interface{})
 	found := false
@@ -165,7 +165,7 @@ func TestConfigUpdate_BoolType(t *testing.T) {
 	r.ServeHTTP(w2, req2)
 
 	var getResp map[string]interface{}
-	json.Unmarshal(w2.Body.Bytes(), &getResp)
+	_ = json.Unmarshal(w2.Body.Bytes(), &getResp)
 	if getResp["value"] != "true" {
 		t.Errorf("expected debug='true', got %v", getResp["value"])
 	}
@@ -193,7 +193,7 @@ func TestConfigUpdate_FloatType(t *testing.T) {
 	r.ServeHTTP(w2, req2)
 
 	var resp map[string]interface{}
-	json.Unmarshal(w2.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w2.Body.Bytes(), &resp)
 	if resp["value"] != "8443" {
 		t.Errorf("expected proxy_port='8443', got %v", resp["value"])
 	}
@@ -220,7 +220,7 @@ func TestConfigUpdate_StringType(t *testing.T) {
 	r.ServeHTTP(w2, req2)
 
 	var resp map[string]interface{}
-	json.Unmarshal(w2.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w2.Body.Bytes(), &resp)
 	if resp["value"] != "example.com" {
 		t.Errorf("expected proxy_domain='example.com', got %v", resp["value"])
 	}
@@ -243,7 +243,7 @@ func TestConfigUpdate_AllOnlyInternalKeys_ReturnsBadRequest(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp["error"] != "no valid settings provided" {
 		t.Errorf("expected 'no valid settings provided', got %v", resp["error"])
 	}
@@ -266,7 +266,7 @@ func TestConfigUpdate_NoValidKeys(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp["error"] != "no valid settings provided" {
 		t.Errorf("expected 'no valid settings provided', got %v", resp["error"])
 	}
@@ -291,7 +291,7 @@ func TestConfigUpdate_MixedKeys_AppliesOnlyAllowed(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 
 	applied := resp["applied"].([]interface{})
 	if len(applied) != 2 {
@@ -335,7 +335,7 @@ func TestConfigUpdate_NullValueSkipped(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 
 	applied := resp["applied"].([]interface{})
 	if len(applied) != 1 {
@@ -360,7 +360,7 @@ func TestConfigHandler_GetKey(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp["key"] != "geoblock_mode" {
 		t.Errorf("expected key='geoblock_mode', got %v", resp["key"])
 	}
@@ -381,7 +381,7 @@ func TestConfigHandler_GetKey_UnknownKey(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp["key"] != "nonexistent_key" {
 		t.Errorf("expected key='nonexistent_key', got %v", resp["key"])
 	}
@@ -413,8 +413,43 @@ func TestConfigHandler_GetKey_AfterUpdate(t *testing.T) {
 	r.ServeHTTP(w2, req2)
 
 	var resp map[string]interface{}
-	json.Unmarshal(w2.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w2.Body.Bytes(), &resp)
 	if resp["value"] != "true" {
 		t.Errorf("expected debug='true' after update, got %v", resp["value"])
+	}
+}
+
+func TestConfigHandler_GetKey_RejectsSensitiveKeys(t *testing.T) {
+	r, _ := setupConfigTestRouter(t)
+
+	// Save jwt_secret first so it exists in the DB
+	body, _ := json.Marshal(map[string]interface{}{
+		"jwt_secret": "super-secret-value",
+	})
+	req := httptest.NewRequest(http.MethodPut, "/config", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	// Now try to read it back via GetKey — should be forbidden
+	req2 := httptest.NewRequest(http.MethodGet, "/config/jwt_secret", nil)
+	w2 := httptest.NewRecorder()
+	r.ServeHTTP(w2, req2)
+
+	if w2.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for sensitive key, got %d: %s", w2.Code, w2.Body.String())
+	}
+}
+
+func TestConfigHandler_GetKey_RejectsPasswordHash(t *testing.T) {
+	r, _ := setupConfigTestRouter(t)
+
+	// auth_password_hash is blocked by sensitiveKeys
+	req := httptest.NewRequest(http.MethodGet, "/config/auth_password_hash", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for auth_password_hash, got %d: %s", w.Code, w.Body.String())
 	}
 }

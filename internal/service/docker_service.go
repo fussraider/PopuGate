@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/fussraider/PopuGate/internal/model"
 	"github.com/fussraider/PopuGate/pkg/dockerutil"
@@ -87,10 +88,10 @@ func (s *DockerService) pullAndTag(ctx context.Context, pullRef, taggedImage, la
 		return nil, fmt.Errorf("pull %s: %w", pullRef, err)
 	}
 	if _, err := io.ReadAll(reader); err != nil {
-		reader.Close()
+		_ = reader.Close()
 		return nil, fmt.Errorf("read pull output: %w", err)
 	}
-	reader.Close()
+	_ = reader.Close()
 
 	// Tag as local version
 	if err := s.dockerTag(ctx, pullRef, taggedImage); err != nil {
@@ -120,7 +121,7 @@ func (s *DockerService) buildFromSource(ctx context.Context, version, taggedImag
 	if err != nil {
 		return fmt.Errorf("create build dir: %w", err)
 	}
-	defer os.RemoveAll(buildDir)
+	defer func() { _ = os.RemoveAll(buildDir) }()
 
 	dockerfile := fmt.Sprintf(`FROM rust:1-bookworm AS builder
 ARG TELEMT_COMMIT
@@ -190,7 +191,9 @@ func (s *DockerService) GetInstalledVersion() string {
 	}
 
 	// Fallback to docker images if version file is missing
-	images, err := s.docker.ListImages(context.Background(), "popugate-telemt")
+	listCtx, listCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer listCancel()
+	images, err := s.docker.ListImages(listCtx, "popugate-telemt")
 	if err != nil || len(images) == 0 {
 		return ""
 	}

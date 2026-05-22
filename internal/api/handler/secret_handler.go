@@ -819,13 +819,18 @@ func (h *SecretHandler) Import(c *gin.Context) {
 		entries[i] = model.Secret{Label: e.Label, SecretKey: e.SecretKey}
 	}
 
-	imported, created, err := h.secrets.ImportSecrets(c.Request.Context(), entries)
+	result, err := h.secrets.ImportSecrets(c.Request.Context(), entries)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	auditLog(c, "secret.import", fmt.Sprintf("count=%d", len(req.Secrets)))
-	c.JSON(http.StatusOK, gin.H{"ok": true, "imported": imported, "created": created})
+	c.JSON(http.StatusOK, gin.H{
+		"ok":       true,
+		"imported": result.Imported,
+		"skipped":  result.Skipped,
+		"errors":   result.Errors,
+	})
 }
 
 // resolveBulkLabels resolves labels from either explicit list or tag.

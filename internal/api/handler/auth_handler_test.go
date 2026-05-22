@@ -79,7 +79,7 @@ func setupAuthTestRouter(t *testing.T) (*gin.Engine, *store.TokenBlocklistStore)
 
 	// Setup password
 	hash, _ := bcrypt.GenerateFromPassword([]byte("testpass123"), bcrypt.MinCost)
-	settingsStore.SetAuthPasswordHash(context.Background(), string(hash))
+	_ = settingsStore.SetAuthPasswordHash(context.Background(), string(hash))
 
 	r := gin.New()
 	r.POST("/auth/login", handler.Login)
@@ -100,7 +100,7 @@ func setupFullAuthRouter(t *testing.T) (*gin.Engine, *store.SettingsStore, *stor
 
 	// Setup password so login/changePassword work
 	hash, _ := bcrypt.GenerateFromPassword([]byte("testpass123"), bcrypt.MinCost)
-	settingsStore.SetAuthPasswordHash(context.Background(), string(hash))
+	_ = settingsStore.SetAuthPasswordHash(context.Background(), string(hash))
 
 	r := gin.New()
 	r.POST("/auth/login", handler.Login)
@@ -126,7 +126,7 @@ func loginForTokens(t *testing.T, r *gin.Engine, password string) (string, strin
 	}
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	return resp["access_token"].(string), resp["refresh_token"].(string)
 }
 
@@ -146,7 +146,7 @@ func TestAuthHandler_Login_MissingPassword(t *testing.T) {
 	}
 
 	var resp map[string]string
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp["error"] != "password required" {
 		t.Errorf("expected 'password required', got %q", resp["error"])
 	}
@@ -174,7 +174,7 @@ func TestAuthHandler_Login_NoSetup_Returns403(t *testing.T) {
 	}
 
 	var resp map[string]string
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp["error"] != "initial setup required" {
 		t.Errorf("expected 'initial setup required', got %q", resp["error"])
 	}
@@ -194,7 +194,7 @@ func TestAuthHandler_Login_WrongPassword_Returns401(t *testing.T) {
 	}
 
 	var resp map[string]string
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp["error"] != "invalid credentials" {
 		t.Errorf("expected 'invalid credentials', got %q", resp["error"])
 	}
@@ -214,7 +214,7 @@ func TestAuthHandler_Login_CorrectPassword_Returns200(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 
 	if _, ok := resp["access_token"]; !ok {
 		t.Error("expected 'access_token' in response")
@@ -243,7 +243,7 @@ func TestAuthHandler_Refresh_MissingToken(t *testing.T) {
 	}
 
 	var resp map[string]string
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp["error"] != "refresh_token required" {
 		t.Errorf("expected 'refresh_token required', got %q", resp["error"])
 	}
@@ -263,7 +263,7 @@ func TestAuthHandler_Refresh_InvalidToken(t *testing.T) {
 	}
 
 	var resp map[string]string
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp["error"] != "invalid refresh token" {
 		t.Errorf("expected 'invalid refresh token', got %q", resp["error"])
 	}
@@ -285,7 +285,7 @@ func TestAuthHandler_Refresh_CorrectRefresh(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	if _, ok := resp["access_token"]; !ok {
 		t.Error("expected 'access_token' in refresh response")
 	}
@@ -315,7 +315,7 @@ func TestAuthHandler_Refresh_RejectsAccessToken(t *testing.T) {
 	}
 
 	var resp map[string]string
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp["error"] != "not a refresh token" {
 		t.Errorf("expected 'not a refresh token', got %q", resp["error"])
 	}
@@ -344,7 +344,7 @@ func TestAuthHandler_Setup_Valid(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	if _, ok := resp["access_token"]; !ok {
 		t.Error("expected 'access_token' in setup response")
 	}
@@ -362,7 +362,7 @@ func TestAuthHandler_Setup_AlreadyDone_Returns409(t *testing.T) {
 
 	// Pre-set password hash to simulate setup already done
 	hash, _ := bcrypt.GenerateFromPassword([]byte("existing"), bcrypt.MinCost)
-	settingsStore.SetAuthPasswordHash(context.Background(), string(hash))
+	_ = settingsStore.SetAuthPasswordHash(context.Background(), string(hash))
 
 	r := gin.New()
 	r.POST("/auth/setup", handler.Setup)
@@ -378,7 +378,7 @@ func TestAuthHandler_Setup_AlreadyDone_Returns409(t *testing.T) {
 	}
 
 	var resp map[string]string
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp["error"] != "setup already completed" {
 		t.Errorf("expected 'setup already completed', got %q", resp["error"])
 	}
@@ -405,7 +405,7 @@ func TestAuthHandler_Setup_ShortPassword_Returns400(t *testing.T) {
 	}
 
 	var resp map[string]string
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	if !strings.Contains(resp["error"], "min 8") {
 		t.Errorf("expected error about minimum 8 characters, got %q", resp["error"])
 	}
@@ -430,7 +430,7 @@ func TestAuthHandler_ChangePassword_Valid(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp["ok"] != true {
 		t.Error("expected ok=true")
 	}
@@ -464,7 +464,7 @@ func TestAuthHandler_ChangePassword_WrongCurrent_Returns401(t *testing.T) {
 	}
 
 	var resp map[string]string
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp["error"] != "current password incorrect" {
 		t.Errorf("expected 'current password incorrect', got %q", resp["error"])
 	}
@@ -512,7 +512,7 @@ func TestLogout_UsesTokenExpiry(t *testing.T) {
 	r.ServeHTTP(loginW, loginReq)
 
 	var loginResp map[string]interface{}
-	json.Unmarshal(loginW.Body.Bytes(), &loginResp)
+	_ = json.Unmarshal(loginW.Body.Bytes(), &loginResp)
 	accessToken := loginResp["access_token"].(string)
 	refreshToken := loginResp["refresh_token"].(string)
 
@@ -567,7 +567,7 @@ func TestLogout_WithoutBody(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp["ok"] != true {
 		t.Error("expected ok=true")
 	}

@@ -121,7 +121,7 @@ func (s *Scheduler) StartWith(tasks []Task, overrides map[string]TaskOverride, h
 			continue
 		}
 
-		s.addTaskToCron(&task, schedule)
+		_ = s.addTaskToCron(&task, schedule)
 	}
 
 	s.cron.Start()
@@ -288,6 +288,11 @@ func (s *Scheduler) addTaskToCron(task *Task, schedule string) error {
 
 func (s *Scheduler) wrapTask(task *Task) func() {
 	return func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Errorf("goroutine panic (task %s): %v", task.Name, r)
+			}
+		}()
 		log.Infof("starting task: %s", task.Name)
 		start := time.Now()
 		rec := &ExecutionRecord{

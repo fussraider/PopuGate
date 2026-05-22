@@ -12,7 +12,10 @@ import (
 
 	"github.com/fussraider/PopuGate/internal/service"
 	"github.com/fussraider/PopuGate/internal/store"
+	"github.com/fussraider/PopuGate/pkg/logger"
 )
+
+var backupLog = logger.WithScope("backup")
 
 // BackupHandler handles backup endpoints.
 type BackupHandler struct {
@@ -71,7 +74,7 @@ func (h *BackupHandler) Create(c *gin.Context) {
 
 	// Audit log
 	if h.auditSvc != nil {
-		h.auditSvc.Log(c.Request.Context(), getUser(c), "backup.created",
+		_ = h.auditSvc.Log(c.Request.Context(), getUser(c), "backup.created",
 			fmt.Sprintf("file=%s size=%d checksum=%s", backup.Filename, backup.Size, backup.Checksum))
 	}
 
@@ -105,62 +108,79 @@ func (h *BackupHandler) Restore(c *gin.Context) {
 		return
 	}
 
-	// Prevent path traversal
 	if strings.Contains(req.Filename, "/") || strings.Contains(req.Filename, "..") {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid filename"})
 		return
 	}
 
-	// Stop the proxy engine before restore
-	if h.containerSvc != nil {
-		if err := h.containerSvc.Stop(c.Request.Context()); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to stop proxy engine"})
-			return
-		}
+	if err := h.stopEngine(c); err != nil {
+		return
 	}
 
-	// Perform restore
 	if err := h.backups.Restore(c.Request.Context(), req.Filename); err != nil {
-		// Try to restart the engine even on failure
-		if h.containerSvc != nil {
-			_ = h.containerSvc.Start(c.Request.Context())
-		}
+		h.startEngine(c)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "restore failed"})
 		return
 	}
 
-	// Start the proxy engine after restore
-	engineStarted := true
-	if h.containerSvc != nil {
-		if err := h.containerSvc.Start(c.Request.Context()); err != nil {
-			engineStarted = false
-		}
-	}
+	engineStarted := h.startEngine(c)
+	jwtRotated := h.rotateJWTSecret(c)
 
-	// Always rotate JWT secret after restore — the old DB is overwritten
-	if h.settings != nil {
-		if newSecret, err := generateRandomHex(32); err == nil {
-			_ = h.settings.Save(c.Request.Context(), map[string]string{"jwt_secret": newSecret})
-		}
-	}
-
-	// Audit log
 	if h.auditSvc != nil {
-		h.auditSvc.Log(c.Request.Context(), getUser(c), "backup.restored",
+		_ = h.auditSvc.Log(c.Request.Context(), getUser(c), "backup.restored",
 			fmt.Sprintf("file=%s", req.Filename))
 	}
 
-	if engineStarted {
-		c.JSON(http.StatusOK, gin.H{
-			"ok":      true,
-			"message": "Database and configuration files were restored. Proxy engine restarted. JWT secret rotated.",
-		})
+	msg := "Database and configuration files were restored."
+	if engineStarted && jwtRotated {
+		msg += " Proxy engine restarted. JWT secret rotated."
+	} else if engineStarted {
+		msg += " Proxy engine restarted. JWT secret rotation failed."
+	} else if jwtRotated {
+		msg += " JWT secret rotated. Failed to restart proxy engine."
 	} else {
-		c.JSON(http.StatusOK, gin.H{
-			"ok":      true,
-			"warning": "Database restored and JWT rotated but failed to restart proxy engine.",
-		})
+		msg += " Failed to restart proxy engine. JWT secret rotation failed."
 	}
+
+	resp := gin.H{"ok": true, "message": msg}
+	if !engineStarted || !jwtRotated {
+		resp["warning"] = msg
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
+func (h *BackupHandler) stopEngine(c *gin.Context) error {
+	if h.containerSvc == nil {
+		return nil
+	}
+	if err := h.containerSvc.Stop(c.Request.Context()); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to stop proxy engine"})
+		return err
+	}
+	return nil
+}
+
+func (h *BackupHandler) startEngine(c *gin.Context) bool {
+	if h.containerSvc == nil {
+		return true
+	}
+	return h.containerSvc.Start(c.Request.Context()) == nil
+}
+
+func (h *BackupHandler) rotateJWTSecret(c *gin.Context) bool {
+	if h.settings == nil {
+		return false
+	}
+	newSecret, err := generateRandomHex(32)
+	if err != nil {
+		backupLog.Warnf("rotate jwt secret: generate: %v", err)
+		return false
+	}
+	if err := h.settings.Save(c.Request.Context(), map[string]string{"jwt_secret": newSecret}); err != nil {
+		backupLog.Warnf("rotate jwt secret after restore: %v", err)
+		return false
+	}
+	return true
 }
 
 // Delete handles DELETE /api/v1/backups/:filename
@@ -189,7 +209,7 @@ func (h *BackupHandler) Delete(c *gin.Context) {
 
 	// Audit log
 	if h.auditSvc != nil {
-		h.auditSvc.Log(c.Request.Context(), getUser(c), "backup.deleted",
+		_ = h.auditSvc.Log(c.Request.Context(), getUser(c), "backup.deleted",
 			fmt.Sprintf("file=%s", filename))
 	}
 
@@ -224,7 +244,7 @@ func (h *BackupHandler) Download(c *gin.Context) {
 	// Audit log
 	if h.auditSvc != nil {
 		info, _ := os.Stat(path)
-		h.auditSvc.Log(c.Request.Context(), getUser(c), "backup.downloaded",
+		_ = h.auditSvc.Log(c.Request.Context(), getUser(c), "backup.downloaded",
 			fmt.Sprintf("file=%s size=%d", filename, info.Size()))
 	}
 

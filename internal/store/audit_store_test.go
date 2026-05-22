@@ -42,7 +42,7 @@ func TestAuditStore_ListPagination(t *testing.T) {
 	ctx := context.Background()
 
 	for i := 0; i < 5; i++ {
-		s.Insert(ctx, "admin", "test.action", "detail")
+		_ = s.Insert(ctx, "admin", "test.action", "detail")
 	}
 
 	entries, err := s.List(ctx, 2, 0)
@@ -91,7 +91,7 @@ func TestAuditStore_CleanOld(t *testing.T) {
 		past, "admin", "test.action", "detail")
 
 	// Insert a fresh entry
-	s.Insert(ctx, "admin", "fresh.action", "detail")
+	_ = s.Insert(ctx, "admin", "fresh.action", "detail")
 
 	// Clean entries older than 24 hours
 	count, err := s.CleanOld(ctx, 24*time.Hour)

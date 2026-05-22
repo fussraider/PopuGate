@@ -14,7 +14,7 @@ import (
 func TestDBTelemtConfig_DBValue(t *testing.T) {
 	db := testutil.OpenTestDB(t)
 	s := store.NewSettingsStore(db)
-	s.Save(context.Background(), map[string]string{"telemt_version": "9.9.9"})
+	_ = s.Save(context.Background(), map[string]string{"telemt_version": "9.9.9"})
 
 	cfg := NewDBTelemtConfig(s)
 	cfg.SetCacheTTL(0)
@@ -29,8 +29,8 @@ func TestDBTelemtConfig_EnvFallback(t *testing.T) {
 	s := store.NewSettingsStore(db)
 
 	orig := os.Getenv("TELEMT_VERSION")
-	t.Cleanup(func() { os.Setenv("TELEMT_VERSION", orig) })
-	os.Setenv("TELEMT_VERSION", "8.8.8")
+	t.Cleanup(func() { _ = os.Setenv("TELEMT_VERSION", orig) })
+	_ = os.Setenv("TELEMT_VERSION", "8.8.8")
 
 	cfg := NewDBTelemtConfig(s)
 	cfg.SetCacheTTL(0)
@@ -45,8 +45,8 @@ func TestDBTelemtConfig_DefaultFallback(t *testing.T) {
 	s := store.NewSettingsStore(db)
 
 	orig := os.Getenv("TELEMT_VERSION")
-	t.Cleanup(func() { os.Setenv("TELEMT_VERSION", orig) })
-	os.Unsetenv("TELEMT_VERSION")
+	t.Cleanup(func() { _ = os.Setenv("TELEMT_VERSION", orig) })
+	_ = os.Unsetenv("TELEMT_VERSION")
 
 	cfg := NewDBTelemtConfig(s)
 	cfg.SetCacheTTL(0)
@@ -59,7 +59,7 @@ func TestDBTelemtConfig_DefaultFallback(t *testing.T) {
 func TestDBTelemtConfig_CommitDBValue(t *testing.T) {
 	db := testutil.OpenTestDB(t)
 	s := store.NewSettingsStore(db)
-	s.Save(context.Background(), map[string]string{"telemt_commit": "abcdef1"})
+	_ = s.Save(context.Background(), map[string]string{"telemt_commit": "abcdef1"})
 
 	cfg := NewDBTelemtConfig(s)
 	cfg.SetCacheTTL(0)
@@ -72,7 +72,7 @@ func TestDBTelemtConfig_CommitDBValue(t *testing.T) {
 func TestDBTelemtConfig_RepoDBValue(t *testing.T) {
 	db := testutil.OpenTestDB(t)
 	s := store.NewSettingsStore(db)
-	s.Save(context.Background(), map[string]string{"telemt_repo": "https://example.com/repo.git"})
+	_ = s.Save(context.Background(), map[string]string{"telemt_repo": "https://example.com/repo.git"})
 
 	cfg := NewDBTelemtConfig(s)
 	cfg.SetCacheTTL(0)
@@ -90,7 +90,7 @@ func TestDBTelemtConfig_InvalidateCache(t *testing.T) {
 	cfg.SetCacheTTL(time.Hour)
 	cfg.TelemtVersion() // populate cache
 
-	s.Save(context.Background(), map[string]string{"telemt_version": "7.7.7"})
+	_ = s.Save(context.Background(), map[string]string{"telemt_version": "7.7.7"})
 
 	if got := cfg.TelemtVersion(); got != model.DefaultTelemtVer {
 		t.Errorf("expected cached default, got %q", got)
@@ -111,7 +111,7 @@ func TestDBTelemtConfig_CacheTTL(t *testing.T) {
 
 	cfg.TelemtVersion() // populate cache
 
-	s.Save(context.Background(), map[string]string{"telemt_version": "5.5.5"})
+	_ = s.Save(context.Background(), map[string]string{"telemt_version": "5.5.5"})
 
 	// Should still return cached value
 	if got := cfg.TelemtVersion(); got != model.DefaultTelemtVer {

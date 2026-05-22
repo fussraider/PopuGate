@@ -25,7 +25,7 @@ func OpenTestDB(t *testing.T) *sql.DB {
 	if err != nil {
 		t.Fatalf("open in-memory db: %v", err)
 	}
-	t.Cleanup(func() { db.Close() })
+	t.Cleanup(func() { _ = db.Close() })
 
 	db.SetMaxOpenConns(1)
 
@@ -84,7 +84,7 @@ func applyMigrations(db *sql.DB) error {
 
 	for _, m := range migrations {
 		var count int
-		db.QueryRow("SELECT COUNT(*) FROM schema_version WHERE version = ?", m.version).Scan(&count)
+		_ = db.QueryRow("SELECT COUNT(*) FROM schema_version WHERE version = ?", m.version).Scan(&count)
 		if count > 0 {
 			continue
 		}
@@ -101,7 +101,7 @@ func applyMigrations(db *sql.DB) error {
 		if _, err := db.Exec(cleanSQL); err != nil {
 			return fmt.Errorf("migration %d (%s) failed: %w\nSQL: %s", m.version, m.name, err, cleanSQL)
 		}
-		db.Exec("INSERT INTO schema_version (version, name) VALUES (?, ?)", m.version, m.name)
+		_, _ = db.Exec("INSERT INTO schema_version (version, name) VALUES (?, ?)", m.version, m.name)
 	}
 
 	return nil

@@ -9,7 +9,10 @@ import (
 	"github.com/fussraider/PopuGate/internal/model"
 	"github.com/fussraider/PopuGate/internal/service"
 	"github.com/fussraider/PopuGate/internal/store"
+	"github.com/fussraider/PopuGate/pkg/logger"
 )
+
+var replLog = logger.WithScope("replication")
 
 // ReplicationHandler handles replication endpoints.
 type ReplicationHandler struct {
@@ -38,8 +41,15 @@ func (h *ReplicationHandler) SetReplicationService(svc *service.ReplicationServi
 // @Security     BearerAuth
 // @Router       /replication/status [get]
 func (h *ReplicationHandler) Status(c *gin.Context) {
-	settings, _ := h.settings.Load(c.Request.Context())
-	slaves, _ := h.slaves.List(c.Request.Context())
+	settings, err := h.settings.Load(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		return
+	}
+	slaves, errS := h.slaves.List(c.Request.Context())
+	if errS != nil {
+		replLog.Warnf("list slaves: %v", errS)
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"role":    settings.ReplicationRole,

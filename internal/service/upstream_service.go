@@ -147,7 +147,14 @@ func (s *UpstreamService) Add(ctx context.Context, u *model.Upstream) error {
 	}
 
 	// Run initial health check asynchronously so the API responds immediately.
-	go s.runInitialHealthCheck(u.Name, u)
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Warnf("goroutine panic (initial health check %s): %v", u.Name, r)
+			}
+		}()
+		s.runInitialHealthCheck(u.Name, u)
+	}()
 
 	return nil
 }
@@ -260,16 +267,7 @@ func (s *UpstreamService) Test(ctx context.Context, name string) (*model.Upstrea
 
 // TestConfig tests connectivity using raw upstream data (no DB lookup).
 func (s *UpstreamService) TestConfig(ctx context.Context, u *model.Upstream) (*model.UpstreamTestResult, error) {
-	switch u.Type {
-	case model.UpstreamDirect:
-		return s.testDirect(ctx)
-	case model.UpstreamSOCKS5:
-		return s.testSOCKS5(ctx, u)
-	case model.UpstreamSOCKS4:
-		return s.testSOCKS4(ctx, u)
-	default:
-		return nil, fmt.Errorf("unsupported upstream type: %s", u.Type)
-	}
+	return s.testUpstream(ctx, u)
 }
 
 func (s *UpstreamService) testUpstream(ctx context.Context, u *model.Upstream) (*model.UpstreamTestResult, error) {
@@ -312,7 +310,7 @@ func (s *UpstreamService) testSOCKS5(ctx context.Context, u *model.Upstream) (*m
 		log.Debugf("TCP connect to %s failed: %v", u.Address, err)
 		return &model.UpstreamTestResult{OK: false, Error: fmt.Sprintf("TCP connect to %s failed: %v", u.Address, err)}, nil
 	}
-	conn.Close()
+	_ = conn.Close()
 	tcpMs := time.Since(start).Milliseconds()
 	log.Debugf("TCP connect to %s ok (%dms)", u.Address, tcpMs)
 
@@ -366,7 +364,7 @@ func (s *UpstreamService) detectIP(client *http.Client) (string, error) {
 			continue
 		}
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		if resp.StatusCode == 200 && len(body) > 0 {
 			ip := strings.TrimSpace(string(body))
 			log.Debugf("service %s returned ip=%s (status %d)", ep, ip, resp.StatusCode)
@@ -387,7 +385,7 @@ func (s *UpstreamService) testSOCKS4(ctx context.Context, u *model.Upstream) (*m
 		log.Debugf("SOCKS4 TCP connect to %s failed: %v", u.Address, err)
 		return &model.UpstreamTestResult{OK: false, Error: err.Error()}, nil
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	latency := time.Since(start).Milliseconds()
 	log.Debugf("SOCKS4 test ok: latency=%dms", latency)

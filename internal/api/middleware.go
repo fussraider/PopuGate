@@ -39,7 +39,7 @@ func AuthMiddleware(secretProvider JWTSecretProvider, blocklist BlocklistChecker
 
 		jwtSecret, err := secretProvider.GetJWTSecret(c.Request.Context())
 		if err != nil {
-			c.Error(err) // Record error for GinLogger
+			_ = c.Error(err) // Record error for GinLogger
 			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "JWT secret error: " + err.Error()})
 			return
 		}

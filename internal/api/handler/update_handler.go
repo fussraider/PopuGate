@@ -57,6 +57,7 @@ func (h *UpdateHandler) Check(c *gin.Context) {
 // @Security     BearerAuth
 // @Router       /update/apply [post]
 func (h *UpdateHandler) Apply(c *gin.Context) {
+	// Use context.Background() so client disconnect does not cancel the update mid-way.
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 
@@ -85,6 +86,11 @@ func (h *UpdateHandler) Apply(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				logger.WithScope("update").Errorf("goroutine panic (RestartSelf): %v", r)
+			}
+		}()
 		time.Sleep(1 * time.Second)
 		if err := h.updateSvc.RestartSelf(result.ImagePulled); err != nil {
 			logger.WithScope("update").Warnf("restart after update: %v", err)

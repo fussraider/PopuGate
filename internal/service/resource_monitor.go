@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/fussraider/PopuGate/internal/model"
+	"github.com/fussraider/PopuGate/pkg/logger"
 )
 
 var (
@@ -47,6 +48,11 @@ func InitResourceMonitor(notify NotifyFunc) *ResourceMonitor {
 }
 
 func (m *ResourceMonitor) run(ctx context.Context) {
+	defer func() {
+		if r := recover(); r != nil {
+			logger.WithScope("resource-monitor").Errorf("goroutine panic (resource monitor): %v", r)
+		}
+	}()
 	ticker := time.NewTicker(3 * time.Second)
 	defer ticker.Stop()
 

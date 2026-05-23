@@ -1,4 +1,4 @@
-.PHONY: build test lint clean swag tidy fmt
+.PHONY: build test lint clean swag tidy fmt build-test-version docker-build-test
 
 BINARY=popugate
 VERSION?=$(shell git describe --tags --exact-match 2>/dev/null || git rev-parse --short HEAD 2>/dev/null || echo dev)
@@ -34,3 +34,13 @@ tidy:
 fmt:
 	gofmt -w .
 	goimports -w .
+
+# Build with a custom version for testing self-update
+TEST_VERSION ?= 0.1.0
+build-test-version:
+	CGO_ENABLED=0 go build -ldflags "-s -w -X main.version=$(TEST_VERSION) -X main.commit=test" -o bin/$(BINARY) ./cmd/popugate/
+
+# Build Docker image with a custom version for testing self-update
+docker-build-test:
+	$(MAKE) build-linux-amd64 VERSION=$(TEST_VERSION)
+	docker build --build-arg TARGETARCH=amd64 -t popugate:test-$(TEST_VERSION) .

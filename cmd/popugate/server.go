@@ -68,12 +68,18 @@ func init() {
 	serverCmd.Flags().IntP("port", "p", 8090, "HTTP server port")
 	serverCmd.Flags().String("db", "", "SQLite database path")
 	serverCmd.Flags().StringP("data", "d", "", "Data directory")
+	serverCmd.Flags().String("override-version", "", "Override application version for update testing")
 	rootCmd.AddCommand(serverCmd)
 }
 
 func runServer(cmd *cobra.Command, args []string) {
 	printBanner()
 	dataDir, dbPath, port := resolveServerFlags(cmd)
+
+	if v, _ := cmd.Flags().GetString("override-version"); v != "" {
+		model.SetVersion(v)
+		srvLog.Infof("version overridden to %s", model.Version)
+	}
 
 	model.InstallDir = dataDir
 

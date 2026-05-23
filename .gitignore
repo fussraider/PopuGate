@@ -25,3 +25,5 @@ GEMINI.md
 *.tar
 *.gz
 coverage.out
+docker-compose.test.yml
+test-data

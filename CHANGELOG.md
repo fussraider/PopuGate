@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2026-05-23
+
+### Added
+- **Version override for update testing**: `POPUGATE_OVERRIDE_VERSION` env and `--override-version` CLI flag allow overriding the application version at runtime to test self-update flows without rebuilding
+- **`POPUGATE_CONTAINER_NAME` env**: Explicitly set the Docker container name for self-update — solves incorrect hostname detection when using `network_mode: host` (e.g., OrbStack, Docker Desktop)
+- **`POPUGATE_DEPLOYMENT=binary`**: Force binary update mode even inside a Docker container for testing binary self-update
+- **`make build-test-version`**: Build binary with a custom version via `TEST_VERSION=x.y.z`
+- **`make docker-build-test`**: Build Docker image with a custom version for update testing
+
+### Fixed
+- **Sidecar crash on self-update**: Entrypoint `/bin/sh` combined with Cmd `["sh","-c",...]` produced `/bin/sh sh -c "..."` which failed — changed Cmd to `["-c",...]`
+- **Container not found during Docker restart**: `selfContainerName()` returned host hostname instead of container name in `network_mode: host` — added `POPUGATE_CONTAINER_NAME` env with highest priority
+- **Web dist extraction failure**: `extractWebDist` rejected tar archives containing `./` directory entries due to incorrect path traversal check — added equality check for `cleanTarget == cleanDir`
+
 ## [0.2.0] - 2026-05-23
 
 ### Added
@@ -272,6 +286,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - SQLite storage with WAL mode
 - JWT authentication
 
+[0.2.1]: https://github.com/fussraider/PopuGate/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/fussraider/PopuGate/compare/v0.1.10...v0.2.0
 [0.1.10]: https://github.com/fussraider/PopuGate/compare/v0.1.9...v0.1.10
 [0.1.9]: https://github.com/fussraider/PopuGate/compare/v0.1.8...v0.1.9

@@ -17,6 +17,10 @@ func init() {
 	if commit != "" {
 		model.Commit = commit
 	}
+	// Env override for testing self-update (lower priority than CLI --override-version).
+	if v := os.Getenv("POPUGATE_OVERRIDE_VERSION"); v != "" {
+		model.SetVersion(v)
+	}
 }
 
 func main() {

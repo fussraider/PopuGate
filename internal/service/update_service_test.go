@@ -25,6 +25,13 @@ func TestIsDockerEnvironment(t *testing.T) {
 		}
 	})
 
+	t.Run("env set to binary forces binary mode", func(t *testing.T) {
+		_ = os.Setenv("POPUGATE_DEPLOYMENT", "binary")
+		if IsDockerEnvironment() {
+			t.Error("expected false when POPUGATE_DEPLOYMENT=binary even inside container")
+		}
+	})
+
 	t.Run("env not set", func(t *testing.T) {
 		_ = os.Setenv("POPUGATE_DEPLOYMENT", "")
 		IsDockerEnvironment()
@@ -34,9 +41,28 @@ func TestIsDockerEnvironment(t *testing.T) {
 func TestSelfContainerName(t *testing.T) {
 	svc := &UpdateService{}
 
-	t.Run("HOSTNAME env takes priority", func(t *testing.T) {
-		orig := os.Getenv("HOSTNAME")
-		t.Cleanup(func() { _ = os.Setenv("HOSTNAME", orig) })
+	t.Run("POPUGATE_CONTAINER_NAME takes priority", func(t *testing.T) {
+		origContainer := os.Getenv("POPUGATE_CONTAINER_NAME")
+		origHostname := os.Getenv("HOSTNAME")
+		t.Cleanup(func() {
+			_ = os.Setenv("POPUGATE_CONTAINER_NAME", origContainer)
+			_ = os.Setenv("HOSTNAME", origHostname)
+		})
+		_ = os.Setenv("POPUGATE_CONTAINER_NAME", "explicit-name")
+		_ = os.Setenv("HOSTNAME", "my-container")
+		if got := svc.selfContainerName(); got != "explicit-name" {
+			t.Errorf("got %q, want %q", got, "explicit-name")
+		}
+	})
+
+	t.Run("HOSTNAME env fallback", func(t *testing.T) {
+		origContainer := os.Getenv("POPUGATE_CONTAINER_NAME")
+		origHostname := os.Getenv("HOSTNAME")
+		t.Cleanup(func() {
+			_ = os.Setenv("POPUGATE_CONTAINER_NAME", origContainer)
+			_ = os.Setenv("HOSTNAME", origHostname)
+		})
+		_ = os.Setenv("POPUGATE_CONTAINER_NAME", "")
 		_ = os.Setenv("HOSTNAME", "my-container")
 		if got := svc.selfContainerName(); got != "my-container" {
 			t.Errorf("got %q, want %q", got, "my-container")
@@ -44,8 +70,13 @@ func TestSelfContainerName(t *testing.T) {
 	})
 
 	t.Run("fallback when HOSTNAME empty", func(t *testing.T) {
-		orig := os.Getenv("HOSTNAME")
-		t.Cleanup(func() { _ = os.Setenv("HOSTNAME", orig) })
+		origContainer := os.Getenv("POPUGATE_CONTAINER_NAME")
+		origHostname := os.Getenv("HOSTNAME")
+		t.Cleanup(func() {
+			_ = os.Setenv("POPUGATE_CONTAINER_NAME", origContainer)
+			_ = os.Setenv("HOSTNAME", origHostname)
+		})
+		_ = os.Setenv("POPUGATE_CONTAINER_NAME", "")
 		_ = os.Setenv("HOSTNAME", "")
 		got := svc.selfContainerName()
 		if got == "" {
@@ -526,6 +557,47 @@ func TestExtractWebDist_RejectsPathTraversal(t *testing.T) {
 	err = extractWebDist(archivePath, targetDir)
 	if err == nil {
 		t.Fatal("expected error for path traversal attempt")
+	}
+}
+
+func TestExtractWebDist_DirDotSlash(t *testing.T) {
+	tmpDir := t.TempDir()
+	archivePath := filepath.Join(tmpDir, "web.tar.gz")
+	targetDir := filepath.Join(tmpDir, "dist")
+
+	f, err := os.Create(archivePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gw := gzip.NewWriter(f)
+	tw := tar.NewWriter(gw)
+
+	// "./" entry is common in real-world tar archives
+	hdr := &tar.Header{Name: "./", Typeflag: tar.TypeDir, Mode: 0755}
+	if err := tw.WriteHeader(hdr); err != nil {
+		t.Fatal(err)
+	}
+
+	hdr2 := &tar.Header{Name: "index.html", Mode: 0644, Size: int64(len("ok"))}
+	if err := tw.WriteHeader(hdr2); err != nil {
+		t.Fatal(err)
+	}
+	_, _ = tw.Write([]byte("ok"))
+
+	_ = tw.Close()
+	_ = gw.Close()
+	_ = f.Close()
+
+	if err := extractWebDist(archivePath, targetDir); err != nil {
+		t.Fatalf("should accept archives with ./ entry: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(targetDir, "index.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "ok" {
+		t.Errorf("index.html = %q, want %q", data, "ok")
 	}
 }
 

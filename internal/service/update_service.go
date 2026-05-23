@@ -48,7 +48,11 @@ func NewUpdateService(dockerCli *dockerutil.DockerClient) *UpdateService {
 }
 
 // IsDockerEnvironment detects if the process is running inside a Docker container.
+// Set POPUGATE_DEPLOYMENT=binary to force binary mode even inside a container.
 func IsDockerEnvironment() bool {
+	if os.Getenv("POPUGATE_DEPLOYMENT") == "binary" {
+		return false
+	}
 	if os.Getenv("POPUGATE_DEPLOYMENT") == "docker" {
 		return true
 	}
@@ -376,7 +380,7 @@ func (s *UpdateService) RestartSelfDocker(newImage string) error {
 			webService = "popugate-web"
 		}
 		log.Infof("detected docker-compose project %q — using compose-aware update", ci.project)
-		sidecarConfig.Cmd = []string{"sh", "-c", s.buildComposeRecreateScript(ci, currentImage, newImage, webService)}
+		sidecarConfig.Cmd = []string{"-c", s.buildComposeRecreateScript(ci, currentImage, newImage, webService)}
 		sidecarHostConfig.Binds = append(sidecarHostConfig.Binds,
 			fmt.Sprintf("%s:%s:ro", ci.workingDir, ci.workingDir),
 		)
@@ -390,9 +394,9 @@ func (s *UpdateService) RestartSelfDocker(newImage string) error {
 		}
 	} else if webErr == nil {
 		log.Infof("standalone mode: recreating backend %s and web %s", containerName, webName)
-		sidecarConfig.Cmd = []string{"sh", "-c", s.buildDualRecreateScript(containerName, inspect, newImage, webInspect, webName, webImageRef)}
+		sidecarConfig.Cmd = []string{"-c", s.buildDualRecreateScript(containerName, inspect, newImage, webInspect, webName, webImageRef)}
 	} else {
-		sidecarConfig.Cmd = []string{"sh", "-c", s.buildRecreateScript(containerName, inspect, newImage)}
+		sidecarConfig.Cmd = []string{"-c", s.buildRecreateScript(containerName, inspect, newImage)}
 	}
 
 	log.Infof("spawning updater sidecar to recreate container %s with image %s", containerName, newImage)
@@ -511,7 +515,11 @@ func (s *UpdateService) buildComposeRecreateScript(ci *composeInfo, currentImage
 }
 
 // selfContainerName returns the name of the current PopuGate backend container.
+// Priority: POPUGATE_CONTAINER_NAME env > HOSTNAME env > os.Hostname > fallback.
 func (s *UpdateService) selfContainerName() string {
+	if name := os.Getenv("POPUGATE_CONTAINER_NAME"); name != "" {
+		return name
+	}
 	if name := os.Getenv("HOSTNAME"); name != "" {
 		return name
 	}
@@ -704,7 +712,9 @@ func extractWebDist(archivePath, targetDir string) error {
 			return fmt.Errorf("tar read: %w", err)
 		}
 		target := filepath.Join(targetDir, hdr.Name)
-		if !strings.HasPrefix(filepath.Clean(target), filepath.Clean(targetDir)+string(os.PathSeparator)) {
+		cleanTarget := filepath.Clean(target)
+		cleanDir := filepath.Clean(targetDir)
+		if cleanTarget != cleanDir && !strings.HasPrefix(cleanTarget, cleanDir+string(os.PathSeparator)) {
 			return fmt.Errorf("refusing to extract path outside target dir: %s", hdr.Name)
 		}
 

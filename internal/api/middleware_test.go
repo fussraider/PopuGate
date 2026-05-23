@@ -486,3 +486,144 @@ func TestCORSMiddleware_OptionsRequest(t *testing.T) {
 		}
 	})
 }
+
+// ---------------------------------------------------------------------------
+// Host middleware tests
+// ---------------------------------------------------------------------------
+
+func TestHostMiddleware_EmptyAllowedHosts(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	r := gin.New()
+	r.Use(HostMiddleware(nil))
+	r.GET("/test", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req.Host = "evil.example.com"
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 with empty allowed hosts, got %d", w.Code)
+	}
+}
+
+func TestHostMiddleware_AllowedHost(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	r := gin.New()
+	r.Use(HostMiddleware([]string{"my.example.com"}))
+	r.GET("/test", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req.Host = "my.example.com"
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 for allowed host, got %d", w.Code)
+	}
+}
+
+func TestHostMiddleware_UnknownHost(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	r := gin.New()
+	r.Use(HostMiddleware([]string{"my.example.com"}))
+	r.GET("/test", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req.Host = "evil.example.com"
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusMisdirectedRequest {
+		t.Fatalf("expected 421 for unknown host, got %d", w.Code)
+	}
+}
+
+func TestHostMiddleware_AllowsLocalhost(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	r := gin.New()
+	r.Use(HostMiddleware([]string{"my.example.com"}))
+	r.GET("/test", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	for _, host := range []string{"localhost", "127.0.0.1", "::1"} {
+		t.Run(host, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/test", nil)
+			req.Host = host
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+
+			if w.Code != http.StatusOK {
+				t.Fatalf("expected 200 for %s, got %d", host, w.Code)
+			}
+		})
+	}
+}
+
+func TestHostMiddleware_StripsPort(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	r := gin.New()
+	r.Use(HostMiddleware([]string{"my.example.com"}))
+	r.GET("/test", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req.Host = "my.example.com:8080"
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 for host with port, got %d", w.Code)
+	}
+}
+
+func TestHostMiddleware_LocalhostWithPort(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	r := gin.New()
+	r.Use(HostMiddleware([]string{"my.example.com"}))
+	r.GET("/test", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req.Host = "localhost:8090"
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 for localhost with port, got %d", w.Code)
+	}
+}
+
+func TestHostMiddleware_CaseInsensitive(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	r := gin.New()
+	r.Use(HostMiddleware([]string{"My.Example.COM"}))
+	r.GET("/test", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req.Host = "my.example.com"
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 for case-insensitive match, got %d", w.Code)
+	}
+}

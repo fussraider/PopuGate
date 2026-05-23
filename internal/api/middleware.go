@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"net"
 	"net/http"
 	"strings"
 
@@ -111,4 +112,43 @@ func CORSMiddleware(allowedOrigins []string) gin.HandlerFunc {
 // BlocklistChecker checks if a JWT token ID is revoked.
 type BlocklistChecker interface {
 	IsBlocked(ctx context.Context, jti string) (bool, error)
+}
+
+// HostMiddleware rejects requests with unrecognized Host headers (anti-phishing).
+// No-op when allowedHosts is empty.
+func HostMiddleware(allowedHosts []string) gin.HandlerFunc {
+	allowed := make(map[string]bool, len(allowedHosts))
+	for _, h := range allowedHosts {
+		allowed[strings.ToLower(h)] = true
+	}
+
+	return func(c *gin.Context) {
+		if len(allowed) == 0 {
+			c.Next()
+			return
+		}
+
+		host := c.Request.Host
+		if host == "" {
+			host = c.GetHeader("X-Forwarded-Host")
+		}
+
+		if h, _, err := net.SplitHostPort(host); err == nil {
+			host = h
+		}
+		host = strings.ToLower(host)
+
+		switch host {
+		case "localhost", "127.0.0.1", "::1":
+			c.Next()
+			return
+		}
+
+		if allowed[host] {
+			c.Next()
+			return
+		}
+
+		c.AbortWithStatus(http.StatusMisdirectedRequest)
+	}
 }

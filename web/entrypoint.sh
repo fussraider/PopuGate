@@ -96,4 +96,31 @@ else
     sed -i 's|# HTTP_REDIRECT_PLACEHOLDER|return 301 https://$host:8443$request_uri;|' /etc/nginx/conf.d/default.conf
 fi
 
+# Anti-phishing: reject requests for unknown hosts when a domain is configured
+if [ "$DOMAIN_NAME" != "localhost" ]; then
+    temp_phishing=$(mktemp)
+    {
+        echo '# Anti-phishing: reject requests for unknown hosts'
+        echo 'server {'
+        echo '    listen 80 default_server;'
+        echo '    server_name _;'
+        echo '    return 444;'
+        echo '}'
+        echo ''
+        # SSL catch-all only when certificates exist
+        if [ -f "/etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem" ]; then
+            echo '# Anti-phishing: reject TLS handshakes for unknown SNI'
+            echo 'server {'
+            echo '    listen 8443 ssl default_server;'
+            echo '    server_name _;'
+            echo '    ssl_reject_handshake on;'
+            echo '}'
+            echo ''
+        fi
+        cat /etc/nginx/conf.d/default.conf
+    } > "$temp_phishing"
+    mv "$temp_phishing" /etc/nginx/conf.d/default.conf
+    echo "Anti-phishing protection enabled: unknown hosts will be rejected."
+fi
+
 exec nginx -g "daemon off;"

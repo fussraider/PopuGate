@@ -18,6 +18,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -132,6 +133,13 @@ func runServer(cmd *cobra.Command, args []string) {
 	schedulerSvc := service.NewSchedulerService(stores.scheduler, sched)
 	templateSvc := service.NewTemplateService(stores.template, stores.secret)
 
+	var allowedHosts []string
+	if settings != nil && settings.WebURL != "" {
+		if u, err := url.Parse(settings.WebURL); err == nil && u.Hostname() != "" {
+			allowedHosts = append(allowedHosts, u.Hostname())
+		}
+	}
+
 	router := api.SetupRouter(api.RouterConfig{
 		Debug:           isDebug,
 		JWTSecret:       api.NewCachedJWTSecretProvider(stores.settings, 5*time.Minute),
@@ -159,6 +167,7 @@ func runServer(cmd *cobra.Command, args []string) {
 		SchedulerSvc:    schedulerSvc,
 		AuditSvc:        auditSvc,
 		TemplateSvc:     templateSvc,
+		AllowedHosts:    allowedHosts,
 	})
 
 	runHTTPServer(port, router, botCancel, &activeBot, svcs.container)

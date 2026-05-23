@@ -166,6 +166,8 @@ sudo ./scripts/init-ssl.sh your-domain.com your-email@example.com
 
 Specify the domain in `docker-compose.yml`: `DOMAIN_NAME=your-domain.com`. Certificates are renewed automatically every 12 hours. Port 80 must be accessible from the internet for Let's Encrypt to work.
 
+**Anti-phishing protection:** When `DOMAIN_NAME` is set (not `localhost`), nginx automatically rejects requests with unknown `Host` headers — unknown domains pointed at your server will receive no response. The backend also checks the `Host` header when the `web_url` setting is configured.
+
 ---
 
 ## 🖥️ Web Interface Features

@@ -51,6 +51,7 @@ type RouterConfig struct {
 	SchedulerSvc    *service.SchedulerService
 	AuditSvc        *service.AuditService
 	CORSOrigins     []string // defaults to ["*"] if empty
+	AllowedHosts    []string // anti-phishing: reject unknown Host headers; empty = no enforcement
 }
 
 // SetupRouter creates and configures the Gin router.
@@ -63,6 +64,9 @@ func SetupRouter(cfg RouterConfig) *gin.Engine {
 
 	r := gin.New()
 	r.Use(logger.GinLogger(), gin.Recovery())
+
+	// Anti-phishing: reject requests with unknown Host headers
+	r.Use(HostMiddleware(cfg.AllowedHosts))
 
 	// Limit request body size to 2MB (skip for WebSocket upgrades)
 	r.Use(func(c *gin.Context) {

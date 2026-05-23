@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.2] - 2026-05-24
+
+### Added
+- **Anti-phishing host validation**: nginx `default_server` blocks reject requests with unknown `Host` headers when `DOMAIN_NAME` is configured — foreign domains pointed at the server receive no response (HTTP: `return 444`, HTTPS: `ssl_reject_handshake on`)
+- **Backend `HostMiddleware`**: defense-in-depth host header check at the application level, activated when `web_url` setting is configured; always allows `localhost`/`127.0.0.1`/`::1`
+
+### Changed
+- **Anti-phishing docs**: README.md and README_RU.md document host validation behavior in the HTTPS section
+
 ## [0.2.1] - 2026-05-23
 
 ### Added
@@ -286,6 +295,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - SQLite storage with WAL mode
 - JWT authentication
 
+[0.2.2]: https://github.com/fussraider/PopuGate/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/fussraider/PopuGate/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/fussraider/PopuGate/compare/v0.1.10...v0.2.0
 [0.1.10]: https://github.com/fussraider/PopuGate/compare/v0.1.9...v0.1.10

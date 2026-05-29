@@ -47,6 +47,20 @@ export function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms))
 }
 
+export function timeAgo(timestamp: number | string): string {
+  const ts = typeof timestamp === 'string' ? Math.floor(new Date(timestamp).getTime() / 1000) : timestamp
+  if (isNaN(ts)) return '—'
+  const seconds = Math.floor(Date.now() / 1000 - ts)
+  if (seconds < 0) return 'just now'
+  if (seconds < 60) return `${seconds}s ago`
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  return `${days}d ago`
+}
+
 export function parseJSONTags(tags?: string): string[] {
   if (!tags || tags === '[]') return []
   try { return JSON.parse(tags) } catch { return [] }

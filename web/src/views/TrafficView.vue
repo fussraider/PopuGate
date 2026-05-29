@@ -204,22 +204,44 @@
       <EmptyState v-else :icon="TrendingUp" :message="t('traffic.no_history')" />
     </div>
 
+    <!-- Connections History -->
+    <div class="card mb-lg">
+      <h3 class="mb-md">{{ t('traffic.connections_history') }}</h3>
+      <div v-if="trafficStore.historyLoading" class="text-muted">{{ t('common.loading') }}</div>
+      <ConnectionsChart v-else-if="trafficStore.history.length" :records="trafficStore.history" />
+      <EmptyState v-else :icon="TrendingUp" :message="t('traffic.no_history')" />
+    </div>
+
     <!-- Per-User Traffic -->
     <div class="card">
       <h3 class="mb-md">{{ t('traffic.per_user_traffic') }}</h3>
-      <DataTable
-        :columns="userColumns"
-        :items="trafficStore.users ?? []"
-        :loading="trafficStore.loading"
-        :empty-icon="BarChart3"
-        :empty-message="t('traffic.no_traffic')"
-        row-key="label"
-      >
-        <template #cell-label="{ item }"><code>{{ item.label }}</code></template>
-        <template #cell-bytes_in="{ item }">{{ formatBytes(item.bytes_in) }}</template>
-        <template #cell-bytes_out="{ item }">{{ formatBytes(item.bytes_out) }}</template>
-        <template #cell-total="{ item }">{{ formatBytes(item.bytes_in + item.bytes_out) }}</template>
-      </DataTable>
+      <div v-if="trafficStore.users && trafficStore.users.length > 0" class="per-user-layout">
+        <TrafficDonut :users="trafficStore.users" :active-index="hoveredUserIdx" @hover="onDonutHover" />
+        <div class="per-user-table">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>{{ t('traffic.user_table.user') }}</th>
+                <th>{{ t('traffic.user_table.in') }}</th>
+                <th>{{ t('traffic.user_table.out') }}</th>
+                <th>{{ t('traffic.user_table.total') }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(u, idx) in trafficStore.users" :key="u.label"
+                :class="{ 'row-highlight': hoveredUserIdx === idx }"
+                @mouseenter="hoveredUserIdx = idx"
+                @mouseleave="hoveredUserIdx = null">
+                <td><code>{{ u.label }}</code></td>
+                <td>{{ formatBytes(u.bytes_in) }}</td>
+                <td>{{ formatBytes(u.bytes_out) }}</td>
+                <td>{{ formatBytes(u.bytes_in + u.bytes_out) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <EmptyState v-else :icon="BarChart3" :message="t('traffic.no_traffic')" />
     </div>
   </div>
 </template>
@@ -230,23 +252,17 @@ import {useI18n} from 'vue-i18n'
 import {useTrafficStore} from '@/stores/traffic'
 import {useProxyStore} from '@/stores/proxy'
 import {formatBytes} from '@/utils/format'
-import DataTable from '@/components/common/DataTable.vue'
 import ToggleSwitch from '@/components/common/ToggleSwitch.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import Tooltip from '@/components/common/Tooltip.vue'
 import TrafficChart from '@/components/traffic/TrafficChart.vue'
+import ConnectionsChart from '@/components/traffic/ConnectionsChart.vue'
+import TrafficDonut from '@/components/traffic/TrafficDonut.vue'
 import {Activity, BarChart3, Info, Loader2, TrendingUp} from '@lucide/vue'
 
 const { t } = useI18n()
 const trafficStore = useTrafficStore()
 const proxyStore = useProxyStore()
-
-const userColumns = [
-  { key: 'label', header: t('traffic.user_table.user') },
-  { key: 'bytes_in', header: t('traffic.user_table.in') },
-  { key: 'bytes_out', header: t('traffic.user_table.out') },
-  { key: 'total', header: t('traffic.user_table.total') },
-]
 
 const autoRefresh = ref(trafficStore.autoRefresh)
 const selectedRange = ref('24h')
@@ -292,6 +308,12 @@ const upstreamSuccessRate = computed(() => {
   return ((live.upstream_success_total / live.upstream_attempt_total) * 100).toFixed(1)
 })
 
+const hoveredUserIdx = ref<number | null>(null)
+
+function onDonutHover(idx: number | null) {
+  hoveredUserIdx.value = idx
+}
+
 function formatInt(v: number): string {
   if (!v && v !== 0) return '—'
   return Math.round(v).toLocaleString()
@@ -321,3 +343,27 @@ onUnmounted(() => {
   trafficStore.stopAutoRefresh()
 })
 </script>
+
+<style scoped lang="scss">
+@use '@/assets/scss/variables' as *;
+
+.per-user-layout {
+  display: flex;
+  align-items: flex-start;
+  gap: $spacing-lg;
+
+  @media (max-width: 768px) {
+    flex-direction: column;
+    align-items: center;
+  }
+}
+
+.per-user-table {
+  flex: 1;
+  min-width: 0;
+}
+
+.row-highlight {
+  background: rgba(59, 130, 246, 0.08);
+}
+</style>

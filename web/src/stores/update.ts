@@ -1,7 +1,7 @@
-import { defineStore } from 'pinia'
-import { ref } from 'vue'
-import { updateApi, healthApi } from '@/api/endpoints'
-import type { UpdateStatus, UpdateResult } from '@/types/models'
+import {defineStore} from 'pinia'
+import {ref} from 'vue'
+import {healthApi, updateApi} from '@/api/endpoints'
+import type {UpdateResult, UpdateStatus} from '@/types/models'
 
 export const useUpdateStore = defineStore('update', () => {
   const status = ref<UpdateStatus | null>(null)
@@ -52,7 +52,10 @@ export const useUpdateStore = defineStore('update', () => {
         await healthApi.check()
         clearInterval(interval)
         restarting.value = false
-        window.location.reload()
+        // Bust browser cache by navigating with timestamp param
+        const url = new URL(window.location.href)
+        url.searchParams.set('_t', Date.now().toString())
+        window.location.replace(url.toString())
       } catch {
         // service not yet available
       }

@@ -547,6 +547,10 @@ func TestInstanceHandler_Start_InvalidID(t *testing.T) {
 }
 
 func TestInstanceHandler_NextMetricsPort_Empty(t *testing.T) {
+	oldIsPortFree := isPortFree
+	isPortFree = func(port int) bool { return true }
+	defer func() { isPortFree = oldIsPortFree }()
+
 	gin.SetMode(gin.TestMode)
 	db := testutil.OpenTestDB(t)
 	instanceStore := store.NewInstanceStore(db)
@@ -574,6 +578,10 @@ func TestInstanceHandler_NextMetricsPort_Empty(t *testing.T) {
 }
 
 func TestInstanceHandler_NextMetricsPort_WithExisting(t *testing.T) {
+	oldIsPortFree := isPortFree
+	isPortFree = func(port int) bool { return true }
+	defer func() { isPortFree = oldIsPortFree }()
+
 	gin.SetMode(gin.TestMode)
 	db := testutil.OpenTestDB(t)
 	instanceStore := store.NewInstanceStore(db)

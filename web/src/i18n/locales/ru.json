@@ -100,6 +100,16 @@
     "no_secret_instances": "инстансов без подходящих секретов",
     "top_users": "Топ пользователей",
     "no_data": "Нет данных",
+    "more_errors": "ещё ошибок",
+    "replication": "Репликация",
+    "bot": "Бот",
+    "disabled": "Отключён",
+    "backup": "Бэкап",
+    "no_backups": "Нет бэкапов",
+    "services": "Сервисы",
+    "geoblock": "Геоблок",
+    "not_configured": "Не настроена",
+    "activity": "Последние события",
     "update_banner": "Доступна PopuGate {latest} (текущая: {current})."
   },
   "secrets": {
@@ -509,6 +519,7 @@
     "no_user_metrics": "Данные пользователей недоступны.",
     "per_user_traffic": "Трафик по пользователям",
     "history": "История трафика",
+    "connections_history": "История подключений",
     "no_history": "История трафика пока пуста. Данные записываются каждую минуту при работающем прокси.",
     "user_table": {
       "user": "Пользователь",

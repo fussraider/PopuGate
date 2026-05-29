@@ -202,6 +202,7 @@ func (s *TrafficService) Flush(ctx context.Context) error {
 type flushAccumulator struct {
 	totalIn    int64
 	totalOut   int64
+	conns      int64
 	histUsers  map[string][2]int64
 	accSnapIn  int64
 	accSnapOut int64
@@ -217,7 +218,7 @@ func (a *flushAccumulator) addUserDeltas(deltas map[string]model.TrafficSnapshot
 }
 
 func (a *flushAccumulator) flushGlobal(ctx context.Context, globalSnap model.TrafficSnapshot, store *store.TrafficStore) {
-	if a.totalIn == 0 && a.totalOut == 0 && a.accSnapIn == 0 && a.accSnapOut == 0 {
+	if a.totalIn == 0 && a.totalOut == 0 && a.conns == 0 && a.accSnapIn == 0 && a.accSnapOut == 0 {
 		return
 	}
 	globalDeltaIn := nonNegativeDelta(a.accSnapIn, globalSnap.SnapIn)
@@ -225,8 +226,8 @@ func (a *flushAccumulator) flushGlobal(ctx context.Context, globalSnap model.Tra
 	if err := store.UpdateGlobal(ctx, globalDeltaIn, globalDeltaOut, a.accSnapIn, a.accSnapOut); err != nil {
 		trafficLog.Warnf("flush global: %v", err)
 	}
-	if a.totalIn > 0 || a.totalOut > 0 {
-		if err := store.InsertHistoryBatch(ctx, time.Now().Unix(), a.totalIn, a.totalOut, a.histUsers); err != nil {
+	if a.totalIn > 0 || a.totalOut > 0 || a.conns > 0 {
+		if err := store.InsertHistoryBatch(ctx, time.Now().Unix(), a.totalIn, a.totalOut, a.conns, a.histUsers); err != nil {
 			trafficLog.Warnf("failed to record traffic history: %v", err)
 		}
 	}
@@ -262,6 +263,7 @@ func (s *TrafficService) flushInstance(ctx context.Context, inst model.Instance,
 	}
 	acc.accSnapIn += int64(instTotalFrom)
 	acc.accSnapOut += int64(instTotalTo)
+	acc.conns += int64(live.ConnsCurrent)
 
 	if len(userDeltas) == 0 {
 		return

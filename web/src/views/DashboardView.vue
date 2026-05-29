@@ -15,37 +15,37 @@
         <div class="stat-icon"><Play :size="28" :stroke-width="1.5" /></div>
         <div class="stat-info">
           <div class="stat-label">{{ t('dashboard.proxy') }}</div>
-          <div class="stat-proxy-row">
+          <div class="stat-proxy-status">
             <StatusBadge :variant="proxyRunning ? 'success' : 'danger'">
               {{ proxyRunning ? t('dashboard.running') : t('dashboard.stopped') }}
             </StatusBadge>
             <span v-if="proxyStore.status?.uptime" class="stat-uptime">{{ proxyStore.status.uptime }}</span>
-            <div class="proxy-actions">
-              <Tooltip :text="t('dashboard.start_hint')">
-                <button class="proxy-action-btn" :disabled="proxyStore.loading || proxyRunning" @click="proxyAction('start')">
-                  <Loader2 v-if="proxyStore.activeAction === 'start'" :size="11" class="animate-spin" />
-                  <Play v-else :size="11" />
-                </button>
-              </Tooltip>
-              <Tooltip :text="t('dashboard.stop_hint')">
-                <button class="proxy-action-btn" :disabled="proxyStore.loading || !proxyRunning" @click="proxyAction('stop')">
-                  <Loader2 v-if="proxyStore.activeAction === 'stop'" :size="11" class="animate-spin" />
-                  <Square v-else :size="11" />
-                </button>
-              </Tooltip>
-              <Tooltip :text="t('dashboard.restart_hint')">
-                <button class="proxy-action-btn" :disabled="proxyStore.loading" @click="proxyAction('restart')">
-                  <Loader2 v-if="proxyStore.activeAction === 'restart'" :size="11" class="animate-spin" />
-                  <RefreshCw v-else :size="11" />
-                </button>
-              </Tooltip>
-              <Tooltip :text="t('dashboard.reload_hint')">
-                <button class="proxy-action-btn" :disabled="proxyStore.loading" @click="proxyAction('reload')">
-                  <Loader2 v-if="proxyStore.activeAction === 'reload'" :size="11" class="animate-spin" />
-                  <RotateCw v-else :size="11" />
-                </button>
-              </Tooltip>
-            </div>
+          </div>
+          <div class="proxy-actions">
+            <Tooltip :text="t('dashboard.start_hint')">
+              <button class="proxy-action-btn" :disabled="proxyStore.loading || proxyRunning" @click="proxyAction('start')">
+                <Loader2 v-if="proxyStore.activeAction === 'start'" :size="11" class="animate-spin" />
+                <Play v-else :size="11" />
+              </button>
+            </Tooltip>
+            <Tooltip :text="t('dashboard.stop_hint')">
+              <button class="proxy-action-btn" :disabled="proxyStore.loading || !proxyRunning" @click="proxyAction('stop')">
+                <Loader2 v-if="proxyStore.activeAction === 'stop'" :size="11" class="animate-spin" />
+                <Square v-else :size="11" />
+              </button>
+            </Tooltip>
+            <Tooltip :text="t('dashboard.restart_hint')">
+              <button class="proxy-action-btn" :disabled="proxyStore.loading" @click="proxyAction('restart')">
+                <Loader2 v-if="proxyStore.activeAction === 'restart'" :size="11" class="animate-spin" />
+                <RefreshCw v-else :size="11" />
+              </button>
+            </Tooltip>
+            <Tooltip :text="t('dashboard.reload_hint')">
+              <button class="proxy-action-btn" :disabled="proxyStore.loading" @click="proxyAction('reload')">
+                <Loader2 v-if="proxyStore.activeAction === 'reload'" :size="11" class="animate-spin" />
+                <RotateCw v-else :size="11" />
+              </button>
+            </Tooltip>
           </div>
         </div>
         <router-link :to="{ name: 'Instances' }" class="stat-card-link">
@@ -62,15 +62,23 @@
           <ArrowUpRight :size="16" />
         </router-link>
       </div>
-      <div class="stat-card">
+      <div class="stat-card stat-card-sparkline">
         <div class="stat-icon"><Users :size="28" :stroke-width="1.5" /></div>
         <div class="stat-info">
           <div class="stat-label">{{ t('dashboard.connections') }}</div>
-          <div class="stat-value">{{ proxyStore.status?.conns_current ?? 0 }}</div>
+          <div class="stat-value-row">
+            <span class="stat-value">{{ proxyStore.status?.conns_current ?? 0 }}</span>
+            <span v-if="connectionsDelta !== 0" class="stat-delta" :class="connectionsDelta > 0 ? 'stat-delta-up' : 'stat-delta-down'">
+              {{ connectionsDelta > 0 ? '↑' : '↓' }}{{ Math.abs(connectionsDelta) }}
+            </span>
+          </div>
         </div>
         <router-link :to="{ name: 'Traffic' }" class="stat-card-link">
           <ArrowUpRight :size="16" />
         </router-link>
+        <div class="sparkline-wrapper">
+          <canvas ref="connectionsCanvas"></canvas>
+        </div>
       </div>
       <div class="stat-card stat-card-sparkline">
         <div class="stat-icon"><TrendingUp :size="28" :stroke-width="1.5" /></div>
@@ -89,6 +97,40 @@
 
     <!-- Bottom Grid -->
     <div class="dashboard-grid">
+      <!-- Services Row -->
+      <div class="mini-cards-row">
+        <router-link :to="{ name: 'Bot' }" class="mini-card">
+          <span class="mini-card-label">{{ t('dashboard.bot') }}</span>
+          <StatusBadge :variant="botStore.running ? 'success' : botStore.enabled ? 'danger' : 'neutral'">
+            {{ botStore.running ? t('dashboard.running') : botStore.enabled ? t('dashboard.stopped') : t('dashboard.disabled') }}
+          </StatusBadge>
+        </router-link>
+
+        <router-link :to="{ name: 'Backups' }" class="mini-card">
+          <span class="mini-card-label">{{ t('dashboard.backup') }}</span>
+          <StatusBadge v-if="lastBackup" :variant="backupAgeHours > 24 ? 'warning' : 'success'">
+            {{ timeAgo(lastBackup.created_at) }}
+          </StatusBadge>
+          <StatusBadge v-else variant="neutral">{{ t('dashboard.no_backups') }}</StatusBadge>
+        </router-link>
+
+        <router-link :to="{ name: 'Geoblock' }" class="mini-card">
+          <span class="mini-card-label">{{ t('dashboard.geoblock') }}</span>
+          <StatusBadge v-if="geoblockStore.countries.length > 0" variant="success">
+            {{ geoblockStore.mode === 'blacklist' ? '✕' : '✓' }} {{ geoblockStore.countries.length }}
+          </StatusBadge>
+          <StatusBadge v-else variant="neutral">{{ t('dashboard.disabled') }}</StatusBadge>
+        </router-link>
+
+        <router-link :to="{ name: 'Replication' }" class="mini-card">
+          <span class="mini-card-label">{{ t('dashboard.replication') }}</span>
+          <StatusBadge v-if="replicationStore.slaves.length > 0" :variant="replicationHealthy ? 'success' : 'warning'">
+            {{ replicationStore.slaves.filter(s => s.status === 'connected').length }}/{{ replicationStore.slaves.length }}
+          </StatusBadge>
+          <StatusBadge v-else variant="neutral">{{ t('dashboard.not_configured') }}</StatusBadge>
+        </router-link>
+      </div>
+
       <!-- Resources -->
       <div class="card">
         <h3 class="mb-md card-header">
@@ -262,8 +304,30 @@
         </div>
       </div>
 
+      <!-- Recent Activity -->
+      <div class="card">
+        <h3 class="mb-md card-header">
+          {{ t('dashboard.activity') }}
+          <router-link :to="{ name: 'Audit' }" class="card-header-link">
+            <ArrowUpRight :size="14" />
+          </router-link>
+        </h3>
+        <div v-if="recentActivity.length === 0" class="text-muted" style="font-size: $font-size-sm;">
+          {{ t('dashboard.no_data') }}
+        </div>
+        <div v-else class="activity-list">
+          <div v-for="entry in recentActivity" :key="entry.id" class="activity-item">
+            <span class="activity-action" :class="'activity-' + actionVariant(entry.action)">
+              {{ entry.action.replace(/_/g, ' ') }}
+            </span>
+            <span v-if="entry.detail" class="activity-detail">{{ entry.detail }}</span>
+            <span class="activity-time">{{ timeAgo(entry.timestamp) }}</span>
+          </div>
+        </div>
+      </div>
+
       <!-- Scheduler Status -->
-      <div v-if="schedulerStore.tasks.length > 0" class="card card-full">
+      <div v-if="schedulerStore.tasks.length > 0" class="card">
         <h3 class="mb-md card-header">
           {{ t('dashboard.scheduler') }}
           <span v-if="errorTasks.length" class="badge badge-danger scheduler-badge">{{ errorTasks.length }}</span>
@@ -273,13 +337,16 @@
         </h3>
 
         <div v-if="errorTasks.length" class="scheduler-errors mb-md">
-          <div v-for="task in errorTasks" :key="task.name" class="scheduler-error-item">
+          <div v-for="task in errorTasks.slice(0, 2)" :key="task.name" class="scheduler-error-item">
             <AlertCircle :size="14" class="scheduler-error-icon" />
             <div class="scheduler-error-info">
               <span class="scheduler-error-name">{{ t(`scheduler.tasks.${task.name}.name`) }}</span>
               <span v-if="task.last_run?.error" class="scheduler-error-msg">{{ task.last_run.error }}</span>
             </div>
           </div>
+          <router-link v-if="errorTasks.length > 2" :to="{ name: 'Scheduler' }" class="scheduler-more">
+            +{{ errorTasks.length - 2 }} {{ t('dashboard.more_errors') }}
+          </router-link>
         </div>
 
         <div class="scheduler-footer">
@@ -298,11 +365,22 @@
 <script setup lang="ts">
 import {computed, onMounted, onUnmounted, ref, watch} from 'vue'
 import {useI18n} from 'vue-i18n'
-import {useConfigStore, useDockerStore, useProxyStore, useSecretsStore, useSystemStore} from '@/stores'
+import {
+  useAuditStore,
+  useBackupStore,
+  useBotStore,
+  useConfigStore,
+  useDockerStore,
+  useGeoblockStore,
+  useProxyStore,
+  useReplicationStore,
+  useSecretsStore,
+  useSystemStore
+} from '@/stores'
 import {useTrafficStore} from '@/stores/traffic'
 import {useSchedulerStore} from '@/stores/scheduler'
 import {useToastStore} from '@/stores/toast'
-import {formatBytes, formatDate} from '@/utils/format'
+import {formatBytes, formatDate, timeAgo} from '@/utils/format'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import Tooltip from '@/components/common/Tooltip.vue'
 import {
@@ -335,8 +413,14 @@ const trafficStore = useTrafficStore()
 const schedulerStore = useSchedulerStore()
 const toast = useToastStore()
 const updateStore = useUpdateStore()
+const replicationStore = useReplicationStore()
+const botStore = useBotStore()
+const backupStore = useBackupStore()
+const auditStore = useAuditStore()
+const geoblockStore = useGeoblockStore()
 
 const sparklineCanvas = ref<HTMLCanvasElement | null>(null)
+const connectionsCanvas = ref<HTMLCanvasElement | null>(null)
 
 const proxyRunning = computed(() => proxyStore.status?.running)
 
@@ -402,6 +486,31 @@ const noSecretInstances = computed(() =>
 
 const secretsAttention = computed(() => expiredSecrets.value + quotaWarnSecrets.value + disabledSecrets.value + noSecretInstances.value)
 
+const connectionsDelta = computed(() => {
+  const h = trafficStore.history
+  if (!h || h.length < 2) return 0
+  const first = h[0].connections || 0
+  const last = h[h.length - 1].connections || 0
+  return last - first
+})
+
+const replicationHealthy = computed(() =>
+  replicationStore.slaves.length > 0 && replicationStore.slaves.every(s => s.status === 'connected')
+)
+
+const lastBackup = computed(() => {
+  const list = backupStore.backups
+  if (!list || list.length === 0) return null
+  return [...list].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0]
+})
+
+const backupAgeHours = computed(() => {
+  if (!lastBackup.value) return Infinity
+  return (Date.now() - new Date(lastBackup.value.created_at).getTime()) / 3600000
+})
+
+const recentActivity = computed(() => auditStore.entries.slice(0, 5))
+
 const topUsers = computed(() => {
   const users = trafficStore.users
   if (!users || users.length === 0) return []
@@ -466,6 +575,13 @@ function healthStatus(status?: string): 'success' | 'warning' | 'danger' | 'neut
   return 'warning'
 }
 
+function actionVariant(action: string): 'success' | 'warning' | 'danger' | 'neutral' {
+  if (action.includes('create') || action.includes('enable')) return 'success'
+  if (action.includes('rotate') || action.includes('archive')) return 'warning'
+  if (action.includes('delete') || action.includes('disable')) return 'danger'
+  return 'neutral'
+}
+
 function buildSparkline() {
   const canvas = sparklineCanvas.value
   if (!canvas) return
@@ -524,7 +640,60 @@ function buildSparkline() {
   ctx.stroke()
 }
 
-watch(() => trafficStore.history, () => buildSparkline(), { deep: true })
+function buildConnectionsSparkline() {
+  const canvas = connectionsCanvas.value
+  if (!canvas) return
+  const records = trafficStore.history
+  if (!records || records.length < 2) return
+  const data = records.map(r => r.connections || 0)
+
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return
+
+  const dpr = window.devicePixelRatio || 1
+  const rect = canvas.getBoundingClientRect()
+  if (rect.width === 0 || rect.height === 0) return
+  canvas.width = rect.width * dpr
+  canvas.height = rect.height * dpr
+  ctx.scale(dpr, dpr)
+
+  const w = rect.width
+  const h = rect.height
+  const max = Math.max(...data)
+  if (max === 0) return
+
+  ctx.clearRect(0, 0, w, h)
+
+  const points = data.map((v, i) => ({
+    x: (i / (data.length - 1)) * w,
+    y: h - (v / max) * h * 0.85,
+  }))
+
+  const gradient = ctx.createLinearGradient(0, 0, 0, h)
+  gradient.addColorStop(0, 'rgba(59, 130, 246, 0.12)')
+  gradient.addColorStop(1, 'rgba(59, 130, 246, 0.01)')
+
+  ctx.beginPath()
+  ctx.moveTo(points[0].x, h)
+  ctx.lineTo(points[0].x, points[0].y)
+  for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y)
+  ctx.lineTo(points[points.length - 1].x, h)
+  ctx.closePath()
+  ctx.fillStyle = gradient
+  ctx.fill()
+
+  ctx.beginPath()
+  ctx.moveTo(points[0].x, points[0].y)
+  for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y)
+  ctx.strokeStyle = 'rgba(59, 130, 246, 0.35)'
+  ctx.lineWidth = 1.5
+  ctx.stroke()
+}
+
+watch(() => trafficStore.history, () => {
+  buildSparkline()
+  buildConnectionsSparkline()
+}, { deep: true })
 
 onMounted(async () => {
   await Promise.all([
@@ -536,7 +705,15 @@ onMounted(async () => {
     configStore.load(),
     schedulerStore.load(),
     trafficStore.load(),
+    replicationStore.loadSlaves(),
+    botStore.loadStatus(),
+    backupStore.load(),
+    auditStore.load(),
   ])
+
+  if (configStore.settings) {
+    geoblockStore.load(configStore.settings)
+  }
 
   systemStore.startResourceStream()
 
@@ -569,12 +746,12 @@ onUnmounted(() => {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: $spacing-md;
-  margin-bottom: $spacing-lg;
+  margin-bottom: $spacing-md;
 
   @media (max-width: 480px) {
     grid-template-columns: repeat(2, 1fr);
     gap: $spacing-sm;
-    margin-bottom: $spacing-md;
+    margin-bottom: $spacing-sm;
   }
 }
 
@@ -637,6 +814,20 @@ onUnmounted(() => {
 .stat-label { font-size: $font-size-xs; color: $text-secondary; text-transform: uppercase; letter-spacing: 0.05em; }
 .stat-value { font-size: $font-size-xl; font-weight: $font-weight-bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+.stat-value-row {
+  display: flex;
+  align-items: baseline;
+  gap: $spacing-xs;
+}
+
+.stat-delta {
+  font-size: $font-size-xs;
+  font-weight: $font-weight-semibold;
+}
+
+.stat-delta-up { color: $color-success; }
+.stat-delta-down { color: $color-danger; }
+
 .stat-card-link {
   display: flex;
   align-items: center;
@@ -659,17 +850,27 @@ onUnmounted(() => {
   color: $text-secondary;
 }
 
-.stat-proxy-row {
+.stat-card-proxy {
+  position: relative;
+  padding-bottom: 32px;
+
+  .stat-info {
+    position: relative;
+  }
+}
+
+.stat-proxy-status {
   display: flex;
   align-items: center;
   gap: 6px;
-  flex-wrap: wrap;
 }
 
 .proxy-actions {
+  position: absolute;
+  bottom: -26px;
+  left: 0;
   display: flex;
   gap: 2px;
-  margin-left: auto;
 }
 
 .proxy-action-btn {
@@ -813,21 +1014,21 @@ onUnmounted(() => {
 }
 
 .dashboard-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: $spacing-md;
+  column-count: 2;
+  column-gap: $spacing-md;
 
   > .card {
+    break-inside: avoid;
+    margin-bottom: $spacing-md;
     min-width: 0;
   }
 
-  > .card-full {
-    grid-column: 1 / -1;
-  }
-
   @media (max-width: 480px) {
-    grid-template-columns: 1fr;
-    gap: $spacing-sm;
+    column-count: 1;
+
+    > .card {
+      margin-bottom: $spacing-sm;
+    }
   }
 }
 
@@ -922,6 +1123,17 @@ onUnmounted(() => {
   gap: $spacing-xs;
 }
 
+.scheduler-more {
+  display: inline-block;
+  font-size: $font-size-xs;
+  color: $color-danger;
+  text-decoration: none;
+  padding-left: $spacing-xs;
+  transition: opacity 0.15s;
+
+  &:hover { opacity: 0.7; }
+}
+
 .scheduler-error-item {
   display: flex;
   align-items: flex-start;
@@ -974,5 +1186,90 @@ onUnmounted(() => {
 
 .scheduler-last {
   white-space: nowrap;
+}
+
+// Mini cards row (bot, backup, geo-block)
+.mini-cards-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: $spacing-md;
+  break-inside: avoid;
+  margin-bottom: $spacing-md;
+
+  @media (max-width: 480px) {
+    grid-template-columns: repeat(2, 1fr);
+    gap: $spacing-sm;
+    margin-bottom: $spacing-sm;
+  }
+}
+
+.mini-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: $spacing-xs;
+  padding: $spacing-sm $spacing-xs;
+  background: $bg-card;
+  border: 1px solid $border-color;
+  border-radius: $border-radius-lg;
+  text-decoration: none;
+  color: inherit;
+  box-shadow: $shadow-sm;
+  transition: border-color 0.15s;
+  text-align: center;
+
+  &:hover {
+    border-color: $color-primary;
+  }
+}
+
+.mini-card-label {
+  font-size: 10px;
+  color: $text-secondary;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+  line-height: 1;
+}
+
+// Recent Activity
+.activity-list {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-xs;
+}
+
+.activity-item {
+  display: flex;
+  align-items: center;
+  gap: $spacing-sm;
+  font-size: $font-size-sm;
+}
+
+.activity-action {
+  font-weight: $font-weight-medium;
+  text-transform: capitalize;
+}
+
+.activity-success { color: $color-success; }
+.activity-warning { color: $color-warning; }
+.activity-danger { color: $color-danger; }
+.activity-neutral { color: $text-secondary; }
+
+.activity-detail {
+  flex: 1;
+  min-width: 0;
+  color: $text-secondary;
+  font-size: $font-size-xs;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activity-time {
+  font-size: $font-size-xs;
+  color: $text-secondary;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 </style>

@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-05-30
+
+### Added
+- **Active Connections History & Sparklines**: Added active connections tracking in SQLite `traffic_history` store, along with an interactive connections sparkline chart on the Dashboard and a full-size historical chart on the Traffic page.
+- **Interactive User Traffic Donut Chart**: Added circular traffic share visualization for users, including bi-directional hover highlighting that links the donut segments directly to the data table rows.
+- **Dashboard Quick Status Monitors (Services Row)**: Integrated quick status cards for Telegram Bot (running/disabled status), Backups (time elapsed since latest backup), and Geo-block config (blacklist/whitelist mode and blocked country count) linking to their respective pages.
+- **Recent Activity Feed**: Created a dashboard log feed presenting the last 5 audit entries with category-based action color-coding (success/warning/danger) and relative "time ago" stamps.
+- **Robust Relative Timestamps**: Added a client-side formatting helper (`timeAgo`) for user-friendly relative age representations (seconds, minutes, hours, days).
+
+### Fixed
+- **DataTable Infinite Skeleton Loader**: Resolved a major UX bug where tables mounted with a cached empty list of items (e.g., fresh database config) permanently hung on the skeleton loader instead of transitioning to the empty state.
+- **Dashboard TypeScript Build Error**: Resolved a Vue compilation failure caused by calling `geoblockStore.load()` synchronously with no arguments under `Promise.all` before config settings were loaded.
+- **Zero-Traffic Connection Recording**: Updated backend `traffic_service` and `InsertHistoryBatch` database logic to persist historical snapshots whenever there are active connections, preventing graph gaps during low-activity intervals.
+- **Flaky API Handler Tests**: Mocked host-level socket checks (`isPortFree`) during next-metrics-port calculation in handler tests to make tests deterministic and independent of local developer network states.
+- **Vite Update & Nginx Cache Policies**: Redefined caching rules in `nginx.conf` (1 year for hashed Vite assets, `no-cache` for `index.html`) and forced cache-busting timestamp queries upon auto-reloads to prevent clients from executing stale frontend builds.
+
 ## [0.2.2] - 2026-05-24
 
 ### Added
@@ -295,6 +311,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - SQLite storage with WAL mode
 - JWT authentication
 
+[0.3.0]: https://github.com/fussraider/PopuGate/compare/v0.2.2...v0.3.0
 [0.2.2]: https://github.com/fussraider/PopuGate/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/fussraider/PopuGate/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/fussraider/PopuGate/compare/v0.1.10...v0.2.0

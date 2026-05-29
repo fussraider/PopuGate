@@ -288,7 +288,7 @@ func TestTrafficStore_InsertHistoryBatch(t *testing.T) {
 		"bob":   {3000, 4000},
 	}
 
-	if err := s.InsertHistoryBatch(ctx, ts, 5000, 6000, users); err != nil {
+	if err := s.InsertHistoryBatch(ctx, ts, 5000, 6000, 42, users); err != nil {
 		t.Fatalf("InsertHistoryBatch: %v", err)
 	}
 
@@ -328,7 +328,7 @@ func TestTrafficStore_InsertHistoryBatch_ZeroDeltas(t *testing.T) {
 		"alice": {0, 0},
 	}
 
-	if err := s.InsertHistoryBatch(ctx, ts, 0, 0, users); err != nil {
+	if err := s.InsertHistoryBatch(ctx, ts, 0, 0, 0, users); err != nil {
 		t.Fatalf("InsertHistoryBatch: %v", err)
 	}
 
@@ -366,8 +366,8 @@ func TestTrafficStore_GetAggregatedHistory(t *testing.T) {
 	users1 := map[string][2]int64{"alice": {100, 200}}
 	users2 := map[string][2]int64{"alice": {300, 400}}
 
-	_ = s.InsertHistoryBatch(ctx, ts1, 500, 600, users1)
-	_ = s.InsertHistoryBatch(ctx, ts2, 700, 800, users2)
+	_ = s.InsertHistoryBatch(ctx, ts1, 500, 600, 0, users1)
+	_ = s.InsertHistoryBatch(ctx, ts2, 700, 800, 0, users2)
 
 	// Aggregate by hour
 	records, err := s.GetAggregatedHistory(ctx, baseHour, baseHour+hourSec, "alice", hourSec)
@@ -409,11 +409,11 @@ func TestTrafficStore_CleanOldHistory(t *testing.T) {
 
 	// Insert old record (2 days ago)
 	users := map[string][2]int64{"old": {100, 200}}
-	_ = s.InsertHistoryBatch(ctx, now-172800, 1000, 2000, users)
+	_ = s.InsertHistoryBatch(ctx, now-172800, 1000, 2000, 0, users)
 
 	// Insert recent record
 	users2 := map[string][2]int64{"recent": {300, 400}}
-	_ = s.InsertHistoryBatch(ctx, now-60, 500, 600, users2)
+	_ = s.InsertHistoryBatch(ctx, now-60, 500, 600, 0, users2)
 
 	if err := s.CleanOldHistory(ctx, 24*time.Hour); err != nil {
 		t.Fatalf("CleanOldHistory: %v", err)

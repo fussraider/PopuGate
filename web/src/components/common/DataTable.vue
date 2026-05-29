@@ -84,6 +84,10 @@ watch(() => props.loading, (val) => {
   if (val) initialized.value = true
 })
 
+watch(() => props.items, () => {
+  initialized.value = true
+}, { immediate: true })
+
 function rowKeyFn(item: any): string | number {
   return typeof props.rowKey === 'function' ? props.rowKey(item) : item[props.rowKey]
 }

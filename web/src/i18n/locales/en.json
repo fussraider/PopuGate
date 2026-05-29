@@ -100,6 +100,16 @@
     "no_secret_instances": "instances without matching secrets",
     "top_users": "Top Users",
     "no_data": "No data",
+    "more_errors": "more errors",
+    "replication": "Replication",
+    "bot": "Bot",
+    "disabled": "Disabled",
+    "backup": "Backup",
+    "no_backups": "No backups",
+    "services": "Services",
+    "geoblock": "Geo-block",
+    "not_configured": "Not configured",
+    "activity": "Recent Activity",
     "update_banner": "PopuGate {latest} is available (current: {current})."
   },
   "secrets": {
@@ -509,6 +519,7 @@
     "no_user_metrics": "No active user metrics available.",
     "per_user_traffic": "Per-User Traffic",
     "history": "Traffic History",
+    "connections_history": "Connections History",
     "no_history": "No traffic history yet. Data is recorded every minute while the proxy is running.",
     "user_table": {
       "user": "User",

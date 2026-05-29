@@ -339,6 +339,7 @@ export interface TrafficHistoryRecord {
   timestamp: number
   bytes_in: number
   bytes_out: number
+  connections: number
 }
 
 export interface AuditEntry {

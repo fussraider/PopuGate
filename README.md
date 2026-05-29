@@ -195,7 +195,7 @@ Proxy chains (SOCKS4/SOCKS5) with weight-based balancing and network interface b
 Country-based access restrictions (blacklist/whitelist) via `iptables`.
 
 ### 📈 Traffic
-Global statistics, real-time active connections, per-secret detailed stats.
+Global statistics, active connections history charts, user traffic donut chart breakdown, per-secret detailed stats.
 
 ### 🤖 Telegram Bot
 Proxy management, statistics, secret creation, QR codes, and scheduler task monitoring — right from Telegram.

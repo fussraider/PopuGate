@@ -681,7 +681,7 @@ func (h *InstanceHandler) auditInstanceAction(c *gin.Context, action string, id 
 }
 
 // isPortFree checks whether a TCP port is available on the host.
-func isPortFree(port int) bool {
+var isPortFree = func(port int) bool {
 	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
 		return false

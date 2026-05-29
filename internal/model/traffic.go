@@ -53,7 +53,8 @@ type TrafficReport struct {
 
 // TrafficHistoryRecord is a single timestamped traffic snapshot.
 type TrafficHistoryRecord struct {
-	Timestamp int64 `json:"timestamp"`
-	BytesIn   int64 `json:"bytes_in"`
-	BytesOut  int64 `json:"bytes_out"`
+	Timestamp   int64 `json:"timestamp"`
+	BytesIn     int64 `json:"bytes_in"`
+	BytesOut    int64 `json:"bytes_out"`
+	Connections int64 `json:"connections"`
 }

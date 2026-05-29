@@ -52,7 +52,7 @@ func seedTrafficHistory(t *testing.T, ts *store.TrafficStore) {
 
 	for i := 0; i < 3; i++ {
 		tsNow := now + int64(i*3600) // one hour apart
-		err := ts.InsertHistoryBatch(ctx, tsNow, int64(50*(i+1)), int64(60*(i+1)), users)
+		err := ts.InsertHistoryBatch(ctx, tsNow, int64(50*(i+1)), int64(60*(i+1)), int64(10*(i+1)), users)
 		if err != nil {
 			t.Fatalf("InsertHistoryBatch %d: %v", i, err)
 		}

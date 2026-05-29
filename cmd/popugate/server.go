@@ -158,6 +158,8 @@ func runServer(cmd *cobra.Command, args []string) {
 		DockerSvc:       svcs.docker,
 		GeoblockSvc:     svcs.geoblock,
 		BotDeps:         botDeps,
+		ActiveBot:       &activeBot,
+		BotMu:           &botMu,
 		HealthSvc:       svcs.health,
 		TrafficSvc:      svcs.traffic,
 		ReplSvc:         svcs.repl,

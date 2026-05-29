@@ -21,13 +21,18 @@ type BotHandler struct {
 	settings *store.SettingsStore
 	deps     *bot.Dependencies
 
-	mu  sync.Mutex
-	bot *bot.Bot
+	activeBot **bot.Bot
+	botMu     *sync.Mutex
 }
 
 // NewBotHandler creates a new BotHandler.
-func NewBotHandler(settings *store.SettingsStore, deps *bot.Dependencies) *BotHandler {
-	return &BotHandler{settings: settings, deps: deps}
+func NewBotHandler(settings *store.SettingsStore, deps *bot.Dependencies, activeBot **bot.Bot, botMu *sync.Mutex) *BotHandler {
+	return &BotHandler{
+		settings:  settings,
+		deps:      deps,
+		activeBot: activeBot,
+		botMu:     botMu,
+	}
 }
 
 type botSetupRequest struct {
@@ -57,11 +62,11 @@ func (h *BotHandler) Setup(c *gin.Context) {
 	}
 
 	// Stop existing bot if running
-	h.mu.Lock()
-	if h.bot != nil && h.bot.IsRunning() {
-		h.bot.Stop()
+	h.botMu.Lock()
+	if *h.activeBot != nil && (*h.activeBot).IsRunning() {
+		(*h.activeBot).Stop()
 	}
-	h.mu.Unlock()
+	h.botMu.Unlock()
 
 	if err := h.settings.Save(c.Request.Context(), map[string]string{
 		"telegram_bot_token":    req.BotToken,
@@ -126,9 +131,9 @@ func (h *BotHandler) Test(c *gin.Context) {
 func (h *BotHandler) Status(c *gin.Context) {
 	settings, _ := h.settings.Load(c.Request.Context())
 
-	h.mu.Lock()
-	running := h.bot != nil && h.bot.IsRunning()
-	h.mu.Unlock()
+	h.botMu.Lock()
+	running := *h.activeBot != nil && (*h.activeBot).IsRunning()
+	h.botMu.Unlock()
 
 	c.JSON(http.StatusOK, gin.H{
 		"enabled":        settings.TelegramEnabled,
@@ -176,12 +181,12 @@ func (h *BotHandler) Toggle(c *gin.Context) {
 			h.startBot(c.Request.Context(), settings.TelegramBotToken, settings.TelegramChatID)
 		}
 	} else {
-		h.mu.Lock()
-		if h.bot != nil {
-			h.bot.Stop()
-			h.bot = nil
+		h.botMu.Lock()
+		if *h.activeBot != nil {
+			(*h.activeBot).Stop()
+			*h.activeBot = nil
 		}
-		h.mu.Unlock()
+		h.botMu.Unlock()
 	}
 
 	auditLog(c, "bot.toggle", fmt.Sprintf("enabled=%v", *req.Enabled))
@@ -226,14 +231,15 @@ func (h *BotHandler) DetectChatID(c *gin.Context) {
 func (h *BotHandler) startBot(ctx context.Context, token, chatID string) {
 	settings, _ := h.settings.Load(ctx)
 
-	h.mu.Lock()
-	if h.bot != nil && h.bot.IsRunning() {
-		h.bot.Stop()
+	h.botMu.Lock()
+	if *h.activeBot != nil && (*h.activeBot).IsRunning() {
+		(*h.activeBot).Stop()
 	}
-	h.bot = bot.New(token, chatID, settings.TelegramServerLabel, h.deps)
-	h.mu.Unlock()
+	b := bot.New(token, chatID, settings.TelegramServerLabel, h.deps)
+	*h.activeBot = b
+	h.botMu.Unlock()
 
-	go h.bot.Start(context.Background())
+	go b.Start(context.Background())
 }
 
 // detectChatID queries Telegram getUpdates to find the most recent chat_id.

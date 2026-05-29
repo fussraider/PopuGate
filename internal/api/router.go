@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -42,6 +43,8 @@ type RouterConfig struct {
 	DockerSvc       *service.DockerService
 	GeoblockSvc     *service.GeoblockService
 	BotDeps         *bot.Dependencies
+	ActiveBot       **bot.Bot
+	BotMu           *sync.Mutex
 	HealthSvc       *service.HealthService
 	TrafficSvc      *service.TrafficService
 	ReplSvc         *service.ReplicationService
@@ -240,7 +243,7 @@ func SetupRouter(cfg RouterConfig) *gin.Engine {
 		protected.GET("/engine/update/ws", wsHandler.HandleEngineUpdate)
 
 		// Bot
-		botHandler := handler.NewBotHandler(cfg.Settings, cfg.BotDeps)
+		botHandler := handler.NewBotHandler(cfg.Settings, cfg.BotDeps, cfg.ActiveBot, cfg.BotMu)
 		protected.POST("/bot/setup", botHandler.Setup)
 		protected.POST("/bot/test", botHandler.Test)
 		protected.GET("/bot/status", botHandler.Status)

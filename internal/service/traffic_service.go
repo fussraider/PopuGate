@@ -253,6 +253,12 @@ func (s *TrafficService) flushInstance(ctx context.Context, inst model.Instance,
 		return
 	}
 
+	if live.ConnsCurrent == 0 && len(live.UserMetrics) > 0 {
+		for _, um := range live.UserMetrics {
+			live.ConnsCurrent += um.Connections
+		}
+	}
+
 	userSnapshots, _ := s.traffic.GetAllUserSnapshots(ctx, inst.ID)
 	userDeltas := computeUserDeltas(live.UserMetrics, userSnapshots)
 

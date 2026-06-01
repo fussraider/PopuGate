@@ -60,6 +60,12 @@ func NewWSHandler(traffic *service.TrafficService, telemt *service.TelemtUpdateS
 }
 
 // Handle upgrades to WebSocket and streams live metrics every 2 seconds.
+// @Summary      Stream real-time traffic/connections metrics
+// @Description  Upgrades HTTP connection to WebSocket to receive periodic traffic and connections metrics.
+// @Tags         traffic
+// @Success      101  {object}  object "Switching Protocols"
+// @Security     BearerAuth
+// @Router       /traffic/live/ws [get]
 func (h *WSHandler) Handle(c *gin.Context) {
 	conn, err := WSUpgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
@@ -96,6 +102,12 @@ func (h *WSHandler) Handle(c *gin.Context) {
 }
 
 // HandleEngineUpdate upgrades to WebSocket and streams engine update status.
+// @Summary      Stream engine update status
+// @Description  Upgrades HTTP connection to WebSocket to receive updates on telemt engine download, verify, and application status.
+// @Tags         engine
+// @Success      101  {object}  object "Switching Protocols"
+// @Security     BearerAuth
+// @Router       /engine/update/ws [get]
 func (h *WSHandler) HandleEngineUpdate(c *gin.Context) {
 	conn, err := WSUpgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {

@@ -140,6 +140,12 @@ func (h *ConfigHandler) Update(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"ok": true, "applied": applied, "rejected": rejected})
 }
 
+// sensitiveKeys are settings that must never be exposed via the API.
+var sensitiveKeys = map[string]bool{
+	"jwt_secret":         true,
+	"auth_password_hash": true,
+}
+
 // GetKey handles GET /api/v1/config/:key
 // @Summary      Get a single setting
 // @Description  Returns the value of a specific setting by key name
@@ -151,12 +157,6 @@ func (h *ConfigHandler) Update(c *gin.Context) {
 // @Failure      500  {object}  map[string]string
 // @Security     BearerAuth
 // @Router       /config/{key} [get]
-// sensitiveKeys are settings that must never be exposed via the API.
-var sensitiveKeys = map[string]bool{
-	"jwt_secret":         true,
-	"auth_password_hash": true,
-}
-
 func (h *ConfigHandler) GetKey(c *gin.Context) {
 	key := c.Param("key")
 	if sensitiveKeys[key] {

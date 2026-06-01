@@ -185,20 +185,6 @@ type updateInstanceRequest struct {
 	TLSFronting   *bool   `json:"tls_fronting"`
 }
 
-// Update handles PUT /api/v1/instances/:id
-// @Summary      Update an instance
-// @Description  Update an existing proxy instance configuration
-// @Tags         instances
-// @Accept       json
-// @Produce      json
-// @Param        id    path  int                   true  "Instance ID"
-// @Param        body  body  updateInstanceRequest  true  "Instance updates"
-// @Success      200  {object}  object
-// @Failure      400  {object}  map[string]string
-// @Failure      404  {object}  map[string]string
-// @Failure      500  {object}  map[string]string
-// @Security     BearerAuth
-// @Router       /instances/{id} [put]
 func (h *InstanceHandler) getInstanceForUpdate(c *gin.Context) (int64, *model.Instance, bool) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
@@ -329,6 +315,20 @@ func (h *InstanceHandler) validateAndSaveInstance(c *gin.Context, id int64, inst
 	return true
 }
 
+// Update handles PUT /api/v1/instances/:id
+// @Summary      Update an instance
+// @Description  Update an existing proxy instance configuration
+// @Tags         instances
+// @Accept       json
+// @Produce      json
+// @Param        id    path  int                   true  "Instance ID"
+// @Param        body  body  updateInstanceRequest  true  "Instance updates"
+// @Success      200  {object}  object
+// @Failure      400  {object}  map[string]string
+// @Failure      404  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /instances/{id} [put]
 func (h *InstanceHandler) Update(c *gin.Context) {
 	id, inst, ok := h.getInstanceForUpdate(c)
 	if !ok {

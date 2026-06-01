@@ -36,6 +36,12 @@ func (h *SystemHandler) GetResources(c *gin.Context) {
 }
 
 // StreamResources handles WebSocket connection for real-time resource updates.
+// @Summary      Stream real-time system resources
+// @Description  Upgrades HTTP connection to WebSocket to receive periodic CPU, memory, disk, and load stats.
+// @Tags         system
+// @Success      101  {object}  object "Switching Protocols"
+// @Security     BearerAuth
+// @Router       /system/resources/ws [get]
 func (h *SystemHandler) StreamResources(c *gin.Context) {
 	ws, err := WSUpgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {

@@ -1026,6 +1026,55 @@ const docTemplate = `{
                 }
             }
         },
+        "/config/{key}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns the value of a specific setting by key name",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "config"
+                ],
+                "summary": "Get a single setting",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Setting key",
+                        "name": "key",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/docker/install": {
             "post": {
                 "security": [
@@ -1478,6 +1527,28 @@ const docTemplate = `{
                             "additionalProperties": {
                                 "type": "string"
                             }
+                        }
+                    }
+                }
+            }
+        },
+        "/engine/update/ws": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Upgrades HTTP connection to WebSocket to receive updates on telemt engine download, verify, and application status.",
+                "tags": [
+                    "engine"
+                ],
+                "summary": "Stream engine update status",
+                "responses": {
+                    "101": {
+                        "description": "Switching Protocols",
+                        "schema": {
+                            "type": "object"
                         }
                     }
                 }
@@ -4872,6 +4943,28 @@ const docTemplate = `{
                 }
             }
         },
+        "/system/resources/ws": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Upgrades HTTP connection to WebSocket to receive periodic CPU, memory, disk, and load stats.",
+                "tags": [
+                    "system"
+                ],
+                "summary": "Stream real-time system resources",
+                "responses": {
+                    "101": {
+                        "description": "Switching Protocols",
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                }
+            }
+        },
         "/system/service/install": {
             "post": {
                 "security": [
@@ -5450,6 +5543,28 @@ const docTemplate = `{
                             "additionalProperties": {
                                 "type": "string"
                             }
+                        }
+                    }
+                }
+            }
+        },
+        "/traffic/live/ws": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Upgrades HTTP connection to WebSocket to receive periodic traffic and connections metrics.",
+                "tags": [
+                    "traffic"
+                ],
+                "summary": "Stream real-time traffic/connections metrics",
+                "responses": {
+                    "101": {
+                        "description": "Switching Protocols",
+                        "schema": {
+                            "type": "object"
                         }
                     }
                 }

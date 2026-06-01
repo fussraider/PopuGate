@@ -1090,6 +1090,37 @@ paths:
       summary: Update settings
       tags:
       - config
+  /config/{key}:
+    get:
+      consumes:
+      - application/json
+      description: Returns the value of a specific setting by key name
+      parameters:
+      - description: Setting key
+        in: path
+        name: key
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get a single setting
+      tags:
+      - config
   /docker/install:
     post:
       consumes:
@@ -1382,6 +1413,20 @@ paths:
       security:
       - BearerAuth: []
       summary: Apply engine update
+      tags:
+      - engine
+  /engine/update/ws:
+    get:
+      description: Upgrades HTTP connection to WebSocket to receive updates on telemt
+        engine download, verify, and application status.
+      responses:
+        "101":
+          description: Switching Protocols
+          schema:
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Stream engine update status
       tags:
       - engine
   /geoblock:
@@ -3548,6 +3593,20 @@ paths:
       summary: Get system resources
       tags:
       - system
+  /system/resources/ws:
+    get:
+      description: Upgrades HTTP connection to WebSocket to receive periodic CPU,
+        memory, disk, and load stats.
+      responses:
+        "101":
+          description: Switching Protocols
+          schema:
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Stream real-time system resources
+      tags:
+      - system
   /system/service/install:
     post:
       consumes:
@@ -3947,6 +4006,20 @@ paths:
       security:
       - BearerAuth: []
       summary: Get live traffic metrics
+      tags:
+      - traffic
+  /traffic/live/ws:
+    get:
+      description: Upgrades HTTP connection to WebSocket to receive periodic traffic
+        and connections metrics.
+      responses:
+        "101":
+          description: Switching Protocols
+          schema:
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Stream real-time traffic/connections metrics
       tags:
       - traffic
   /update/apply:

@@ -377,3 +377,14 @@ export interface SystemResources {
   load15: number
   uptime: number
 }
+
+export interface DockerUpdateStatus {
+  current_version: string
+  latest_version: string
+  update_available: boolean
+  live_restore_enabled: boolean
+  changelog_url?: string
+  last_checked?: string
+  updating: boolean
+}
+

@@ -26,7 +26,7 @@
           >
             <component :is="item.icon" class="nav-icon" :size="18" />
             <span class="nav-label">{{ item.label }}</span>
-            <span v-if="showBadge(item.path)" class="nav-badge-dot" :title="badgeTooltip(item.path)"></span>
+            <span v-if="showBadge(item.path)" class="nav-badge-dot" v-tooltip="badgeTooltip(item.path)"></span>
           </router-link>
         </template>
       </nav>
@@ -118,6 +118,7 @@ const sidebarOpen = ref(false)
 onMounted(() => {
   updateStore.check()
   dockerStore.loadTelemtUpdateStatus()
+  dockerStore.loadHostUpdateStatus()
   schedulerStore.load()
   secretsStore.load()
   upstreamsStore.load()
@@ -162,7 +163,7 @@ const groupedNavItems = computed(() => {
 
 const showBadge = computed(() => (path: string) => {
   if (path === '/updates') return !!updateStore.status?.update_available
-  if (path === '/docker') return !!dockerStore.telemtUpdateStatus?.update_available
+  if (path === '/docker') return !!dockerStore.telemtUpdateStatus?.update_available || !!dockerStore.hostUpdateStatus?.update_available
   if (path === '/scheduler') return schedulerStore.tasks.some(t => t.last_run?.status === 'error')
   if (path === '/secrets') return secretsStore.secrets.some(s => {
     if (!s.enabled || !s.expires_at || s.expires_at === '0') return false
@@ -174,7 +175,13 @@ const showBadge = computed(() => (path: string) => {
 
 const badgeTooltip = (path: string): string => {
   if (path === '/updates') return t('nav.badge.updates')
-  if (path === '/docker') return t('nav.badge.docker')
+  if (path === '/docker') {
+    const telemt = !!dockerStore.telemtUpdateStatus?.update_available
+    const host = !!dockerStore.hostUpdateStatus?.update_available
+    if (telemt && host) return t('nav.badge.docker_both')
+    if (host) return t('nav.badge.docker_host')
+    return t('nav.badge.docker')
+  }
   if (path === '/scheduler') return t('nav.badge.scheduler')
   if (path === '/secrets') return t('nav.badge.secrets')
   if (path === '/upstreams') return t('nav.badge.upstreams')
@@ -301,13 +308,31 @@ async function handleLogout() {
 .nav-label { white-space: nowrap; }
 
 .nav-badge-dot {
+  position: relative;
   width: 6px;
   height: 6px;
   background: #f59e0b;
   border-radius: 50%;
   flex-shrink: 0;
   margin-left: auto;
-  cursor: help;
+  cursor: pointer;
+  transition: transform $transition-fast, background-color $transition-fast, box-shadow $transition-fast;
+
+  &:hover {
+    transform: scale(1.4);
+    background-color: #fbbf24;
+    box-shadow: 0 0 8px rgba(245, 158, 11, 0.6);
+  }
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: -12px;
+    left: -12px;
+    right: -12px;
+    bottom: -12px;
+    border-radius: 50%;
+  }
 }
 
 .nav-group-label {

@@ -50,6 +50,7 @@ type RouterConfig struct {
 	ReplSvc         *service.ReplicationService
 	UpdateSvc       *service.UpdateService
 	TelemtUpdateSvc *service.TelemtUpdateService
+	DockerUpdateSvc *service.DockerUpdateService
 	TelemtCfg       *service.DBTelemtConfig
 	SchedulerSvc    *service.SchedulerService
 	AuditSvc        *service.AuditService
@@ -202,8 +203,14 @@ func SetupRouter(cfg RouterConfig) *gin.Engine {
 
 		// Docker/Engine
 		dockerHandler := handler.NewDockerHandler(cfg.Docker, cfg.DockerSvc, cfg.Settings)
+		if cfg.DockerUpdateSvc != nil {
+			dockerHandler.SetDockerUpdateService(cfg.DockerUpdateSvc)
+		}
 		protected.POST("/docker/install", dockerHandler.Install)
 		protected.GET("/docker/status", dockerHandler.Status)
+		protected.GET("/docker/update/status", dockerHandler.CheckUpdate)
+		protected.POST("/docker/update/check", dockerHandler.TriggerCheckUpdate)
+		protected.POST("/docker/update/apply", dockerHandler.ApplyUpdate)
 		protected.GET("/engine/status", dockerHandler.EngineStatus)
 		protected.POST("/engine/build", dockerHandler.Build)
 

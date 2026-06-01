@@ -4,6 +4,7 @@ import type {
     BackupInfo,
     BuildResult,
     DockerStatus,
+    DockerUpdateStatus,
     EngineStatus,
     GlobalTraffic,
     HealthStatus,
@@ -267,6 +268,11 @@ export const dockerApi = {
   engineCheckRemote: () => api.post<TelemtUpdateStatus>('/engine/check', {}).then((r) => r.data),
   engineApplyUpdate: (version: string, commit: string) =>
     api.post<{ ok: boolean; message: string; version: string }>('/engine/update', { version, commit }, { timeout: 2100000 }).then((r) => r.data),
+
+  // Host Docker daemon update methods
+  updateStatus: () => api.get<DockerUpdateStatus>('/docker/update/status').then((r) => r.data),
+  updateCheck: () => api.post<DockerUpdateStatus>('/docker/update/check', {}).then((r) => r.data),
+  updateApply: () => api.post<{ ok: boolean }>('/docker/update/apply', {}, { timeout: 900000 }).then((r) => r.data),
 }
 
 // ─── Geoblock ──────────────────────────────────────────────────

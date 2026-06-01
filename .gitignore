@@ -10,6 +10,7 @@
 /popugate-linux-*
 /popugate-darwin-*
 /popugate-windows-*
+/dev_docs
 .claude
 .qwen
 .idea
@@ -28,3 +29,5 @@ GEMINI.md
 coverage.out
 docker-compose.test.yml
 test-data
+PLAN_IMPLEMENTATION.md
+PLAN_SKILL.md

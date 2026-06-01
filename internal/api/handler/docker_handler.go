@@ -19,14 +19,20 @@ var dockerLog = logger.WithScope("docker")
 
 // DockerHandler handles Docker/engine endpoints.
 type DockerHandler struct {
-	docker    *dockerutil.DockerClient
-	dockerSvc *service.DockerService
-	settings  *store.SettingsStore
+	docker          *dockerutil.DockerClient
+	dockerSvc       *service.DockerService
+	settings        *store.SettingsStore
+	dockerUpdateSvc *service.DockerUpdateService
 }
 
 // NewDockerHandler creates a new DockerHandler.
 func NewDockerHandler(docker *dockerutil.DockerClient, dockerSvc *service.DockerService, settings *store.SettingsStore) *DockerHandler {
 	return &DockerHandler{docker: docker, dockerSvc: dockerSvc, settings: settings}
+}
+
+// SetDockerUpdateService sets the docker update service.
+func (h *DockerHandler) SetDockerUpdateService(s *service.DockerUpdateService) {
+	h.dockerUpdateSvc = s
 }
 
 // Install handles POST /api/v1/docker/install
@@ -179,4 +185,46 @@ func (h *DockerHandler) Build(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, result)
+}
+
+// CheckUpdate handles GET /api/v1/docker/update/status
+func (h *DockerHandler) CheckUpdate(c *gin.Context) {
+	if h.dockerUpdateSvc == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "docker update service not available"})
+		return
+	}
+	status, err := h.dockerUpdateSvc.GetStatus(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to get update status: %v", err)})
+		return
+	}
+	c.JSON(http.StatusOK, status)
+}
+
+// TriggerCheckUpdate handles POST /api/v1/docker/update/check
+func (h *DockerHandler) TriggerCheckUpdate(c *gin.Context) {
+	if h.dockerUpdateSvc == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "docker update service not available"})
+		return
+	}
+	status, err := h.dockerUpdateSvc.CheckRemote(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to check update: %v", err)})
+		return
+	}
+	c.JSON(http.StatusOK, status)
+}
+
+// ApplyUpdate handles POST /api/v1/docker/update/apply
+func (h *DockerHandler) ApplyUpdate(c *gin.Context) {
+	if h.dockerUpdateSvc == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "docker update service not available"})
+		return
+	}
+	err := h.dockerUpdateSvc.Apply(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to apply update: %v", err)})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
 }

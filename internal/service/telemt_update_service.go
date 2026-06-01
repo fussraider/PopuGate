@@ -176,6 +176,7 @@ func (s *TelemtUpdateService) GetStatus(ctx context.Context) (*TelemtUpdateStatu
 
 	latestVersion, _ := s.settings.Get(ctx, "telemt_latest_version")
 	latestCommit, _ := s.settings.Get(ctx, "telemt_latest_commit")
+	latestURL, _ := s.settings.Get(ctx, "telemt_latest_url")
 	lastChecked, _ := s.settings.Get(ctx, "telemt_latest_checked")
 
 	updatingFlag, _ := s.settings.Get(ctx, "telemt_updating")
@@ -189,9 +190,14 @@ func (s *TelemtUpdateService) GetStatus(ctx context.Context) (*TelemtUpdateStatu
 	}
 
 	if latestVersion != "" {
+		htmlURL := latestURL
+		if htmlURL == "" {
+			htmlURL = fmt.Sprintf("https://github.com/%s/releases/tag/v%s", telemtGitHubRepo, latestVersion)
+		}
 		status.Latest = &TelemtReleaseInfo{
 			Version: latestVersion,
 			Commit:  latestCommit,
+			HTMLURL: htmlURL,
 		}
 		status.UpdateAvailable = latestVersion != s.telemtCfg.TelemtVersion() ||
 			(latestCommit != "" && latestCommit != s.telemtCfg.TelemtCommit())
@@ -357,6 +363,7 @@ func (s *TelemtUpdateService) cacheRelease(ctx context.Context, info *TelemtRele
 	updates := map[string]string{
 		"telemt_latest_version": info.Version,
 		"telemt_latest_commit":  info.Commit,
+		"telemt_latest_url":     info.HTMLURL,
 		"telemt_latest_checked": fmt.Sprintf("%d", time.Now().Unix()),
 	}
 	if err := s.settings.Save(ctx, updates); err != nil {

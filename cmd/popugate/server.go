@@ -124,6 +124,7 @@ func runServer(cmd *cobra.Command, args []string) {
 		blocklist: stores.blocklist, settings: stores.settings, secrets: stores.secret,
 		backupStore: stores.backup, activeBot: &activeBot, botMu: &botMu,
 		updateSvc: svcs.update, telemtUpdateSvc: svcs.telemtUpdate, telemtCfg: svcs.telemtCfg,
+		dockerUpdateSvc: svcs.dockerUpdate,
 		notify: notifyFn, notifyWithBtns: notifyWithBtns, trafficStore: stores.traffic, secretSvc: svcs.secret,
 		upstreamSvc: svcs.upstream, auditSvc: auditSvc,
 	})
@@ -165,6 +166,7 @@ func runServer(cmd *cobra.Command, args []string) {
 		ReplSvc:         svcs.repl,
 		UpdateSvc:       svcs.update,
 		TelemtUpdateSvc: svcs.telemtUpdate,
+		DockerUpdateSvc: svcs.dockerUpdate,
 		TelemtCfg:       svcs.telemtCfg,
 		SchedulerSvc:    schedulerSvc,
 		AuditSvc:        auditSvc,
@@ -250,6 +252,7 @@ type appServices struct {
 	health       *service.HealthService
 	repl         *service.ReplicationService
 	telemtUpdate *service.TelemtUpdateService
+	dockerUpdate *service.DockerUpdateService
 }
 
 func initServices(s appStores, dataDir string) appServices {
@@ -284,6 +287,8 @@ func initServices(s appStores, dataDir string) appServices {
 		svcs.repl = service.NewReplicationService(s.settings, s.slave, s.instance)
 		svcs.telemtUpdate = service.NewTelemtUpdateService(s.settings, svcs.docker, svcs.container, svcs.telemtCfg)
 		svcs.telemtUpdate.ResetStaleUpdate(context.Background())
+		svcs.dockerUpdate = service.NewDockerUpdateService(s.settings, dockerClient, svcs.container)
+		svcs.dockerUpdate.HandleStartupRecovery(context.Background())
 	}
 
 	return svcs
@@ -409,6 +414,9 @@ func wireNotifyCallbacks(svcs appServices, notify service.NotifyFunc, notifyWith
 	}
 	if svcs.telemtUpdate != nil {
 		svcs.telemtUpdate.SetNotify(notify)
+	}
+	if svcs.dockerUpdate != nil {
+		svcs.dockerUpdate.SetNotify(notify)
 	}
 	if svcs.upstream != nil {
 		svcs.upstream.SetNotify(notify)
@@ -567,6 +575,7 @@ type schedulerTaskParams struct {
 	botMu           *sync.Mutex
 	updateSvc       *service.UpdateService
 	telemtUpdateSvc *service.TelemtUpdateService
+	dockerUpdateSvc *service.DockerUpdateService
 	telemtCfg       *service.DBTelemtConfig
 	notify          service.NotifyFunc
 	notifyWithBtns  service.NotifyWithButtonsFunc
@@ -600,6 +609,7 @@ func buildTaskFn(name string, p schedulerTaskParams) func(context.Context) error
 		"telegram-report":  buildTelegramReport,
 		"update-check":     buildUpdateCheck,
 		"telemt-check":     buildTelemtCheck,
+		"docker-host-check": buildDockerHostCheck,
 		"history-cleanup":  buildHistoryCleanup,
 		"quota-reset":      buildQuotaReset,
 		"auto-rotate":      buildAutoRotate,
@@ -750,10 +760,42 @@ func buildTelemtCheck(p schedulerTaskParams) func(context.Context) error {
 				webURL = s.WebURL
 			}
 			var buttons []service.KeyboardButton
+			if release.HTMLURL != "" {
+				buttons = append(buttons, service.KeyboardButton{Text: "Release Notes", URL: release.HTMLURL})
+			}
 			if webURL != "" {
 				buttons = append(buttons, service.KeyboardButton{Text: "Engine Updates", URL: webURL + "/docker"})
 			}
 			p.notifyWithBtns(ctx, "🆕 *%s* New telemt engine version available: %s\nCurrent: %s", buttons, release.Version, p.telemtCfg.TelemtVersion())
+		}
+		return nil
+	}
+}
+
+func buildDockerHostCheck(p schedulerTaskParams) func(context.Context) error {
+	if p.dockerUpdateSvc == nil {
+		return nil
+	}
+	return func(ctx context.Context) error {
+		status, err := p.dockerUpdateSvc.CheckRemote(ctx)
+		if err != nil {
+			return err
+		}
+		if status.UpdateAvailable {
+			srvLog.Infof("host Docker update available: %s (current: %s)", status.LatestVersion, status.CurrentVersion)
+			s, _ := p.settings.Load(ctx)
+			webURL := ""
+			if s != nil {
+				webURL = s.WebURL
+			}
+			var buttons []service.KeyboardButton
+			if status.ChangelogURL != "" {
+				buttons = append(buttons, service.KeyboardButton{Text: "Release Notes", URL: status.ChangelogURL})
+			}
+			if webURL != "" {
+				buttons = append(buttons, service.KeyboardButton{Text: "Docker Updates", URL: webURL + "/docker"})
+			}
+			p.notifyWithBtns(ctx, "🆕 *%s* New host Docker Engine version available: %s\nCurrent: %s", buttons, status.LatestVersion, status.CurrentVersion)
 		}
 		return nil
 	}

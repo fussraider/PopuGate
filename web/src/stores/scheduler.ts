@@ -10,12 +10,12 @@ export const useSchedulerStore = defineStore('scheduler', () => {
   const toggling = ref<string | null>(null)
   const running = ref<string | null>(null)
 
-  async function load() {
-    loading.value = true
+  async function load(quiet = false) {
+    if (!quiet) loading.value = true
     try {
       tasks.value = (await schedulerApi.listTasks()) || []
     } finally {
-      loading.value = false
+      if (!quiet) loading.value = false
     }
   }
 

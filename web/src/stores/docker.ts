@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { dockerApi } from '@/api/endpoints'
 import { useWebSocket } from '@/composables/useWebSocket'
-import type { DockerStatus, EngineStatus, TelemtUpdateStatus, TelemtReleaseListItem } from '@/types/models'
+import type { DockerStatus, EngineStatus, TelemtUpdateStatus, TelemtReleaseListItem, DockerUpdateStatus } from '@/types/models'
 
 export const useDockerStore = defineStore('docker', () => {
   const dockerStatus = ref<DockerStatus | null>(null)
@@ -17,6 +17,11 @@ export const useDockerStore = defineStore('docker', () => {
   const applyingUpdate = ref(false)
   const releases = ref<TelemtReleaseListItem[]>([])
   const selectedRelease = ref<TelemtReleaseListItem | null>(null)
+
+  // host Docker daemon package update state
+  const hostUpdateStatus = ref<DockerUpdateStatus | null>(null)
+  const checkingHostRemote = ref(false)
+  const applyingHostUpdate = ref(false)
 
   let wsControls: ReturnType<typeof useWebSocket> | null = null
 
@@ -96,6 +101,29 @@ export const useDockerStore = defineStore('docker', () => {
     await loadTelemtUpdateStatus()
   }
 
+  async function loadHostUpdateStatus() {
+    try {
+      hostUpdateStatus.value = await dockerApi.updateStatus()
+    } catch { /* ignore */ }
+  }
+
+  async function checkHostRemote() {
+    checkingHostRemote.value = true
+    try {
+      hostUpdateStatus.value = await dockerApi.updateCheck()
+    } catch { /* ignore */ }
+    checkingHostRemote.value = false
+  }
+
+  async function applyHostUpdate() {
+    applyingHostUpdate.value = true
+    try {
+      await dockerApi.updateApply()
+    } catch { /* error handled by caller */ }
+    applyingHostUpdate.value = false
+    await loadHostUpdateStatus()
+  }
+
   function startUpdateStream() {
     if (wsControls) return
 
@@ -125,8 +153,10 @@ export const useDockerStore = defineStore('docker', () => {
     dockerStatus, engineStatus, loading, building, buildResult,
     telemtUpdateStatus, checkingRemote, applyingUpdate,
     releases, selectedRelease,
+    hostUpdateStatus, checkingHostRemote, applyingHostUpdate,
     loadDockerStatus, loadEngineStatus, installDocker, buildEngine,
     loadTelemtUpdateStatus, loadReleases, checkRemoteTelemt, applyTelemtUpdate,
+    loadHostUpdateStatus, checkHostRemote, applyHostUpdate,
     stopUpdateStream,
   }
 })

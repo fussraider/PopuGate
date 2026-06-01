@@ -11,6 +11,8 @@
     "badge": {
       "updates": "PopuGate update available",
       "docker": "Engine update available",
+      "docker_host": "Docker Daemon update available",
+      "docker_both": "Engine & Docker updates available",
       "scheduler": "Task execution errors",
       "secrets": "Expired secrets found",
       "upstreams": "Unhealthy upstreams detected"
@@ -379,7 +381,13 @@
     "updating_to": "Updating engine to {version}... Build in progress, please wait.",
     "select_release": "Select a release to build",
     "choose_release": "Choose a release...",
-    "build_selected": "Build Selected"
+    "build_selected": "Build Selected",
+    "host_updates_title": "Host Docker Daemon Updates",
+    "docker_updating_to": "Updating host Docker daemon to latest package version... Please wait.",
+    "live_restore_enabled": "Live-restore is enabled. Updating Docker will run without container downtime.",
+    "live_restore_disabled": "Live-restore is disabled! Updating Docker will cause proxy containers to temporarily stop and restart.",
+    "confirm_host_update": "Are you sure you want to update the host Docker Engine? This will upgrade docker-ce, docker-ce-cli, and containerd.io packages.",
+    "update_docker": "Update Docker Engine"
   },
   "geoblock": {
     "title": "Geo-Blocking Configuration",
@@ -837,6 +845,10 @@
       "telemt-check": {
         "name": "Engine Version Check",
         "description": "Checks for new telemt engine versions and updates the Docker image."
+      },
+      "docker-host-check": {
+        "name": "Docker Host Update Check",
+        "description": "Checks for new host Docker Engine releases and notifies via the Telegram bot."
       },
       "token-cleanup": {
         "name": "Token Cleanup",

@@ -11,6 +11,8 @@
     "badge": {
       "updates": "Доступно обновление PopuGate",
       "docker": "Доступно обновление движка",
+      "docker_host": "Доступно обновление Docker",
+      "docker_both": "Доступны обновления движка и Docker",
       "scheduler": "Ошибки выполнения задач",
       "secrets": "Найдены истёкшие секреты",
       "upstreams": "Обнаружены неработающие апстримы"
@@ -379,7 +381,13 @@
     "updating_to": "Обновление движка до {version}... Сборка в процессе, подождите.",
     "select_release": "Выберите релиз для сборки",
     "choose_release": "Выберите релиз...",
-    "build_selected": "Собрать выбранную"
+    "build_selected": "Собрать выбранную",
+    "host_updates_title": "Обновления хост-демона Docker",
+    "docker_updating_to": "Обновление хост-демона Docker до последней версии... Пожалуйста, подождите.",
+    "live_restore_enabled": "Live-restore включен. Обновление Docker пройдет без перезапуска контейнеров (без даунтайма).",
+    "live_restore_disabled": "Live-restore выключен! Обновление Docker приведет к кратковременной остановке и перезапуску контейнеров прокси.",
+    "confirm_host_update": "Вы уверены, что хотите обновить хост-демон Docker? Это обновит пакеты docker-ce, docker-ce-cli и containerd.io.",
+    "update_docker": "Обновить Docker Engine"
   },
   "geoblock": {
     "title": "Геоблокировка",
@@ -837,6 +845,10 @@
       "telemt-check": {
         "name": "Проверка версии движка",
         "description": "Проверяет наличие новых версий движка telemt и обновляет Docker-образ."
+      },
+      "docker-host-check": {
+        "name": "Проверка Docker на хосте",
+        "description": "Проверяет наличие новых версий хост-демона Docker Engine и уведомляет через Telegram-бота."
       },
       "token-cleanup": {
         "name": "Очистка токенов",

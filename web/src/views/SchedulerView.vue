@@ -268,8 +268,8 @@ async function handleRunNow(task: SchedulerTask) {
   const result = await schedulerStore.runNow(task.name)
   if (result) {
     toast.success(t('scheduler.task_triggered'))
-    // Reload to get fresh last_run data
-    await schedulerStore.load()
+    // Reload quietly to get fresh last_run data without table flash
+    await schedulerStore.load(true)
   } else {
     toast.error(t('scheduler.task_trigger_failed'))
   }

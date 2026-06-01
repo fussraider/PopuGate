@@ -342,6 +342,7 @@ func DefaultTasks() []Task {
 		{Name: "replication-sync", Schedule: "0 */1 * * * *", Timeout: 3 * time.Minute}, // SSH transfers can be slow
 		{Name: "update-check", Schedule: "0 0 */6 * * *"},                               // every 6 hours
 		{Name: "telemt-check", Schedule: "0 0 */6 * * *", Timeout: 30 * time.Second},    // every 6 hours
+		{Name: "docker-host-check", Schedule: "0 0 */6 * * *", Timeout: 30 * time.Second}, // every 6 hours
 		{Name: "token-cleanup", Schedule: "0 0 */1 * * *"},                              // every hour
 		{Name: "daily-backup", Schedule: "0 0 3 * * *", Timeout: 5 * time.Minute},       // daily at 3:00
 		{Name: "backup-cleanup", Schedule: "0 30 3 * * *"},                              // daily at 3:30

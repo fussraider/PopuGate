@@ -18,12 +18,12 @@ export const useSecretsStore = defineStore('secrets', () => {
   const allTags = ref<string[]>([])
   const selectedTagFilter = ref('')
 
-  async function load() {
-    loading.value = true
+  async function load(quiet = false) {
+    if (!quiet) loading.value = true
     try {
       secrets.value = (await secretsApi.list()) || []
     } finally {
-      loading.value = false
+      if (!quiet) loading.value = false
     }
   }
 

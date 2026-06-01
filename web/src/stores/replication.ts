@@ -18,12 +18,12 @@ export const useReplicationStore = defineStore('replication', () => {
     } catch { /* ignore */ }
   }
 
-  async function loadSlaves() {
-    loading.value = true
+  async function loadSlaves(quiet = false) {
+    if (!quiet) loading.value = true
     try {
       slaves.value = (await replicationApi.listSlaves()) || []
     } finally {
-      loading.value = false
+      if (!quiet) loading.value = false
     }
   }
 

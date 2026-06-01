@@ -6,9 +6,12 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/fussraider/PopuGate/internal/model"
 	"github.com/fussraider/PopuGate/internal/store"
 	"github.com/fussraider/PopuGate/pkg/dockerutil"
 	"github.com/fussraider/PopuGate/pkg/logger"
@@ -66,32 +69,15 @@ func (h *HealthService) Check(ctx context.Context) *HealthStatus {
 		return status
 	}
 
-	runningCount := 0
-	listeningCount := 0
-	metricsCount := 0
-
-	for _, inst := range insts {
-		if !inst.Enabled {
-			continue
-		}
-		r, _ := h.docker.IsInstanceRunning(ctx, inst.ContainerName())
-		if r {
-			runningCount++
-		}
-		if h.isPortListening(inst.Port) {
-			listeningCount++
-		}
-		if h.isMetricsResponding(inst.MetricsPort) {
-			metricsCount++
-		}
+	var runningContainers map[string]bool
+	if h.docker != nil {
+		runningContainers, _ = h.docker.ListRunningContainerNames(ctx)
+	}
+	if runningContainers == nil {
+		runningContainers = make(map[string]bool)
 	}
 
-	enabledTotal := 0
-	for _, inst := range insts {
-		if inst.Enabled {
-			enabledTotal++
-		}
-	}
+	runningCount, listeningCount, metricsCount, enabledTotal := h.checkInstanceCounts(insts, runningContainers)
 
 	status.Container = fmt.Sprintf("%d/%d running", runningCount, enabledTotal)
 	status.Port = fmt.Sprintf("%d/%d listening", listeningCount, enabledTotal)
@@ -104,6 +90,43 @@ func (h *HealthService) Check(ctx context.Context) *HealthStatus {
 	return status
 }
 
+// checkInstanceCounts tallies running, port-listening, and metrics-responding counts across enabled instances.
+func (h *HealthService) checkInstanceCounts(insts []model.Instance, runningContainers map[string]bool) (running, listening, metrics, total int) {
+	for _, inst := range insts {
+		if !inst.Enabled {
+			continue
+		}
+		total++
+
+		activeName := inst.ContainerName()
+		if h.containerSvc != nil {
+			activeName = h.containerSvc.GetActiveContainerNameWithMap(&inst, runningContainers)
+		}
+
+		activePort, activeMetricsPort := inst.Port, inst.MetricsPort
+		if h.containerSvc != nil {
+			activePort, activeMetricsPort = h.containerSvc.ResolveActivePortsWithMap(&inst, runningContainers)
+		} else if activeName != inst.ContainerName() && strings.HasPrefix(activeName, "popugate-telemt-") {
+			portStr := strings.TrimPrefix(activeName, "popugate-telemt-")
+			if p, err := strconv.Atoi(portStr); err == nil {
+				activePort = p
+				activeMetricsPort = p + 100
+			}
+		}
+
+		if runningContainers[activeName] {
+			running++
+		}
+		if h.isPortListening(inst.Port) || h.isPortListening(activePort) {
+			listening++
+		}
+		if h.isMetricsResponding(activeMetricsPort) {
+			metrics++
+		}
+	}
+	return
+}
+
 // InstanceHealth checks health for a specific instance.
 func (h *HealthService) InstanceHealth(ctx context.Context, id int64) (string, error) {
 	inst, err := h.instances.GetByID(ctx, id)
@@ -114,12 +137,26 @@ func (h *HealthService) InstanceHealth(ctx context.Context, id int64) (string, e
 		return "not_found", fmt.Errorf("instance %d not found", id)
 	}
 
-	running, err := h.docker.IsInstanceRunning(ctx, inst.ContainerName())
+	activeName := inst.ContainerName()
+	if h.containerSvc != nil {
+		activeName = h.containerSvc.GetActiveContainerName(ctx, inst)
+	}
+	running, err := h.docker.IsInstanceRunning(ctx, activeName)
 	if err != nil || !running {
 		return "stopped", nil
 	}
 
-	if !h.isMetricsResponding(inst.MetricsPort) {
+	activeMetricsPort := inst.MetricsPort
+	if h.containerSvc != nil {
+		_, activeMetricsPort = h.containerSvc.ResolveActivePorts(ctx, inst)
+	} else if activeName != inst.ContainerName() && strings.HasPrefix(activeName, "popugate-telemt-") {
+		portStr := strings.TrimPrefix(activeName, "popugate-telemt-")
+		if p, err := strconv.Atoi(portStr); err == nil {
+			activeMetricsPort = p + 100
+		}
+	}
+
+	if !h.isMetricsResponding(activeMetricsPort) {
 		return "unhealthy", nil
 	}
 
@@ -151,7 +188,11 @@ func (h *HealthService) AutoRecover(ctx context.Context) error {
 		if !inst.Enabled {
 			continue
 		}
-		running, err := h.docker.IsInstanceRunning(ctx, inst.ContainerName())
+		activeName := inst.ContainerName()
+		if h.containerSvc != nil {
+			activeName = h.containerSvc.GetActiveContainerName(ctx, &inst)
+		}
+		running, err := h.docker.IsInstanceRunning(ctx, activeName)
 		if err != nil || !running {
 			toRecover = append(toRecover, inst.ID)
 		}

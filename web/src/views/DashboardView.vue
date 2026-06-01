@@ -1,7 +1,18 @@
 <template>
-  <div class="dashboard">
+  <div ref="dashboardRef" class="dashboard" :class="{ 'fullscreen-mode': isFullscreen }">
+    <!-- Fullscreen Header -->
+    <div v-if="isFullscreen" class="dashboard-header-fullscreen mb-lg">
+      <div class="title-container">
+        <h2>{{ t('common.dashboard') }}</h2>
+        <LiveBadge />
+      </div>
+      <button class="btn btn-secondary btn-sm" @click="toggleFullscreen">
+        <Minimize :size="14" />
+        <span>{{ t('dashboard.exit_fullscreen') }}</span>
+      </button>
+    </div>
     <!-- Update Banner -->
-    <div v-if="updateStore.status?.update_available" class="update-banner mb-lg">
+    <div v-if="updateStore.status?.update_available && !isFullscreen" class="update-banner mb-lg">
       <Package :size="16" class="update-banner-icon" />
       <span>{{ t('dashboard.update_banner', { current: updateStore.status.current, latest: updateStore.status.latest }) }}</span>
       <router-link :to="{ name: 'Updates' }" class="btn btn-sm btn-warning" style="margin-left: auto;">
@@ -38,6 +49,12 @@
               <button class="proxy-action-btn" :disabled="proxyStore.loading" @click="proxyAction('restart')">
                 <Loader2 v-if="proxyStore.activeAction === 'restart'" :size="11" class="animate-spin" />
                 <RefreshCw v-else :size="11" />
+              </button>
+            </Tooltip>
+            <Tooltip :text="t('dashboard.reload_zero_downtime_hint')">
+              <button class="proxy-action-btn" :disabled="proxyStore.loading" @click="proxyAction('reloadZeroDowntime')">
+                <Loader2 v-if="proxyStore.activeAction === 'reloadZeroDowntime'" :size="11" class="animate-spin" />
+                <Zap v-else :size="11" />
               </button>
             </Tooltip>
             <Tooltip :text="t('dashboard.reload_hint')">
@@ -97,268 +114,295 @@
 
     <!-- Bottom Grid -->
     <div class="dashboard-grid">
-      <!-- Services Row -->
-      <div class="mini-cards-row">
-        <router-link :to="{ name: 'Bot' }" class="mini-card">
-          <span class="mini-card-label">{{ t('dashboard.bot') }}</span>
-          <StatusBadge :variant="botStore.running ? 'success' : botStore.enabled ? 'danger' : 'neutral'">
-            {{ botStore.running ? t('dashboard.running') : botStore.enabled ? t('dashboard.stopped') : t('dashboard.disabled') }}
-          </StatusBadge>
-        </router-link>
+      <div class="dashboard-col">
+        <!-- Left Column: Services Row, Resources, Engine & Health -->
 
-        <router-link :to="{ name: 'Backups' }" class="mini-card">
-          <span class="mini-card-label">{{ t('dashboard.backup') }}</span>
-          <StatusBadge v-if="lastBackup" :variant="backupAgeHours > 24 ? 'warning' : 'success'">
-            {{ timeAgo(lastBackup.created_at) }}
-          </StatusBadge>
-          <StatusBadge v-else variant="neutral">{{ t('dashboard.no_backups') }}</StatusBadge>
-        </router-link>
-
-        <router-link :to="{ name: 'Geoblock' }" class="mini-card">
-          <span class="mini-card-label">{{ t('dashboard.geoblock') }}</span>
-          <StatusBadge v-if="geoblockStore.countries.length > 0" variant="success">
-            {{ geoblockStore.mode === 'blacklist' ? '✕' : '✓' }} {{ geoblockStore.countries.length }}
-          </StatusBadge>
-          <StatusBadge v-else variant="neutral">{{ t('dashboard.disabled') }}</StatusBadge>
-        </router-link>
-
-        <router-link :to="{ name: 'Replication' }" class="mini-card">
-          <span class="mini-card-label">{{ t('dashboard.replication') }}</span>
-          <StatusBadge v-if="replicationStore.slaves.length > 0" :variant="replicationHealthy ? 'success' : 'warning'">
-            {{ replicationStore.slaves.filter(s => s.status === 'connected').length }}/{{ replicationStore.slaves.length }}
-          </StatusBadge>
-          <StatusBadge v-else variant="neutral">{{ t('dashboard.not_configured') }}</StatusBadge>
-        </router-link>
-      </div>
-
-      <!-- Resources -->
-      <div class="card">
-        <h3 class="mb-md card-header">
-          {{ t('dashboard.resources') }}
-          <router-link :to="{ name: 'System' }" class="card-header-link">
-            <ArrowUpRight :size="14" />
-          </router-link>
-        </h3>
-        <div v-if="!systemStore.resources" class="skeleton" style="height: 80px; width: 100%; border-radius: 4px;"></div>
-        <div v-else class="resource-grid">
-          <div class="resource-row">
-            <Cpu :size="14" class="resource-icon" />
-            <span class="resource-label">CPU</span>
-            <div class="resource-bar">
-              <div class="progress-bar" style="height: 4px;">
-                <div class="progress-inner" :class="getBarVariant(systemStore.resources.cpu_usage)" :style="{ width: systemStore.resources.cpu_usage + '%' }"></div>
-              </div>
-            </div>
-            <span class="resource-value">{{ systemStore.resources.cpu_usage.toFixed(1) }}%</span>
-          </div>
-          <div class="resource-row">
-            <Database :size="14" class="resource-icon" />
-            <span class="resource-label">RAM</span>
-            <div class="resource-bar">
-              <div class="progress-bar" style="height: 4px;">
-                <div class="progress-inner" :class="getBarVariant(ramPercent)" :style="{ width: ramPercent + '%' }"></div>
-              </div>
-            </div>
-            <span class="resource-value">{{ ramPercent.toFixed(1) }}%</span>
-          </div>
-          <div class="resource-row">
-            <HardDrive :size="14" class="resource-icon" />
-            <span class="resource-label">DISK</span>
-            <div class="resource-bar">
-              <div class="progress-bar" style="height: 4px;">
-                <div class="progress-inner" :class="getBarVariant(diskPercent)" :style="{ width: diskPercent + '%' }"></div>
-              </div>
-            </div>
-            <span class="resource-value">{{ diskPercent.toFixed(1) }}%</span>
-          </div>
-          <div class="resource-row">
-            <Activity :size="14" class="resource-icon" />
-            <span class="resource-label">LOAD</span>
-            <span class="resource-value">{{ systemStore.resources.load1.toFixed(2) }}</span>
-          </div>
-          <div v-if="systemStore.resources.uptime" class="resource-footer">
-            <span class="text-muted">{{ t('dashboard.uptime') }}: {{ formatUptime(systemStore.resources.uptime) }}</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Engine & Health -->
-      <div class="card">
-        <h3 class="mb-md card-header">
-          {{ t('dashboard.engine') }}
-          <router-link :to="{ name: 'Docker' }" class="card-header-link">
-            <ArrowUpRight :size="14" />
-          </router-link>
-        </h3>
-
-        <div class="engine-health-grid">
-          <div class="engine-health-item">
-            <span class="engine-health-label">{{ t('dashboard.docker') }}</span>
-            <span class="engine-health-dots"></span>
-            <StatusBadge :variant="healthStatus(proxyStore.health?.docker)">{{ proxyStore.health?.docker || '—' }}</StatusBadge>
-          </div>
-          <div class="engine-health-item">
-            <span class="engine-health-label">{{ t('dashboard.health_containers') }}</span>
-            <span class="engine-health-dots"></span>
-            <StatusBadge :variant="healthStatus(proxyStore.health?.container)">{{ proxyStore.health?.container || '—' }}</StatusBadge>
-          </div>
-          <div class="engine-health-item">
-            <span class="engine-health-label">{{ t('dashboard.health_ports') }}</span>
-            <span class="engine-health-dots"></span>
-            <StatusBadge :variant="healthStatus(proxyStore.health?.port)">{{ proxyStore.health?.port || '—' }}</StatusBadge>
-          </div>
-          <div class="engine-health-item">
-            <span class="engine-health-label">{{ t('dashboard.metrics') }}</span>
-            <span class="engine-health-dots"></span>
-            <StatusBadge :variant="healthStatus(proxyStore.health?.metrics)">{{ proxyStore.health?.metrics || '—' }}</StatusBadge>
-          </div>
-        </div>
-
-        <div class="engine-divider"></div>
-
-        <div class="engine-info-grid">
-          <div class="engine-info-item">
-            <span class="engine-info-label">{{ t('dashboard.version') }}</span>
-            <code>{{ dockerStore.engineStatus?.version || '—' }}</code>
-          </div>
-          <div class="engine-info-item">
-            <span class="engine-info-label">{{ t('dashboard.instances') }}</span>
-            <span>{{ runningInstances }}/{{ totalInstances }}</span>
-          </div>
-          <div class="engine-info-item">
-            <span class="engine-info-label">{{ t('dashboard.image') }}</span>
-            <StatusBadge :variant="dockerStore.engineStatus?.image_exists ? 'success' : 'danger'">
-              {{ dockerStore.engineStatus?.image_exists ? t('dashboard.image_ready') : t('dashboard.image_missing') }}
+        <!-- Services Row -->
+        <div class="mini-cards-row">
+          <router-link :to="{ name: 'Bot' }" class="mini-card">
+            <Loader2 v-if="isBotLoading" :size="10" class="animate-spin mini-card-loader" />
+            <span class="mini-card-label">{{ t('dashboard.bot') }}</span>
+            <StatusBadge :variant="botStore.running ? 'success' : botStore.enabled ? 'danger' : 'neutral'">
+              {{ botStore.running ? t('dashboard.running') : botStore.enabled ? t('dashboard.stopped') : t('dashboard.disabled') }}
             </StatusBadge>
-          </div>
-          <div class="engine-info-item">
-            <span class="engine-info-label">{{ t('dashboard.update') }}</span>
-            <StatusBadge v-if="dockerStore.telemtUpdateStatus?.updating" variant="warning">
-              {{ t('dashboard.updating') }} v{{ dockerStore.telemtUpdateStatus.updating_to }}
-            </StatusBadge>
-            <StatusBadge v-else-if="dockerStore.applyingUpdate" variant="warning">
-              {{ t('dashboard.updating') }}…
-            </StatusBadge>
-            <StatusBadge v-else-if="dockerStore.telemtUpdateStatus?.update_available" variant="warning">
-              {{ t('dashboard.update_available') }} v{{ dockerStore.telemtUpdateStatus.latest?.version }}
-            </StatusBadge>
-            <StatusBadge v-else variant="success">{{ t('dashboard.up_to_date') }}</StatusBadge>
-          </div>
-        </div>
-      </div>
+          </router-link>
 
-      <!-- Secrets Health -->
-      <div class="card">
-        <h3 class="mb-md card-header">
-          {{ t('dashboard.secrets_health') }}
-          <router-link :to="{ name: 'Secrets' }" class="card-header-link">
-            <ArrowUpRight :size="14" />
+          <router-link :to="{ name: 'Backups' }" class="mini-card">
+            <Loader2 v-if="isBackupLoading" :size="10" class="animate-spin mini-card-loader" />
+            <span class="mini-card-label">{{ t('dashboard.backup') }}</span>
+            <StatusBadge v-if="lastBackup" :variant="backupAgeHours > 24 ? 'warning' : 'success'">
+              {{ timeAgo(lastBackup.created_at) }}
+            </StatusBadge>
+            <StatusBadge v-else variant="neutral">{{ t('dashboard.no_backups') }}</StatusBadge>
           </router-link>
-        </h3>
-        <div v-if="secretsAttention === 0" class="scheduler-ok">
-          <CheckCircle :size="14" />
-          <span>{{ t('dashboard.secrets_ok') }}</span>
-        </div>
-        <div v-else class="secrets-issues">
-          <div v-if="expiredSecrets > 0" class="secrets-issue">
-            <AlertCircle :size="14" class="secrets-issue-icon secrets-issue-danger" />
-            <span><strong>{{ expiredSecrets }}</strong> {{ t('dashboard.secrets_expired') }}</span>
-          </div>
-          <div v-if="quotaWarnSecrets > 0" class="secrets-issue">
-            <AlertCircle :size="14" class="secrets-issue-icon secrets-issue-warn" />
-            <span><strong>{{ quotaWarnSecrets }}</strong> {{ t('dashboard.secrets_quota') }}</span>
-          </div>
-          <div v-if="disabledSecrets > 0" class="secrets-issue">
-            <AlertCircle :size="14" class="secrets-issue-icon secrets-issue-muted" />
-            <span><strong>{{ disabledSecrets }}</strong> {{ t('dashboard.secrets_disabled') }}</span>
-          </div>
-          <router-link v-if="noSecretInstances > 0" :to="{ name: 'Instances' }" class="secrets-issue secrets-issue-link">
-            <AlertCircle :size="14" class="secrets-issue-icon secrets-issue-danger" />
-            <span><strong>{{ noSecretInstances }}</strong> {{ t('dashboard.no_secret_instances') }}</span>
-            <ArrowUpRight :size="12" class="secrets-issue-arrow" />
-          </router-link>
-        </div>
-      </div>
 
-      <!-- Top Users -->
-      <div class="card">
-        <h3 class="mb-md card-header">
-          {{ t('dashboard.top_users') }}
-          <router-link :to="{ name: 'Traffic' }" class="card-header-link">
-            <ArrowUpRight :size="14" />
+          <router-link :to="{ name: 'Geoblock' }" class="mini-card">
+            <span class="mini-card-label">{{ t('dashboard.geoblock') }}</span>
+            <StatusBadge v-if="geoblockStore.countries.length > 0" variant="success">
+              {{ geoblockStore.mode === 'blacklist' ? '✕' : '✓' }} {{ geoblockStore.countries.length }}
+            </StatusBadge>
+            <StatusBadge v-else variant="neutral">{{ t('dashboard.disabled') }}</StatusBadge>
           </router-link>
-        </h3>
-        <div v-if="topUsers.length === 0" class="text-muted" style="font-size: $font-size-sm;">
-          {{ t('dashboard.no_data') }}
+
+          <router-link :to="{ name: 'Replication' }" class="mini-card">
+            <Loader2 v-if="isReplicationLoading" :size="10" class="animate-spin mini-card-loader" />
+            <span class="mini-card-label">{{ t('dashboard.replication') }}</span>
+            <StatusBadge v-if="replicationStore.slaves.length > 0" :variant="replicationHealthy ? 'success' : 'warning'">
+              {{ replicationStore.slaves.filter(s => s.status === 'connected').length }}/{{ replicationStore.slaves.length }}
+            </StatusBadge>
+            <StatusBadge v-else variant="neutral">{{ t('dashboard.not_configured') }}</StatusBadge>
+          </router-link>
         </div>
-        <div v-else class="top-users-list">
-          <div v-for="user in topUsers" :key="user.label" class="top-user-row">
-            <span class="top-user-label">{{ user.label }}</span>
-            <div class="top-user-bar">
-              <div class="progress-bar" style="height: 4px;">
-                <div class="progress-inner" :style="{ width: user.percent + '%' }"></div>
+
+        <!-- Resources -->
+        <div class="card">
+          <h3 class="mb-md card-header">
+            {{ t('dashboard.resources') }}
+            <router-link :to="{ name: 'System' }" class="card-header-link">
+              <ArrowUpRight :size="14" />
+            </router-link>
+          </h3>
+          <div class="resource-grid" :class="{ 'skeleton-loading': !systemStore.resources }">
+            <div class="resource-row">
+              <Cpu :size="14" class="resource-icon" />
+              <span class="resource-label">CPU</span>
+              <div class="resource-bar">
+                <div class="progress-bar" style="height: 4px;">
+                  <div class="progress-inner" :class="systemStore.resources ? getBarVariant(systemStore.resources.cpu_usage) : 'placeholder-bar'" :style="{ width: systemStore.resources ? systemStore.resources.cpu_usage + '%' : '35%' }"></div>
+                </div>
               </div>
+              <span class="resource-value">{{ systemStore.resources ? systemStore.resources.cpu_usage.toFixed(1) + '%' : '—' }}</span>
             </div>
-            <span class="top-user-value">{{ user.total }}</span>
+            <div class="resource-row">
+              <Database :size="14" class="resource-icon" />
+              <span class="resource-label">RAM</span>
+              <div class="resource-bar">
+                <div class="progress-bar" style="height: 4px;">
+                  <div class="progress-inner" :class="systemStore.resources ? getBarVariant(ramPercent) : 'placeholder-bar'" :style="{ width: systemStore.resources ? ramPercent + '%' : '45%' }"></div>
+                </div>
+              </div>
+              <span class="resource-value">{{ systemStore.resources ? ramPercent.toFixed(1) + '%' : '—' }}</span>
+            </div>
+            <div class="resource-row">
+              <HardDrive :size="14" class="resource-icon" />
+              <span class="resource-label">DISK</span>
+              <div class="resource-bar">
+                <div class="progress-bar" style="height: 4px;">
+                  <div class="progress-inner" :class="systemStore.resources ? getBarVariant(diskPercent) : 'placeholder-bar'" :style="{ width: systemStore.resources ? diskPercent + '%' : '25%' }"></div>
+                </div>
+              </div>
+              <span class="resource-value">{{ systemStore.resources ? diskPercent.toFixed(1) + '%' : '—' }}</span>
+            </div>
+            <div class="resource-row">
+              <Activity :size="14" class="resource-icon" />
+              <span class="resource-label">LOAD</span>
+              <span class="resource-value">{{ systemStore.resources ? systemStore.resources.load1.toFixed(2) : '—' }}</span>
+            </div>
+            <div class="resource-footer">
+              <span class="text-muted">{{ t('dashboard.uptime') }}: {{ systemStore.resources ? formatUptime(systemStore.resources.uptime) : '—' }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Engine & Health -->
+        <div class="card">
+          <h3 class="mb-md card-header">
+            {{ t('dashboard.engine') }}
+            <router-link :to="{ name: 'Docker' }" class="card-header-link">
+              <ArrowUpRight :size="14" />
+            </router-link>
+          </h3>
+
+          <div class="engine-health-grid">
+            <div class="engine-health-item">
+              <span class="engine-health-label">{{ t('dashboard.docker') }}</span>
+              <span class="engine-health-dots"></span>
+              <StatusBadge :variant="healthStatus(proxyStore.health?.docker)">{{ proxyStore.health?.docker || '—' }}</StatusBadge>
+            </div>
+            <div class="engine-health-item">
+              <span class="engine-health-label">{{ t('dashboard.health_containers') }}</span>
+              <span class="engine-health-dots"></span>
+              <StatusBadge :variant="healthStatus(proxyStore.health?.container)">{{ proxyStore.health?.container || '—' }}</StatusBadge>
+            </div>
+            <div class="engine-health-item">
+              <span class="engine-health-label">{{ t('dashboard.health_ports') }}</span>
+              <span class="engine-health-dots"></span>
+              <StatusBadge :variant="healthStatus(proxyStore.health?.port)">{{ proxyStore.health?.port || '—' }}</StatusBadge>
+            </div>
+            <div class="engine-health-item">
+              <span class="engine-health-label">{{ t('dashboard.metrics') }}</span>
+              <span class="engine-health-dots"></span>
+              <StatusBadge :variant="healthStatus(proxyStore.health?.metrics)">{{ proxyStore.health?.metrics || '—' }}</StatusBadge>
+            </div>
+          </div>
+
+          <div class="engine-divider"></div>
+
+          <div class="engine-info-grid">
+            <div class="engine-info-item">
+              <span class="engine-info-label">{{ t('dashboard.version') }}</span>
+              <code>{{ dockerStore.engineStatus?.version || '—' }}</code>
+            </div>
+            <div class="engine-info-item">
+              <span class="engine-info-label">{{ t('dashboard.instances') }}</span>
+              <span>{{ runningInstances }}/{{ totalInstances }}</span>
+            </div>
+            <div class="engine-info-item">
+              <span class="engine-info-label">{{ t('dashboard.image') }}</span>
+              <StatusBadge :variant="dockerStore.engineStatus?.image_exists ? 'success' : 'danger'">
+                {{ dockerStore.engineStatus?.image_exists ? t('dashboard.image_ready') : t('dashboard.image_missing') }}
+              </StatusBadge>
+            </div>
+            <div class="engine-info-item">
+              <span class="engine-info-label">{{ t('dashboard.update') }}</span>
+              <StatusBadge v-if="dockerStore.telemtUpdateStatus?.updating" variant="warning">
+                {{ t('dashboard.updating') }} v{{ dockerStore.telemtUpdateStatus.updating_to }}
+              </StatusBadge>
+              <StatusBadge v-else-if="dockerStore.applyingUpdate" variant="warning">
+                {{ t('dashboard.updating') }}…
+              </StatusBadge>
+              <StatusBadge v-else-if="dockerStore.telemtUpdateStatus?.update_available" variant="warning">
+                {{ t('dashboard.update_available') }} v{{ dockerStore.telemtUpdateStatus.latest?.version }}
+              </StatusBadge>
+              <StatusBadge v-else variant="success">{{ t('dashboard.up_to_date') }}</StatusBadge>
+            </div>
           </div>
         </div>
       </div>
 
-      <!-- Recent Activity -->
-      <div class="card">
-        <h3 class="mb-md card-header">
-          {{ t('dashboard.activity') }}
-          <router-link :to="{ name: 'Audit' }" class="card-header-link">
-            <ArrowUpRight :size="14" />
-          </router-link>
-        </h3>
-        <div v-if="recentActivity.length === 0" class="text-muted" style="font-size: $font-size-sm;">
-          {{ t('dashboard.no_data') }}
-        </div>
-        <div v-else class="activity-list">
-          <div v-for="entry in recentActivity" :key="entry.id" class="activity-item">
-            <span class="activity-action" :class="'activity-' + actionVariant(entry.action)">
-              {{ entry.action.replace(/_/g, ' ') }}
-            </span>
-            <span v-if="entry.detail" class="activity-detail">{{ entry.detail }}</span>
-            <span class="activity-time">{{ timeAgo(entry.timestamp) }}</span>
+      <div class="dashboard-col">
+        <!-- Right Column: Secrets Health, Top Users, Recent Activity, Scheduler Status -->
+
+        <!-- Secrets Health -->
+        <div class="card secrets-card">
+          <h3 class="mb-md card-header">
+            {{ t('dashboard.secrets_health') }}
+            <router-link :to="{ name: 'Secrets' }" class="card-header-link">
+              <Loader2 v-if="isSecretsLoading" :size="14" class="animate-spin" />
+              <ArrowUpRight v-else :size="14" />
+            </router-link>
+          </h3>
+          <div v-if="secretsStore.secrets.length === 0" class="no-data-placeholder-small">
+            <AlertCircle :size="14" class="text-muted" />
+            <span>{{ t('dashboard.no_data') }}</span>
           </div>
-        </div>
-      </div>
-
-      <!-- Scheduler Status -->
-      <div v-if="schedulerStore.tasks.length > 0" class="card">
-        <h3 class="mb-md card-header">
-          {{ t('dashboard.scheduler') }}
-          <span v-if="errorTasks.length" class="badge badge-danger scheduler-badge">{{ errorTasks.length }}</span>
-          <router-link :to="{ name: 'Scheduler' }" class="card-header-link">
-            <ArrowUpRight :size="14" />
-          </router-link>
-        </h3>
-
-        <div v-if="errorTasks.length" class="scheduler-errors mb-md">
-          <div v-for="task in errorTasks.slice(0, 2)" :key="task.name" class="scheduler-error-item">
-            <AlertCircle :size="14" class="scheduler-error-icon" />
-            <div class="scheduler-error-info">
-              <span class="scheduler-error-name">{{ t(`scheduler.tasks.${task.name}.name`) }}</span>
-              <span v-if="task.last_run?.error" class="scheduler-error-msg">{{ task.last_run.error }}</span>
-            </div>
-          </div>
-          <router-link v-if="errorTasks.length > 2" :to="{ name: 'Scheduler' }" class="scheduler-more">
-            +{{ errorTasks.length - 2 }} {{ t('dashboard.more_errors') }}
-          </router-link>
-        </div>
-
-        <div class="scheduler-footer">
-          <div v-if="errorTasks.length === 0" class="scheduler-ok">
+          <div v-else-if="secretsAttention === 0" class="scheduler-ok">
             <CheckCircle :size="14" />
-            <span>{{ t('dashboard.scheduler_ok') }}</span>
+            <span>{{ t('dashboard.secrets_ok') }}</span>
           </div>
-          <span class="text-muted">{{ enabledCount }}/{{ schedulerStore.tasks.length }} {{ t('dashboard.scheduler_active') }}</span>
-          <span v-if="lastActivity" class="text-muted scheduler-last"> · {{ formatDate(lastActivity.last_run!.started_at) }}</span>
+          <div v-else class="secrets-issues">
+            <div v-if="expiredSecrets > 0" class="secrets-issue">
+              <AlertCircle :size="14" class="secrets-issue-icon secrets-issue-danger" />
+              <span><strong>{{ expiredSecrets }}</strong> {{ t('dashboard.secrets_expired') }}</span>
+            </div>
+            <div v-if="quotaWarnSecrets > 0" class="secrets-issue">
+              <AlertCircle :size="14" class="secrets-issue-icon secrets-issue-warn" />
+              <span><strong>{{ quotaWarnSecrets }}</strong> {{ t('dashboard.secrets_quota') }}</span>
+            </div>
+            <div v-if="disabledSecrets > 0" class="secrets-issue">
+              <AlertCircle :size="14" class="secrets-issue-icon secrets-issue-muted" />
+              <span><strong>{{ disabledSecrets }}</strong> {{ t('dashboard.secrets_disabled') }}</span>
+            </div>
+            <router-link v-if="noSecretInstances > 0" :to="{ name: 'Instances' }" class="secrets-issue secrets-issue-link">
+              <AlertCircle :size="14" class="secrets-issue-icon secrets-issue-danger" />
+              <span><strong>{{ noSecretInstances }}</strong> {{ t('dashboard.no_secret_instances') }}</span>
+              <ArrowUpRight :size="12" class="secrets-issue-arrow" />
+            </router-link>
+          </div>
+        </div>
+
+        <!-- Top Users -->
+        <div class="card">
+          <h3 class="mb-md card-header">
+            {{ t('dashboard.top_users') }}
+            <router-link :to="{ name: 'Traffic' }" class="card-header-link">
+              <Loader2 v-if="isTrafficLoading" :size="14" class="animate-spin" />
+              <ArrowUpRight v-else :size="14" />
+            </router-link>
+          </h3>
+          <div v-if="topUsers.length === 0" class="no-data-placeholder">
+            <AlertCircle :size="20" class="text-muted mb-xs" />
+            <span>{{ t('dashboard.no_data') }}</span>
+          </div>
+          <div v-else class="top-users-list">
+            <div v-for="user in topUsers" :key="user.label" class="top-user-row">
+              <span class="top-user-label">{{ user.label }}</span>
+              <div class="top-user-bar">
+                <div class="progress-bar" style="height: 4px;">
+                  <div class="progress-inner" :style="{ width: user.percent + '%' }"></div>
+                </div>
+              </div>
+              <span class="top-user-value">{{ user.total }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Recent Activity -->
+        <div class="card">
+          <h3 class="mb-md card-header">
+            {{ t('dashboard.activity') }}
+            <router-link :to="{ name: 'Audit' }" class="card-header-link">
+              <Loader2 v-if="isAuditLoading" :size="14" class="animate-spin" />
+              <ArrowUpRight v-else :size="14" />
+            </router-link>
+          </h3>
+          <div v-if="recentActivity.length === 0" class="no-data-placeholder">
+            <AlertCircle :size="20" class="text-muted mb-xs" />
+            <span>{{ t('dashboard.no_data') }}</span>
+          </div>
+          <div v-else class="activity-list">
+            <div v-for="entry in recentActivity" :key="entry.id" class="activity-item">
+              <span class="activity-action" :class="'activity-' + actionVariant(entry.action)">
+                {{ entry.action.replace(/_/g, ' ') }}
+              </span>
+              <span v-if="entry.detail" class="activity-detail">{{ entry.detail }}</span>
+              <span class="activity-time">{{ timeAgo(entry.timestamp) }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Scheduler Status -->
+        <div class="card">
+          <h3 class="mb-md card-header">
+            {{ t('dashboard.scheduler') }}
+            <span v-if="schedulerStore.tasks.length > 0 && errorTasks.length" class="badge badge-danger scheduler-badge">{{ errorTasks.length }}</span>
+            <router-link :to="{ name: 'Scheduler' }" class="card-header-link">
+              <Loader2 v-if="isSchedulerLoading" :size="14" class="animate-spin" />
+              <ArrowUpRight v-else :size="14" />
+            </router-link>
+          </h3>
+
+          <div v-if="schedulerStore.tasks.length === 0" class="no-data-placeholder">
+            <AlertCircle :size="20" class="text-muted mb-xs" />
+            <span>{{ t('dashboard.no_data') }}</span>
+          </div>
+          <div v-else class="scheduler-content" :class="{ 'scheduler-content-ok': errorTasks.length === 0 }">
+            <div v-if="errorTasks.length" class="scheduler-errors mb-md">
+              <div v-for="task in errorTasks.slice(0, 2)" :key="task.name" class="scheduler-error-item">
+                <AlertCircle :size="14" class="scheduler-error-icon" />
+                <div class="scheduler-error-info">
+                  <span class="scheduler-error-name">{{ t(`scheduler.tasks.${task.name}.name`) }}</span>
+                  <span v-if="task.last_run?.error" class="scheduler-error-msg">{{ task.last_run.error }}</span>
+                </div>
+              </div>
+              <router-link v-if="errorTasks.length > 2" :to="{ name: 'Scheduler' }" class="scheduler-more">
+                +{{ errorTasks.length - 2 }} {{ t('dashboard.more_errors') }}
+              </router-link>
+            </div>
+
+            <div class="scheduler-footer">
+              <div v-if="errorTasks.length === 0" class="scheduler-ok">
+                <CheckCircle :size="14" />
+                <span>{{ t('dashboard.scheduler_ok') }}</span>
+              </div>
+              <span class="text-muted">{{ enabledCount }}/{{ schedulerStore.tasks.length }} {{ t('dashboard.scheduler_active') }}</span>
+              <span v-if="lastActivity" class="text-muted scheduler-last"> · {{ formatDate(lastActivity.last_run!.started_at) }}</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
+    <ConfirmDialog v-bind="confirmState" @confirm="handleConfirm" @cancel="handleCancel" />
   </div>
 </template>
 
@@ -383,6 +427,9 @@ import {useToastStore} from '@/stores/toast'
 import {formatBytes, formatDate, timeAgo} from '@/utils/format'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import Tooltip from '@/components/common/Tooltip.vue'
+import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import LiveBadge from '@/components/common/LiveBadge.vue'
+import {useConfirmDialog} from '@/composables/useConfirmDialog'
 import {
   Activity,
   AlertCircle,
@@ -393,13 +440,15 @@ import {
   HardDrive,
   KeyRound,
   Loader2,
+  Minimize,
   Package,
   Play,
   RefreshCw,
   RotateCw,
   Square,
   TrendingUp,
-  Users
+  Users,
+  Zap
 } from '@lucide/vue'
 import {useUpdateStore} from '@/stores/update'
 
@@ -418,6 +467,8 @@ const botStore = useBotStore()
 const backupStore = useBackupStore()
 const auditStore = useAuditStore()
 const geoblockStore = useGeoblockStore()
+
+const { confirm, confirmState, handleConfirm, handleCancel } = useConfirmDialog()
 
 const sparklineCanvas = ref<HTMLCanvasElement | null>(null)
 const connectionsCanvas = ref<HTMLCanvasElement | null>(null)
@@ -541,14 +592,33 @@ function formatUptime(seconds: number): string {
   return `${m}m`
 }
 
-async function proxyAction(action: 'start' | 'stop' | 'restart' | 'reload') {
+async function proxyAction(action: 'start' | 'stop' | 'restart' | 'reload' | 'reloadZeroDowntime') {
+  if (action === 'stop') {
+    const ok = await confirm({
+      title: t('dashboard.stop_confirm_title') || 'Stop Proxy',
+      message: t('dashboard.stop_confirm_message') || 'Are you sure you want to stop the proxy service? All active connections will be dropped immediately.',
+      confirmText: t('common.stop'),
+      variant: 'danger',
+    })
+    if (!ok) return
+  } else if (action === 'restart') {
+    const ok = await confirm({
+      title: t('dashboard.restart_confirm_title') || 'Restart Proxy',
+      message: t('dashboard.restart_confirm_message') || 'Are you sure you want to restart the proxy service? This will cause a brief interruption in service.',
+      confirmText: t('common.restart'),
+      variant: 'warning',
+    })
+    if (!ok) return
+  }
+
   try {
     await proxyStore[action]()
     const labels = {
       start: t('dashboard.started'),
       stop: t('dashboard.stopped_success'),
       restart: t('dashboard.restarted'),
-      reload: t('dashboard.reloaded')
+      reload: t('dashboard.reloaded'),
+      reloadZeroDowntime: t('dashboard.zero_downtime_restarted')
     }
     toast.success(labels[action])
   } catch {
@@ -695,7 +765,43 @@ watch(() => trafficStore.history, () => {
   buildConnectionsSparkline()
 }, { deep: true })
 
-onMounted(async () => {
+let activeInterval: ReturnType<typeof setInterval> | null = null
+let schedulerInterval: ReturnType<typeof setInterval> | null = null
+let servicesInterval: ReturnType<typeof setInterval> | null = null
+
+const isSecretsLoading = ref(false)
+const isTrafficLoading = ref(false)
+const isAuditLoading = ref(false)
+const isSchedulerLoading = ref(false)
+const isBotLoading = ref(false)
+const isBackupLoading = ref(false)
+const isReplicationLoading = ref(false)
+
+const dashboardRef = ref<HTMLElement | null>(null)
+const isFullscreen = ref(false)
+
+function toggleFullscreen() {
+  if (!dashboardRef.value) return
+  if (!document.fullscreenElement) {
+    dashboardRef.value.requestFullscreen()
+      .then(() => {
+        isFullscreen.value = true
+      })
+      .catch((err) => {
+        console.error('Error entering fullscreen:', err)
+      })
+  } else {
+    document.exitFullscreen()
+      .then(() => {
+        isFullscreen.value = false
+      })
+  }
+}
+
+function handleFullscreenChange() {
+  isFullscreen.value = !!document.fullscreenElement
+}
+async function reloadDashboardData() {
   await Promise.all([
     secretsStore.load(),
     proxyStore.loadStatus(),
@@ -709,20 +815,77 @@ onMounted(async () => {
     botStore.loadStatus(),
     backupStore.load(),
     auditStore.load(),
-  ])
+  ]).catch(() => {
+    // Suppress API errors to allow safe initialization
+  })
 
   if (configStore.settings) {
     geoblockStore.load(configStore.settings)
   }
 
-  systemStore.startResourceStream()
-
   const now = Math.floor(Date.now() / 1000)
   trafficStore.loadHistory(now - 3600, now, undefined, 'none').then(() => buildSparkline())
+}
+
+watch(() => proxyStore.wsStatus, (status) => {
+  if (status === 'connected') {
+    reloadDashboardData()
+  }
+})
+
+onMounted(async () => {
+  document.addEventListener('fullscreenchange', handleFullscreenChange)
+
+  systemStore.startResourceStream()
+  proxyStore.startStatusStream()
+
+  // Quiet background polling
+  activeInterval = setInterval(() => {
+    isSecretsLoading.value = true
+    secretsStore.load(true).finally(() => { isSecretsLoading.value = false })
+
+    isTrafficLoading.value = true
+    trafficStore.load(true).finally(() => { isTrafficLoading.value = false })
+
+    isAuditLoading.value = true
+    auditStore.load(100, 0, true).finally(() => { isAuditLoading.value = false })
+  }, 15000)
+
+  schedulerInterval = setInterval(async () => {
+    isSchedulerLoading.value = true
+    try {
+      await schedulerStore.load(true)
+    } finally {
+      isSchedulerLoading.value = false
+    }
+  }, 30000)
+
+  servicesInterval = setInterval(() => {
+    isBotLoading.value = true
+    botStore.loadStatus().finally(() => { isBotLoading.value = false })
+
+    isBackupLoading.value = true
+    backupStore.load(true).finally(() => { isBackupLoading.value = false })
+
+    isReplicationLoading.value = true
+    replicationStore.loadSlaves(true).finally(() => { isReplicationLoading.value = false })
+
+    dockerStore.loadEngineStatus()
+    dockerStore.loadTelemtUpdateStatus()
+
+    const currentNow = Math.floor(Date.now() / 1000)
+    trafficStore.loadHistory(currentNow - 3600, currentNow, undefined, 'none', true)
+  }, 60000)
 })
 
 onUnmounted(() => {
+  document.removeEventListener('fullscreenchange', handleFullscreenChange)
   systemStore.stopResourceStream()
+  proxyStore.stopStatusStream()
+
+  if (activeInterval) clearInterval(activeInterval)
+  if (schedulerInterval) clearInterval(schedulerInterval)
+  if (servicesInterval) clearInterval(servicesInterval)
 })
 </script>
 
@@ -1014,25 +1177,22 @@ onUnmounted(() => {
 }
 
 .dashboard-grid {
-  column-count: 2;
-  column-gap: $spacing-md;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: $spacing-md;
+  align-items: start;
 
-  > .card {
-    break-inside: avoid;
-    margin-bottom: $spacing-md;
-    min-width: 0;
-  }
-
-  @media (max-width: 480px) {
-    column-count: 1;
-
-    > .card {
-      margin-bottom: $spacing-sm;
-    }
+  @media (max-width: 768px) {
+    grid-template-columns: 1fr;
+    gap: $spacing-sm;
   }
 }
 
 // Secrets Health
+.secrets-card {
+  height: fit-content;
+}
+
 .secrets-issues {
   display: flex;
   flex-direction: column;
@@ -1077,12 +1237,6 @@ onUnmounted(() => {
 }
 
 // Top Users
-.top-users-list {
-  display: flex;
-  flex-direction: column;
-  gap: $spacing-sm;
-}
-
 .top-user-row {
   display: flex;
   align-items: center;
@@ -1188,18 +1342,32 @@ onUnmounted(() => {
   white-space: nowrap;
 }
 
+.dashboard-col {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-md;
+  min-width: 0;
+  height: fit-content;
+
+  @media (max-width: 768px) {
+    gap: $spacing-sm;
+  }
+}
+
 // Mini cards row (bot, backup, geo-block)
 .mini-cards-row {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: $spacing-md;
-  break-inside: avoid;
-  margin-bottom: $spacing-md;
 
-  @media (max-width: 480px) {
+  @media (max-width: 1024px) {
     grid-template-columns: repeat(2, 1fr);
     gap: $spacing-sm;
-    margin-bottom: $spacing-sm;
+  }
+
+  @media (min-width: 480px) and (max-width: 768px) {
+    grid-template-columns: repeat(4, 1fr);
+    gap: $spacing-md;
   }
 }
 
@@ -1217,10 +1385,19 @@ onUnmounted(() => {
   box-shadow: $shadow-sm;
   transition: border-color 0.15s;
   text-align: center;
+  position: relative;
 
   &:hover {
     border-color: $color-primary;
   }
+}
+
+.mini-card-loader {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  color: $text-secondary;
+  opacity: 0.5;
 }
 
 .mini-card-label {
@@ -1233,12 +1410,6 @@ onUnmounted(() => {
 }
 
 // Recent Activity
-.activity-list {
-  display: flex;
-  flex-direction: column;
-  gap: $spacing-xs;
-}
-
 .activity-item {
   display: flex;
   align-items: center;
@@ -1271,5 +1442,111 @@ onUnmounted(() => {
   color: $text-secondary;
   white-space: nowrap;
   flex-shrink: 0;
+}
+
+// Fullscreen modes
+.dashboard:fullscreen {
+  background: var(--bg-body);
+  padding: $spacing-xl;
+  overflow-y: auto;
+  width: 100vw;
+  height: 100vh;
+  box-sizing: border-box;
+}
+
+.dashboard-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.dashboard-header-fullscreen {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid $border-color;
+  padding-bottom: $spacing-md;
+
+  .title-container {
+    display: flex;
+    align-items: center;
+    gap: $spacing-xs;
+
+    h2 {
+      font-size: $font-size-xl;
+      font-weight: $font-weight-semibold;
+      margin: 0;
+      color: var(--text-primary, inherit);
+    }
+  }
+}
+
+// NOC-style hide properties for dashboard fullscreen
+.dashboard.fullscreen-mode {
+  .card-header-link {
+    display: none !important;
+  }
+  .proxy-actions {
+    display: none !important;
+  }
+}
+
+.no-data-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: $spacing-md;
+  color: $text-muted;
+  font-size: $font-size-sm;
+  min-height: 120px;
+  text-align: center;
+  gap: $spacing-xs;
+
+  span {
+    font-weight: $font-weight-medium;
+  }
+}
+
+.no-data-placeholder-small {
+  display: flex;
+  align-items: center;
+  gap: $spacing-xs;
+  color: $text-muted;
+  font-size: $font-size-sm;
+  padding: $spacing-xs 0;
+}
+
+.top-users-list {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-sm;
+  min-height: 120px;
+  justify-content: center;
+}
+
+.activity-list {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-xs;
+  min-height: 120px;
+  justify-content: center;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+.resource-grid.skeleton-loading {
+  animation: pulse 1.5s infinite ease-in-out;
+  pointer-events: none;
+
+  .progress-inner.placeholder-bar {
+    background-color: $border-color !important;
+  }
+  .resource-value, .resource-footer span {
+    color: $text-muted !important;
+  }
 }
 </style>

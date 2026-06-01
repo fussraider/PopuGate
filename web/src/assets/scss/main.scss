@@ -818,3 +818,130 @@ code {
     transform: translateY(4px);
   }
 }
+
+// ─── Live Telemetry badge (Global styles) ───────────────────────────
+@keyframes live-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 hsla(142, 76%, 45%, 0.6);
+    opacity: 1;
+  }
+  50% {
+    box-shadow: 0 0 0 5px hsla(142, 76%, 45%, 0);
+    opacity: 0.85;
+  }
+}
+
+@keyframes live-glow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+@keyframes connecting-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.6);
+    opacity: 1;
+  }
+  50% {
+    box-shadow: 0 0 0 5px rgba(245, 158, 11, 0);
+    opacity: 0.85;
+  }
+}
+
+@keyframes connecting-glow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+@keyframes disconnected-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
+    opacity: 1;
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(239, 68, 68, 0);
+    opacity: 0.7;
+  }
+}
+
+@keyframes disconnected-glow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.8; }
+}
+
+.live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px 2px 6px;
+  border-radius: 20px;
+  background: hsla(142, 76%, 45%, 0.12);
+  border: 1px solid hsla(142, 76%, 45%, 0.3);
+  margin-left: $spacing-sm;
+  transition: background 0.3s;
+  vertical-align: middle;
+
+  &:hover {
+    background: hsla(142, 76%, 45%, 0.18);
+  }
+
+  // Connecting override
+  &.live-connecting {
+    background: rgba(245, 158, 11, 0.12);
+    border-color: rgba(245, 158, 11, 0.3);
+
+    &:hover {
+      background: rgba(245, 158, 11, 0.18);
+    }
+
+    .live-dot {
+      background: rgb(245, 158, 11);
+      animation: connecting-pulse 1.8s ease-in-out infinite;
+    }
+
+    .live-label {
+      color: rgb(217, 119, 6);
+      animation: connecting-glow 1.8s ease-in-out infinite;
+    }
+  }
+
+  // Disconnected override
+  &.live-disconnected {
+    background: rgba(239, 68, 68, 0.12);
+    border-color: rgba(239, 68, 68, 0.3);
+
+    &:hover {
+      background: rgba(239, 68, 68, 0.18);
+    }
+
+    .live-dot {
+      background: rgb(239, 68, 68);
+      animation: disconnected-pulse 2.5s ease-in-out infinite;
+    }
+
+    .live-label {
+      color: rgb(220, 38, 38);
+      animation: disconnected-glow 2.5s ease-in-out infinite;
+    }
+  }
+}
+
+.live-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: hsl(142, 76%, 45%);
+  animation: live-pulse 1.8s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+.live-label {
+  font-size: 10px;
+  font-weight: $font-weight-semibold;
+  color: hsl(142, 60%, 42%);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  animation: live-glow 1.8s ease-in-out infinite;
+  line-height: 1;
+}
+

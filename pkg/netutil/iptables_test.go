@@ -151,3 +151,42 @@ func TestSetTCPMSSRule_InvalidMSS(t *testing.T) {
 		})
 	}
 }
+
+func TestPortRedirect_InvalidPorts(t *testing.T) {
+	m := NewIptablesManager()
+	invalidPorts := []int{0, -1, 70000}
+
+	for _, p := range invalidPorts {
+		t.Run("AddPortRedirect invalid primary", func(t *testing.T) {
+			if err := m.AddPortRedirect(p, 10443); err == nil {
+				t.Errorf("expected error for primary port %d", p)
+			}
+		})
+		t.Run("AddPortRedirect invalid temp", func(t *testing.T) {
+			if err := m.AddPortRedirect(443, p); err == nil {
+				t.Errorf("expected error for temp port %d", p)
+			}
+		})
+		t.Run("RemovePortRedirect invalid primary", func(t *testing.T) {
+			if err := m.RemovePortRedirect(p, 10443); err == nil {
+				t.Errorf("expected error for primary port %d", p)
+			}
+		})
+		t.Run("RemovePortRedirect invalid temp", func(t *testing.T) {
+			if err := m.RemovePortRedirect(443, p); err == nil {
+				t.Errorf("expected error for temp port %d", p)
+			}
+		})
+		t.Run("HasPortRedirect invalid primary", func(t *testing.T) {
+			if _, err := m.HasPortRedirect(p, 10443); err == nil {
+				t.Errorf("expected error for primary port %d", p)
+			}
+		})
+		t.Run("HasPortRedirect invalid temp", func(t *testing.T) {
+			if _, err := m.HasPortRedirect(443, p); err == nil {
+				t.Errorf("expected error for temp port %d", p)
+			}
+		})
+	}
+}
+

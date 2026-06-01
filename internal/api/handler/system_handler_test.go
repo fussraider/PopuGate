@@ -12,7 +12,7 @@ import (
 func setupSystemTestRouter(t *testing.T) (*gin.Engine, *SystemHandler) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
-	handler := NewSystemHandler()
+	handler := NewSystemHandler(nil)
 
 	r := gin.New()
 	r.GET("/api/v1/system/os", handler.GetOS)

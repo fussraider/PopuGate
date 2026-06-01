@@ -142,6 +142,28 @@ func (h *ProxyHandler) Reload(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
+// ReloadZeroDowntime handles POST /api/v1/proxy/reload-zero-downtime
+// @Summary      Zero-Downtime reload/restart of all proxy containers
+// @Description  Recreate all proxy containers and switch traffic without downtime using Swing Routing
+// @Tags         proxy
+// @Produce      json
+// @Success      200  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /proxy/reload-zero-downtime [post]
+func (h *ProxyHandler) ReloadZeroDowntime(c *gin.Context) {
+	if h.container == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "proxy service unavailable"})
+		return
+	}
+	if err := h.container.ReloadZeroDowntime(c.Request.Context()); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to hot reload proxy: %v", err)})
+		return
+	}
+	auditLog(c, "proxy.reload_zero_downtime", "proxy hot reloaded with zero downtime")
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
 // Status handles GET /api/v1/proxy/status
 // @Summary      Proxy status
 // @Description  Retrieve the current status of the proxy container
@@ -209,4 +231,48 @@ func (h *ProxyHandler) Logs(c *gin.Context) {
 	tail := c.DefaultQuery("tail", "100")
 	follow := c.Query("follow") == "true"
 	streamLogs(c, h.docker, containerName, tail, follow)
+}
+
+// StatusWS handles WebSocket connection for real-time proxy status updates.
+// @Summary      Stream real-time proxy status
+// @Description  Upgrades HTTP connection to WebSocket to receive periodic and pinpoint proxy and instance status updates.
+// @Tags         proxy
+// @Success      101  {object}  object "Switching Protocols"
+// @Security     BearerAuth
+// @Router       /proxy/status/ws [get]
+func (h *ProxyHandler) StatusWS(c *gin.Context) {
+	ws, err := WSUpgrader.Upgrade(c.Writer, c.Request, nil)
+	if err != nil {
+		return
+	}
+	defer func() { _ = ws.Close() }()
+
+	if h.container == nil {
+		_ = ws.WriteJSON(gin.H{"error": "proxy service unavailable"})
+		return
+	}
+
+	ch, unsubscribe := h.container.Subscribe()
+	defer unsubscribe()
+
+	// Send current state immediately
+	if status, err := h.container.Status(c.Request.Context()); err == nil {
+		if err := ws.WriteJSON(status); err != nil {
+			return
+		}
+	}
+
+	for {
+		select {
+		case status, ok := <-ch:
+			if !ok {
+				return
+			}
+			if err := ws.WriteJSON(status); err != nil {
+				return
+			}
+		case <-c.Request.Context().Done():
+			return
+		}
+	}
 }

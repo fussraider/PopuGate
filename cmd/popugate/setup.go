@@ -4,16 +4,18 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"syscall"
 
 	"github.com/spf13/cobra"
 
+	"github.com/fussraider/PopuGate/internal/database"
+	"github.com/fussraider/PopuGate/internal/service"
+	"github.com/fussraider/PopuGate/internal/store"
 	"github.com/fussraider/PopuGate/pkg/logger"
 	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/term"
-
-	"github.com/fussraider/PopuGate/internal/database"
-	"github.com/fussraider/PopuGate/internal/store"
 )
 
 // setupCmd represents the setup command.
@@ -33,27 +35,12 @@ Usage:
 
 func init() {
 	setupCmd.Flags().StringP("data", "d", "", "Data directory (default: auto-detect)")
+	setupCmd.Flags().Bool("enable-tcp-tune", false, "Enable Linux kernel TCP optimizations (BBR & FastOpen)")
+	setupCmd.Flags().Bool("disable-tcp-tune", false, "Disable Linux kernel TCP optimizations (BBR & FastOpen)")
 	rootCmd.AddCommand(setupCmd)
 }
 
-func runSetup(cmd *cobra.Command, args []string) error {
-	dataDir, _ := cmd.Flags().GetString("data")
-	if dataDir == "" {
-		dataDir = resolveDataDir()
-	}
-
-	dbPath := filepath.Join(dataDir, "settings.db")
-
-	// Open database
-	db, err := database.Open(database.Config{Path: dbPath})
-	if err != nil {
-		return fmt.Errorf("open database: %w", err)
-	}
-	defer func() { _ = database.Close() }()
-
-	settingsStore := store.NewSettingsStore(db)
-
-	ctx := context.Background()
+func handlePasswordSetup(ctx context.Context, settingsStore *store.SettingsStore, args []string) error {
 	hash, err := settingsStore.GetAuthPasswordHash(ctx)
 	if err != nil {
 		return fmt.Errorf("read password hash: %w", err)
@@ -90,6 +77,80 @@ func runSetup(cmd *cobra.Command, args []string) error {
 
 	logger.WithScope("setup").Infof("Admin password set successfully. You can now access the web UI.")
 	return nil
+}
+
+func handleSysctlSetup(ctx context.Context, settingsStore *store.SettingsStore, cmd *cobra.Command, args []string) error {
+	// TCP Optimizations stateful management
+	enableTuning, _ := cmd.Flags().GetBool("enable-tcp-tune")
+	disableTuning, _ := cmd.Flags().GetBool("disable-tcp-tune")
+
+	var runTuning bool
+	var tuneEnabled bool
+
+	if enableTuning {
+		runTuning = true
+		tuneEnabled = true
+	} else if disableTuning {
+		runTuning = true
+		tuneEnabled = false
+	} else if len(args) == 0 && runtime.GOOS == "linux" {
+		// Only ask interactive prompt on Linux
+		fmt.Print("Enable Linux kernel network TCP optimizations (BBR & TCP FastOpen)? [Y/n]: ")
+		var answer string
+		_, _ = fmt.Scanln(&answer)
+		answer = strings.ToLower(strings.TrimSpace(answer))
+		if answer == "" || answer == "y" || answer == "yes" {
+			runTuning = true
+			tuneEnabled = true
+		}
+	}
+
+	if !runTuning {
+		return nil
+	}
+
+	if runtime.GOOS != "linux" {
+		logger.WithScope("setup").Warnf("TCP BBR/FastOpen optimizations are only supported on Linux.")
+		return nil
+	}
+
+	if err := service.ConfigureSysctl(ctx, settingsStore, tuneEnabled); err != nil {
+		logger.WithScope("setup").Warnf("Failed to configure TCP optimizations: %v (You may need to run setup with root/sudo privileges)", err)
+		return nil
+	}
+
+	if tuneEnabled {
+		logger.WithScope("setup").Infof("Linux kernel TCP optimizations (BBR & FastOpen) applied successfully.")
+	} else {
+		logger.WithScope("setup").Infof("TCP optimizations disabled and original system configuration restored.")
+	}
+
+	return nil
+}
+
+func runSetup(cmd *cobra.Command, args []string) error {
+	dataDir, _ := cmd.Flags().GetString("data")
+	if dataDir == "" {
+		dataDir = resolveDataDir()
+	}
+
+	dbPath := filepath.Join(dataDir, "settings.db")
+
+	// Open database
+	db, err := database.Open(database.Config{Path: dbPath})
+	if err != nil {
+		return fmt.Errorf("open database: %w", err)
+	}
+	defer func() { _ = database.Close() }()
+
+	settingsStore := store.NewSettingsStore(db)
+	ctx := context.Background()
+
+	if err := handlePasswordSetup(ctx, settingsStore, args); err != nil {
+		return err
+	}
+
+	return handleSysctlSetup(ctx, settingsStore, cmd, args)
 }
 
 func readPasswordInteractive() (string, error) {

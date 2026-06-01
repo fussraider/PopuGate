@@ -19,14 +19,14 @@ export const useTrafficStore = defineStore('traffic', () => {
   let liveInterval: ReturnType<typeof setInterval> | null = null
   let wsControls: ReturnType<typeof useWebSocket> | null = null
 
-  async function load() {
-    loading.value = true
+  async function load(quiet = false) {
+    if (!quiet) loading.value = true
     try {
       const data = await trafficApi.get()
       global.value = data.global
       users.value = data.users
     } finally {
-      loading.value = false
+      if (!quiet) loading.value = false
     }
   }
 
@@ -42,15 +42,15 @@ export const useTrafficStore = defineStore('traffic', () => {
     }
   }
 
-  async function loadHistory(start: number, end: number, label?: string, aggregate?: string) {
-    historyLoading.value = true
+  async function loadHistory(start: number, end: number, label?: string, aggregate?: string, quiet = false) {
+    if (!quiet) historyLoading.value = true
     try {
       const data = await trafficApi.getHistory(start, end, label, aggregate)
       history.value = data.history ?? []
     } catch {
       history.value = []
     } finally {
-      historyLoading.value = false
+      if (!quiet) historyLoading.value = false
     }
   }
 

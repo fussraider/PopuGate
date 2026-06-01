@@ -108,6 +108,14 @@ func (s *TrafficService) fetchLiveMetrics(ctx context.Context) (*model.LiveMetri
 		UserMetrics: make(map[string]*model.UserLiveMetrics),
 	}
 
+	var runningContainers map[string]bool
+	if s.docker != nil {
+		runningContainers, _ = s.docker.ListRunningContainerNames(ctx)
+	}
+	if runningContainers == nil {
+		runningContainers = make(map[string]bool)
+	}
+
 	foundAny := false
 
 	for _, inst := range instances {
@@ -115,7 +123,9 @@ func (s *TrafficService) fetchLiveMetrics(ctx context.Context) (*model.LiveMetri
 			continue
 		}
 
-		url := fmt.Sprintf("http://%s:%d/metrics", s.dockerAddr, inst.MetricsPort)
+		metricsPort := s.resolveSwingMetricsPort(inst.Port, inst.MetricsPort, runningContainers)
+
+		url := fmt.Sprintf("http://%s:%d/metrics", s.dockerAddr, metricsPort)
 		resp, err := s.client.Get(url)
 		if err != nil {
 			trafficLog.Warnf("failed to fetch metrics from %s: %v", url, err)
@@ -130,27 +140,7 @@ func (s *TrafficService) fetchLiveMetrics(ctx context.Context) (*model.LiveMetri
 		}
 
 		foundAny = true
-		combined.UptimeSeconds = max(combined.UptimeSeconds, live.UptimeSeconds)
-		combined.ConnsCurrent += live.ConnsCurrent
-		combined.ConnsTotal += live.ConnsTotal
-		combined.ConnsBadTotal += live.ConnsBadTotal
-		combined.ConnsMECurrent += live.ConnsMECurrent
-		combined.ConnsDirectCurrent += live.ConnsDirectCurrent
-		combined.UpstreamAttemptTotal += live.UpstreamAttemptTotal
-		combined.UpstreamSuccessTotal += live.UpstreamSuccessTotal
-		combined.UpstreamFailTotal += live.UpstreamFailTotal
-		combined.MEWritersActive += live.MEWritersActive
-		combined.MEWritersWarm += live.MEWritersWarm
-
-		for user, metrics := range live.UserMetrics {
-			if _, ok := combined.UserMetrics[user]; !ok {
-				combined.UserMetrics[user] = &model.UserLiveMetrics{}
-			}
-			combined.UserMetrics[user].OctetsFromClient += metrics.OctetsFromClient
-			combined.UserMetrics[user].OctetsToClient += metrics.OctetsToClient
-			combined.UserMetrics[user].Connections += metrics.Connections
-			combined.UserMetrics[user].UniqueIPs += metrics.UniqueIPs
-		}
+		s.mergeInstanceMetrics(combined, live)
 	}
 
 	if !foundAny {
@@ -169,6 +159,43 @@ func (s *TrafficService) fetchLiveMetrics(ctx context.Context) (*model.LiveMetri
 	s.mu.Unlock()
 
 	return combined, nil
+}
+
+// resolveSwingMetricsPort returns the metrics port for the currently active container.
+// If a swing (dynamic) container is running for the given primary port, its metrics port is returned instead.
+func (s *TrafficService) resolveSwingMetricsPort(primaryPort, defaultMetricsPort int, runningContainers map[string]bool) int {
+	startPort := primaryPort + 10000
+	for i := 0; i < 100; i++ {
+		port := startPort + i
+		if runningContainers[fmt.Sprintf("popugate-telemt-%d", port)] {
+			return port + 100
+		}
+	}
+	return defaultMetricsPort
+}
+
+// mergeInstanceMetrics adds metrics from a single instance into the combined aggregator.
+func (s *TrafficService) mergeInstanceMetrics(combined, live *model.LiveMetrics) {
+	combined.UptimeSeconds = max(combined.UptimeSeconds, live.UptimeSeconds)
+	combined.ConnsCurrent += live.ConnsCurrent
+	combined.ConnsTotal += live.ConnsTotal
+	combined.ConnsBadTotal += live.ConnsBadTotal
+	combined.ConnsMECurrent += live.ConnsMECurrent
+	combined.ConnsDirectCurrent += live.ConnsDirectCurrent
+	combined.UpstreamAttemptTotal += live.UpstreamAttemptTotal
+	combined.UpstreamSuccessTotal += live.UpstreamSuccessTotal
+	combined.UpstreamFailTotal += live.UpstreamFailTotal
+	combined.MEWritersActive += live.MEWritersActive
+	combined.MEWritersWarm += live.MEWritersWarm
+	for user, metrics := range live.UserMetrics {
+		if _, ok := combined.UserMetrics[user]; !ok {
+			combined.UserMetrics[user] = &model.UserLiveMetrics{}
+		}
+		combined.UserMetrics[user].OctetsFromClient += metrics.OctetsFromClient
+		combined.UserMetrics[user].OctetsToClient += metrics.OctetsToClient
+		combined.UserMetrics[user].Connections += metrics.Connections
+		combined.UserMetrics[user].UniqueIPs += metrics.UniqueIPs
+	}
 }
 
 // Flush computes deltas from the latest Prometheus snapshot and persists them.

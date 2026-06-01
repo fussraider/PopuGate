@@ -1,12 +1,12 @@
 import {defineStore} from 'pinia'
-import {ref} from 'vue'
+import {reactive, ref} from 'vue'
 import {instancesApi} from '@/api/endpoints'
 import type {Instance} from '@/types/models'
 
 export const useInstancesStore = defineStore('instances', () => {
   const instances = ref<Instance[]>([])
   const loading = ref(false)
-  const actionLoading = ref<Map<number, string>>(new Map())
+  const actionLoading = reactive<Map<number, string>>(new Map())
   const bulkLoading = ref(false)
 
   async function load() {
@@ -25,9 +25,9 @@ export const useInstancesStore = defineStore('instances', () => {
 
   function setActionLoading(id: number, action: string | null) {
     if (action) {
-      actionLoading.value.set(id, action)
+      actionLoading.set(id, action)
     } else {
-      actionLoading.value.delete(id)
+      actionLoading.delete(id)
     }
   }
 

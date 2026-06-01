@@ -78,6 +78,12 @@ type Settings struct {
 	TelemtVersion string `json:"telemt_version"`
 	TelemtCommit  string `json:"telemt_commit"`
 	TelemtRepo    string `json:"telemt_repo"`
+
+	// Kernel Network Tuning (TCP BBR & FastOpen)
+	SysctlOptimizationsEnabled bool   `json:"sysctl_optimizations_enabled"`
+	OriginalQdisc             string `json:"original_qdisc"`
+	OriginalCongestionControl  string `json:"original_congestion_control"`
+	OriginalFastOpen          string `json:"original_fastopen"`
 }
 
 // DefaultSSHKeyPath returns the default SSH key location.
@@ -135,6 +141,7 @@ func DefaultSettings() Settings {
 		BackupRetentionDays:        7,
 		SecretAutoRotateDays:       0,
 		MaintenanceMode:            false,
+		SysctlOptimizationsEnabled: false,
 	}
 }
 
@@ -278,7 +285,6 @@ type ProxyStatus struct {
 	Instances     []InstanceStatus `json:"instances,omitempty"`
 }
 
-// InstanceStatus for multi-port instances.
 type InstanceStatus struct {
 	ID                  int64  `json:"id"`
 	Port                int    `json:"port"`
@@ -288,6 +294,9 @@ type InstanceStatus struct {
 	FakeTLS             bool   `json:"fake_tls"`
 	Status              string `json:"status"` // "healthy", "unhealthy", "stopped"
 	ContainerName       string `json:"container_name,omitempty"`
+	ActivePort          int    `json:"active_port,omitempty"`
+	ActiveMetricsPort   int    `json:"active_metrics_port,omitempty"`
+	Draining            bool   `json:"draining"`
 	MatchingSecretCount int    `json:"matching_secret_count"`
 }
 

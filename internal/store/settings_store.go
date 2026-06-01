@@ -99,6 +99,12 @@ func (s *SettingsStore) Load(ctx context.Context) (*model.Settings, error) {
 	settings.TelemtCommit = getString(kv, "telemt_commit", "")
 	settings.TelemtRepo = getString(kv, "telemt_repo", "")
 
+	// Kernel Network Tuning (TCP BBR & FastOpen)
+	settings.SysctlOptimizationsEnabled = getBool(kv, "sysctl_optimizations_enabled")
+	settings.OriginalQdisc = getString(kv, "original_qdisc", "")
+	settings.OriginalCongestionControl = getString(kv, "original_congestion_control", "")
+	settings.OriginalFastOpen = getString(kv, "original_fastopen", "")
+
 	settings.Validate()
 	return &settings, nil
 }

@@ -320,3 +320,86 @@ func (m *IptablesManager) RemoveTCPMSSRules(port int) error {
 	}
 	return nil
 }
+
+// AddPortRedirect creates an iptables NAT redirect rule from primaryPort to tempPort.
+func (m *IptablesManager) AddPortRedirect(primaryPort, tempPort int) error {
+	if err := ValidatePort(strconv.Itoa(primaryPort)); err != nil {
+		return err
+	}
+	if err := ValidatePort(strconv.Itoa(tempPort)); err != nil {
+		return err
+	}
+
+	primaryStr := strconv.Itoa(primaryPort)
+	tempStr := strconv.Itoa(tempPort)
+
+	// Check if rule already exists
+	check := exec.Command("iptables", "-t", "nat", "-C", "PREROUTING",
+		"-p", "tcp", "--dport", primaryStr,
+		"-j", "REDIRECT", "--to-ports", tempStr)
+	if check.Run() == nil {
+		return nil // rule exists
+	}
+
+	err := runCmd("iptables", "-t", "nat", "-A", "PREROUTING",
+		"-p", "tcp", "--dport", primaryStr,
+		"-j", "REDIRECT", "--to-ports", tempStr)
+	if err != nil {
+		return fmt.Errorf("add port redirect %d -> %d: %w", primaryPort, tempPort, err)
+	}
+	iptablesLog.Infof("port redirect rule added: %d -> %d", primaryPort, tempPort)
+	return nil
+}
+
+// RemovePortRedirect deletes the iptables NAT redirect rule from primaryPort to tempPort.
+func (m *IptablesManager) RemovePortRedirect(primaryPort, tempPort int) error {
+	if err := ValidatePort(strconv.Itoa(primaryPort)); err != nil {
+		return err
+	}
+	if err := ValidatePort(strconv.Itoa(tempPort)); err != nil {
+		return err
+	}
+
+	primaryStr := strconv.Itoa(primaryPort)
+	tempStr := strconv.Itoa(tempPort)
+
+	// Check if rule exists before attempting delete to avoid errors
+	check := exec.Command("iptables", "-t", "nat", "-C", "PREROUTING",
+		"-p", "tcp", "--dport", primaryStr,
+		"-j", "REDIRECT", "--to-ports", tempStr)
+	if check.Run() != nil {
+		return nil // rule does not exist
+	}
+
+	err := runCmd("iptables", "-t", "nat", "-D", "PREROUTING",
+		"-p", "tcp", "--dport", primaryStr,
+		"-j", "REDIRECT", "--to-ports", tempStr)
+	if err != nil {
+		return fmt.Errorf("remove port redirect %d -> %d: %w", primaryPort, tempPort, err)
+	}
+	iptablesLog.Infof("port redirect rule removed: %d -> %d", primaryPort, tempPort)
+	return nil
+}
+
+// HasPortRedirect checks if there is an active iptables NAT redirect rule from primaryPort to tempPort.
+func (m *IptablesManager) HasPortRedirect(primaryPort, tempPort int) (bool, error) {
+	if err := ValidatePort(strconv.Itoa(primaryPort)); err != nil {
+		return false, err
+	}
+	if err := ValidatePort(strconv.Itoa(tempPort)); err != nil {
+		return false, err
+	}
+
+	primaryStr := strconv.Itoa(primaryPort)
+	tempStr := strconv.Itoa(tempPort)
+
+	check := exec.Command("iptables", "-t", "nat", "-C", "PREROUTING",
+		"-p", "tcp", "--dport", primaryStr,
+		"-j", "REDIRECT", "--to-ports", tempStr)
+	err := check.Run()
+	if err == nil {
+		return true, nil
+	}
+	return false, nil
+}
+

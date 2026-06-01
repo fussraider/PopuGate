@@ -9,14 +9,14 @@ export const useAuditStore = defineStore('audit', () => {
   const limit = ref(100)
   const offset = ref(0)
 
-  async function load(newLimit = 100, newOffset = 0) {
-    loading.value = true
+  async function load(newLimit = 100, newOffset = 0, quiet = false) {
+    if (!quiet) loading.value = true
     try {
       limit.value = newLimit
       offset.value = newOffset
       entries.value = (await auditApi.list(newLimit, newOffset)) || []
     } finally {
-      loading.value = false
+      if (!quiet) loading.value = false
     }
   }
 

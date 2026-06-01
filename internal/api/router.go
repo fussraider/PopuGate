@@ -186,6 +186,8 @@ func SetupRouter(cfg RouterConfig) *gin.Engine {
 		protected.POST("/instances/:id/start", instanceHandler.StartInstance)
 		protected.POST("/instances/:id/stop", instanceHandler.StopInstance)
 		protected.POST("/instances/:id/reload", instanceHandler.ReloadInstance)
+		protected.POST("/instances/:id/restart", instanceHandler.RestartInstance)
+		protected.POST("/instances/:id/reload-config", instanceHandler.ReloadInstanceConfig)
 		protected.POST("/instances/:id/refresh-fronting", instanceHandler.RefreshFronting)
 		protected.GET("/instances/:id/status", instanceHandler.InstanceStatus)
 		protected.GET("/instances/:id/logs", instanceHandler.InstanceLogs)
@@ -198,7 +200,9 @@ func SetupRouter(cfg RouterConfig) *gin.Engine {
 		protected.POST("/proxy/stop", proxyHandler.Stop)
 		protected.POST("/proxy/restart", proxyHandler.Restart)
 		protected.POST("/proxy/reload", proxyHandler.Reload)
+		protected.POST("/proxy/reload-zero-downtime", proxyHandler.ReloadZeroDowntime)
 		protected.GET("/proxy/status", proxyHandler.Status)
+		protected.GET("/proxy/status/ws", proxyHandler.StatusWS)
 		protected.GET("/proxy/logs", proxyHandler.Logs)
 
 		// Docker/Engine
@@ -285,7 +289,7 @@ func SetupRouter(cfg RouterConfig) *gin.Engine {
 		protected.DELETE("/backups/:filename", backupHandler.Delete)
 
 		// System
-		systemHandler := handler.NewSystemHandler()
+		systemHandler := handler.NewSystemHandler(cfg.Settings)
 		protected.GET("/system/resources", systemHandler.GetResources)
 		protected.GET("/system/resources/ws", systemHandler.StreamResources)
 		protected.GET("/system/os", systemHandler.GetOS)
@@ -294,6 +298,7 @@ func SetupRouter(cfg RouterConfig) *gin.Engine {
 		protected.GET("/system/service/status", systemHandler.ServiceStatus)
 		protected.POST("/system/service/restart", systemHandler.RestartService)
 		protected.POST("/system/service/reload", systemHandler.ReloadService)
+		protected.POST("/system/sysctl", systemHandler.ConfigureSysctl)
 
 		// Scheduler
 		if cfg.SchedulerSvc != nil {

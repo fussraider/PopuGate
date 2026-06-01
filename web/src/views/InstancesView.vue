@@ -70,8 +70,27 @@
       @update:selected-keys="onSelectionChange"
     >
       <template #cell-port="{ item }">
-        <code>{{ item.port }}</code>
-        <span class="text-muted text-xs">:{{ item.metrics_port }}</span>
+        <div class="flex flex-col">
+          <div class="flex items-center">
+            <template v-if="getActivePort(item) !== item.port">
+              <Tooltip :text="isDraining(item) ? t('instances.port_redirect_draining_tooltip', { port: item.port, active: getActivePort(item) }) : t('instances.port_redirect_tooltip', { port: item.port, active: getActivePort(item) })">
+                <span class="badge badge-info badge-sm text-xs font-mono flex items-center gap-1 redirect-badge">
+                  <Loader2 v-if="isDraining(item)" :size="10" class="animate-spin" />
+                  {{ item.port }} ➔ {{ getActivePort(item) }}
+                </span>
+              </Tooltip>
+            </template>
+            <code v-else>{{ item.port }}</code>
+          </div>
+          <div class="flex items-center gap-1 text-muted text-xs">
+            <span v-if="getActiveMetricsPort(item) === item.metrics_port">:{{ item.metrics_port }}</span>
+            <Tooltip v-else :text="t('instances.metrics_port_redirect_tooltip', { port: item.metrics_port, active: getActiveMetricsPort(item) })">
+              <span class="dynamic-metrics-port">
+                :{{ getActiveMetricsPort(item) }}
+              </span>
+            </Tooltip>
+          </div>
+        </div>
       </template>
       <template #cell-label="{ item }">{{ item.label || '—' }}</template>
       <template #cell-tls_domain="{ item }">
@@ -109,20 +128,30 @@
           <button class="btn btn-ghost btn-sm" @click="openEditModal(item)" :title="t('common.edit')">
             <Pencil :size="16" />
           </button>
-          <button class="btn btn-ghost btn-sm" @click="handleInstanceAction(item, 'start')" :title="t('instances.start')"
+          <button class="btn btn-ghost btn-sm" @click="handleInstanceAction(item, 'start')" :title="t('instances.start_hint')"
                   :disabled="store.actionLoading.has(item.id) || !item.enabled || isInstanceRunning(item)">
             <Loader2 v-if="store.actionLoading.get(item.id) === 'start'" :size="16" class="animate-spin" />
             <Play v-else :size="16" />
           </button>
-          <button class="btn btn-ghost btn-sm" @click="handleInstanceAction(item, 'stop')" :title="t('instances.stop')"
+          <button class="btn btn-ghost btn-sm" @click="handleInstanceAction(item, 'stop')" :title="t('instances.stop_hint')"
                   :disabled="store.actionLoading.has(item.id) || !isInstanceRunning(item)">
             <Loader2 v-if="store.actionLoading.get(item.id) === 'stop'" :size="16" class="animate-spin" />
             <Square v-else :size="16" />
           </button>
-          <button class="btn btn-ghost btn-sm" @click="handleInstanceAction(item, 'reload')" :title="t('instances.reload')"
+          <button class="btn btn-ghost btn-sm" @click="handleInstanceAction(item, 'restart')" :title="t('instances.restart_hint')"
+                  :disabled="store.actionLoading.has(item.id) || !isInstanceRunning(item)">
+            <Loader2 v-if="store.actionLoading.get(item.id) === 'restart'" :size="16" class="animate-spin" />
+            <RefreshCw v-else :size="16" />
+          </button>
+          <button class="btn btn-ghost btn-sm" @click="handleInstanceAction(item, 'reload')" :title="t('instances.reload_hint')"
                   :disabled="store.actionLoading.has(item.id) || !isInstanceRunning(item)">
             <Loader2 v-if="store.actionLoading.get(item.id) === 'reload'" :size="16" class="animate-spin" />
-            <RefreshCw v-else :size="16" />
+            <Zap v-else :size="16" />
+          </button>
+          <button class="btn btn-ghost btn-sm" @click="handleInstanceAction(item, 'reloadConfig')" :title="t('instances.reload_config_hint')"
+                  :disabled="store.actionLoading.has(item.id) || !isInstanceRunning(item)">
+            <Loader2 v-if="store.actionLoading.get(item.id) === 'reloadConfig'" :size="16" class="animate-spin" />
+            <RotateCw v-else :size="16" />
           </button>
           <button v-if="item.tls_fronting && item.fake_tls" class="btn btn-ghost btn-sm"
                   @click="handleRefreshFronting(item)" :title="t('instances.refresh_fronting')"
@@ -276,9 +305,21 @@
       </button>
       <button class="action-sheet-item"
               :disabled="store.actionLoading.has(instanceActions.activeItem.value?.id ?? 0) || !isInstanceRunning(instanceActions.activeItem.value!)"
+              @click="handleInstanceAction(instanceActions.activeItem.value!, 'restart'); instanceActions.close()">
+        <Loader2 v-if="store.actionLoading.get(instanceActions.activeItem.value?.id ?? 0) === 'restart'" :size="16" class="animate-spin" />
+        <RefreshCw v-else :size="16" /> {{ t('instances.restart') }}
+      </button>
+      <button class="action-sheet-item"
+              :disabled="store.actionLoading.has(instanceActions.activeItem.value?.id ?? 0) || !isInstanceRunning(instanceActions.activeItem.value!)"
               @click="handleInstanceAction(instanceActions.activeItem.value!, 'reload'); instanceActions.close()">
         <Loader2 v-if="store.actionLoading.get(instanceActions.activeItem.value?.id ?? 0) === 'reload'" :size="16" class="animate-spin" />
-        <RefreshCw v-else :size="16" /> {{ t('instances.reload') }}
+        <Zap v-else :size="16" /> {{ t('instances.reload') }}
+      </button>
+      <button class="action-sheet-item"
+              :disabled="store.actionLoading.has(instanceActions.activeItem.value?.id ?? 0) || !isInstanceRunning(instanceActions.activeItem.value!)"
+              @click="handleInstanceAction(instanceActions.activeItem.value!, 'reloadConfig'); instanceActions.close()">
+        <Loader2 v-if="store.actionLoading.get(instanceActions.activeItem.value?.id ?? 0) === 'reloadConfig'" :size="16" class="animate-spin" />
+        <RotateCw v-else :size="16" /> {{ t('instances.reload_config') }}
       </button>
       <button v-if="instanceActions.activeItem.value?.tls_fronting && instanceActions.activeItem.value?.fake_tls"
               class="action-sheet-item"
@@ -305,7 +346,7 @@
 </template>
 
 <script setup lang="ts">
-import {computed, onMounted, reactive, ref, watch} from 'vue'
+import {computed, onMounted, onUnmounted, reactive, ref, watch} from 'vue'
 import {useI18n} from 'vue-i18n'
 import {useInstancesStore} from '@/stores/instances'
 import {useProxyStore} from '@/stores/proxy'
@@ -337,7 +378,8 @@ import {
   RotateCw,
   Server,
   Square,
-  Trash2
+  Trash2,
+  Zap
 } from '@lucide/vue'
 import type {Instance} from '@/types/models'
 
@@ -393,7 +435,32 @@ function getInstanceSecretCount(id: number): number {
 }
 
 function getContainerName(item: Instance): string {
+  const activeInfo = proxyStore.status?.instances?.find(i => i.id === item.id)
+  if (activeInfo && activeInfo.container_name) {
+    return activeInfo.container_name
+  }
   return `popugate-telemt-${item.port}`
+}
+
+function getActivePort(item: Instance): number {
+  const activeInfo = proxyStore.status?.instances?.find(i => i.id === item.id)
+  if (activeInfo && activeInfo.active_port) {
+    return activeInfo.active_port
+  }
+  return item.port
+}
+
+function getActiveMetricsPort(item: Instance): number {
+  const activeInfo = proxyStore.status?.instances?.find(i => i.id === item.id)
+  if (activeInfo && activeInfo.active_metrics_port) {
+    return activeInfo.active_metrics_port
+  }
+  return item.metrics_port
+}
+
+function isDraining(item: Instance): boolean {
+  const activeInfo = proxyStore.status?.instances?.find(i => i.id === item.id)
+  return activeInfo?.draining ?? false
 }
 
 const parsedInstanceData = computed(() => {
@@ -585,14 +652,34 @@ async function handleRemove(item: Instance) {
   }
 }
 
-async function handleInstanceAction(item: Instance, action: 'start' | 'stop' | 'reload') {
+async function handleInstanceAction(item: Instance, action: 'start' | 'stop' | 'restart' | 'reload' | 'reloadConfig') {
+  if (action === 'stop') {
+    const ok = await confirm({
+      title: t('instances.stop_confirm_title') || 'Stop Instance',
+      message: t('instances.stop_confirm_message', { label: item.label }) || `Are you sure you want to stop instance "${item.label}" immediately?`,
+      confirmText: t('common.stop'),
+      variant: 'danger',
+    })
+    if (!ok) return
+  } else if (action === 'restart') {
+    const ok = await confirm({
+      title: t('instances.restart_confirm_title') || 'Restart Instance',
+      message: t('instances.restart_confirm_message', { label: item.label }) || `Are you sure you want to restart instance "${item.label}"?`,
+      confirmText: t('common.restart'),
+      variant: 'warning',
+    })
+    if (!ok) return
+  }
+
   store.setActionLoading(item.id, action)
   try {
     await instancesApi[action](item.id)
     const messages: Record<string, string> = {
       start: t('instances.started', { label: item.label }),
       stop: t('instances.stopped', { label: item.label }),
+      restart: t('instances.restarted', { label: item.label }),
       reload: t('instances.reloaded', { label: item.label }),
+      reloadConfig: t('instances.reload_config_success', { label: item.label }),
     }
     toast.success(messages[action])
     await proxyStore.loadStatus()
@@ -663,11 +750,39 @@ async function handleBulkToggle(enabled: boolean) {
 onMounted(() => {
   store.load()
   proxyStore.loadStatus()
+  proxyStore.startStatusStream()
+})
+
+onUnmounted(() => {
+  proxyStore.stopStatusStream()
 })
 </script>
 
 <style scoped lang="scss">
 @use '@/assets/scss/variables' as *;
+
+.dynamic-metrics-port {
+  color: $color-info;
+  border-bottom: 1px dotted $color-info;
+  text-decoration: none;
+  transition: all 0.2s ease-in-out;
+
+  &:hover {
+    border-bottom-style: solid;
+    opacity: 0.8;
+    cursor: pointer;
+  }
+}
+
+.redirect-badge {
+  transition: all 0.2s ease-in-out;
+
+  &:hover {
+    filter: brightness(0.95);
+    transform: translateY(-0.5px);
+    cursor: pointer;
+  }
+}
 
 .status-cell {
   display: flex;

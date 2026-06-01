@@ -350,6 +350,7 @@ func DefaultTasks() []Task {
 		{Name: "quota-reset", Schedule: "0 0 0 1 * *", Timeout: 2 * time.Minute},        // monthly on 1st
 		{Name: "auto-rotate", Schedule: "0 0 4 * * *", Disabled: true},                  // daily at 4:00 (off by default)
 		{Name: "upstream-health", Schedule: "0 */5 * * * *", Timeout: 2 * time.Minute},  // every 5 min
+		{Name: "fronting-update", Schedule: "0 0 5 * * *", Timeout: 5 * time.Minute},    // daily at 5:00
 	}
 }
 

@@ -187,6 +187,9 @@ Pre-configured limit presets (connections, IPs, quota, expiration, tags) for qui
 Independent proxies with their own port, masking domains, FakeTLS, and access tags. Multi-domain support, hot reload, logs (SSE), bulk operations.
 
 - **Anti-Blocking**: Per-instance TCPMSS fragmentation to defeat DPI ClientHello reassembly, and TLS fronting content serving for active probing defense
+- **Zero-Downtime Reload (Swing Routing)**: Recreates containers on a swing port, atomically redirects traffic via iptables NAT, drains old connections gracefully, then stops the old container — all without dropping a single live connection
+- **Hot Config Reload**: Apply secret and upstream changes to a running container instantly without any restart
+- **Live Logs**: Real-time per-instance container log streaming via SSE
 
 ### 🔀 Upstreams
 Proxy chains (SOCKS4/SOCKS5) with weight-based balancing and network interface binding.
@@ -220,8 +223,13 @@ Docker availability check, installation, building and updating the `telemt` engi
 ### 🖥️ System Menu
 Install/remove the systemd service, restart, view status and system information.
 
+- **TCP Network Tuning**: One-click enable/disable of TCP BBR congestion control and TCP FastOpen kernel optimizations (sysctl) with automatic backup and rollback to original values
+
 ### ⚙️ Settings
 Global parameters: Docker CPU/memory limits, custom IP, FakeTLS, PROXY protocol, custom Telegram URLs, Ad Tag, secret auto-rotation, maintenance mode, backup rotation, debug mode.
+
+### 📊 Dashboard Live Telemetry
+The Engine & Health card header shows a pulsing green **Live** badge when the real-time WebSocket status stream is connected, giving instant visual confirmation of live telemetry.
 
 ---
 
@@ -234,6 +242,30 @@ sudo systemctl status popugate
 sudo systemctl restart popugate
 sudo systemctl stop popugate
 ```
+
+---
+
+## 📖 API Reference
+
+The REST API is fully documented via **Swagger / OpenAPI 2.0**.
+
+- **Interactive UI** (self-hosted): `http://<your-server>:8090/swagger/index.html`
+- **External viewer**: [Swagger Petstore viewer](https://petstore.swagger.io/?url=https://raw.githubusercontent.com/fussraider/PopuGate/master/docs/swagger.json)
+
+All protected endpoints require a `Bearer` JWT token in the `Authorization` header (obtained via `POST /api/v1/auth/login`).
+
+### WebSocket Streaming Endpoints
+
+Four endpoints stream data over WebSocket connections (not standard HTTP REST):
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/v1/proxy/status/ws` | Real-time proxy status updates (running state, instance list, traffic) |
+| `GET /api/v1/traffic/live/ws` | Live metrics stream (connections, user metrics) |
+| `GET /api/v1/system/resources/ws` | Server resource monitoring (CPU, RAM, disk, load) |
+| `GET /api/v1/engine/update/ws` | Engine update progress streaming |
+
+WebSocket connections also require the `Authorization: Bearer <token>` header (or `?token=` query param for browser clients that cannot set headers).
 
 ---
 
@@ -268,3 +300,6 @@ make fmt    # gofmt + goimports
 ```
 
 Tests are isolated and do not require Docker or a network environment.
+
+Code quality is enforced with `gocyclo` — all functions maintain a cyclomatic complexity of ≤ 15.
+

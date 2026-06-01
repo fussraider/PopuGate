@@ -10,14 +10,14 @@ export const useBackupStore = defineStore('backup', () => {
   const restoring = ref(false)
   const encryptionEnabled = ref(false)
 
-  async function load() {
-    loading.value = true
+  async function load(quiet = false) {
+    if (!quiet) loading.value = true
     try {
       const data = await backupApi.list()
       backups.value = data.backups
       encryptionEnabled.value = data.encryption_enabled
     } finally {
-      loading.value = false
+      if (!quiet) loading.value = false
     }
   }
 

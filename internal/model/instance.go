@@ -13,6 +13,9 @@ type Instance struct {
 	MetricsPort int    `json:"metrics_port" db:"metrics_port"`
 	Enabled     bool   `json:"enabled" db:"enabled"`
 	Label       string `json:"label" db:"label"`
+	// Runtime active ports (ignored by DB, populated on demand for UI display)
+	ActivePort        int `json:"active_port,omitempty" db:"-"`
+	ActiveMetricsPort int `json:"active_metrics_port,omitempty" db:"-"`
 	// Per-instance proxy configuration
 	TLSDomain     string `json:"tls_domain" db:"tls_domain"`           // Primary masking domain (required)
 	TLSDomains    string `json:"tls_domains" db:"tls_domains"`         // Additional domains (JSON array)

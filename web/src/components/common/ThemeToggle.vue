@@ -4,7 +4,7 @@
       class="theme-btn"
       :class="{ active: true }"
       @click="cycleTheme"
-      :title="label"
+      v-tooltip="label"
     >
       <Monitor v-if="preference === 'auto'" :size="14" />
       <Sun v-else-if="preference === 'light'" :size="14" />
@@ -54,9 +54,10 @@ function cycleTheme() {
   display: flex;
   align-items: center;
   justify-content: center;
+  height: 22px;
   background: none;
   border: none;
-  padding: 4px 8px;
+  padding: 0 8px;
   color: $text-muted;
   cursor: pointer;
   border-radius: $border-radius;

@@ -41,8 +41,19 @@
         <button class="hamburger" @click="sidebarOpen = true"><Menu :size="22" /></button>
         <div class="topbar-title">
           <h2>{{ pageTitle }}</h2>
+          <LiveBadge v-if="route.path === '/'" />
         </div>
         <div class="topbar-actions">
+          <div v-if="route.path === '/'" class="fullscreen-toggle">
+            <button
+              class="fullscreen-btn"
+              @click="toggleFullscreen"
+              v-tooltip="isFullscreen ? t('dashboard.exit_fullscreen') : t('dashboard.fullscreen')"
+            >
+              <Minimize v-if="isFullscreen" :size="14" />
+              <Maximize v-else :size="14" />
+            </button>
+          </div>
           <ThemeToggle />
           <LanguageSwitcher />
           <button class="btn btn-ghost btn-sm" @click="handleLogout"><LogOut :size="16" /> {{ t('common.logout') }}</button>
@@ -62,7 +73,7 @@
 </template>
 
 <script setup lang="ts">
-import {computed, onMounted, ref} from 'vue'
+import {computed, onMounted, onUnmounted, ref} from 'vue'
 import {useRoute, useRouter} from 'vue-router'
 import {useI18n} from 'vue-i18n'
 import {useAuthStore} from '@/stores/auth'
@@ -74,6 +85,7 @@ import {useUpstreamsStore} from '@/stores/upstreams'
 import Toast from '@/components/common/Toast.vue'
 import ThemeToggle from '@/components/common/ThemeToggle.vue'
 import LanguageSwitcher from '@/components/common/LanguageSwitcher.vue'
+import LiveBadge from '@/components/common/LiveBadge.vue'
 import {
   Bot,
   CalendarClock,
@@ -90,6 +102,8 @@ import {
   Package,
   RefreshCw,
   Save,
+  Maximize,
+  Minimize,
   Server,
   Settings,
   TrendingUp,
@@ -122,6 +136,11 @@ onMounted(() => {
   schedulerStore.load()
   secretsStore.load()
   upstreamsStore.load()
+  document.addEventListener('fullscreenchange', handleFullscreenChange)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('fullscreenchange', handleFullscreenChange)
 })
 
 const navItems = computed(() => [
@@ -200,6 +219,32 @@ const pageTitle = computed(() => {
 async function handleLogout() {
   await auth.logout()
   router.push('/auth/login')
+}
+
+const isFullscreen = ref(false)
+
+function toggleFullscreen() {
+  const el = document.querySelector('.dashboard')
+  if (!el) return
+  
+  if (!document.fullscreenElement) {
+    el.requestFullscreen()
+      .then(() => {
+        isFullscreen.value = true
+      })
+      .catch((err) => {
+        console.error('Error entering fullscreen:', err)
+      })
+  } else {
+    document.exitFullscreen()
+      .then(() => {
+        isFullscreen.value = false
+      })
+  }
+}
+
+function handleFullscreenChange() {
+  isFullscreen.value = !!document.fullscreenElement
 }
 </script>
 
@@ -404,6 +449,9 @@ async function handleLogout() {
 
 .topbar-title {
   flex: 1;
+  display: flex;
+  align-items: center;
+  gap: $spacing-xs;
 
   h2 {
     font-size: $font-size-lg;
@@ -424,5 +472,31 @@ async function handleLogout() {
   padding: $spacing-lg;
 
   @media (max-width: 768px) { padding: $spacing-md; }
+}
+
+.fullscreen-toggle {
+  display: flex;
+  background: var(--bg-code);
+  padding: 4px;
+  border-radius: $border-radius;
+}
+
+.fullscreen-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 22px;
+  background: none;
+  border: none;
+  padding: 0 8px;
+  color: $text-muted;
+  cursor: pointer;
+  border-radius: $border-radius;
+  transition: all $transition-fast;
+
+  &:hover {
+    color: $text-primary;
+    background: var(--bg-table-hover);
+  }
 }
 </style>

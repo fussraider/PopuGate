@@ -126,7 +126,7 @@ func runServer(cmd *cobra.Command, args []string) {
 		updateSvc: svcs.update, telemtUpdateSvc: svcs.telemtUpdate, telemtCfg: svcs.telemtCfg,
 		dockerUpdateSvc: svcs.dockerUpdate,
 		notify: notifyFn, notifyWithBtns: notifyWithBtns, trafficStore: stores.traffic, secretSvc: svcs.secret,
-		upstreamSvc: svcs.upstream, auditSvc: auditSvc,
+		upstreamSvc: svcs.upstream, auditSvc: auditSvc, containerSvc: svcs.container,
 	})
 
 	startScheduler(sched, tasks, stores.scheduler, botDeps, stores.scheduler)
@@ -583,6 +583,7 @@ type schedulerTaskParams struct {
 	secretSvc       *service.SecretService
 	upstreamSvc     *service.UpstreamService
 	auditSvc        *service.AuditService
+	containerSvc    *service.ContainerService
 }
 
 func prepareSchedulerTasks(p schedulerTaskParams) (*scheduler.Scheduler, []scheduler.Task) {
@@ -598,22 +599,23 @@ func prepareSchedulerTasks(p schedulerTaskParams) (*scheduler.Scheduler, []sched
 
 func buildTaskFn(name string, p schedulerTaskParams) func(context.Context) error {
 	builders := map[string]func(schedulerTaskParams) func(context.Context) error{
-		"traffic-flush":    buildTrafficFlush,
-		"quota-check":      buildQuotaCheck,
-		"expiry-check":     buildExpiryCheck,
-		"health-check":     buildHealthCheck,
-		"replication-sync": buildReplicationSync,
-		"token-cleanup":    buildTokenCleanup,
-		"daily-backup":     buildDailyBackup,
-		"backup-cleanup":   buildBackupCleanup,
-		"telegram-report":  buildTelegramReport,
-		"update-check":     buildUpdateCheck,
-		"telemt-check":     buildTelemtCheck,
+		"traffic-flush":     buildTrafficFlush,
+		"quota-check":       buildQuotaCheck,
+		"expiry-check":      buildExpiryCheck,
+		"health-check":      buildHealthCheck,
+		"replication-sync":  buildReplicationSync,
+		"token-cleanup":     buildTokenCleanup,
+		"daily-backup":      buildDailyBackup,
+		"backup-cleanup":    buildBackupCleanup,
+		"telegram-report":   buildTelegramReport,
+		"update-check":      buildUpdateCheck,
+		"telemt-check":      buildTelemtCheck,
 		"docker-host-check": buildDockerHostCheck,
-		"history-cleanup":  buildHistoryCleanup,
-		"quota-reset":      buildQuotaReset,
-		"auto-rotate":      buildAutoRotate,
-		"upstream-health":  buildUpstreamHealth,
+		"history-cleanup":   buildHistoryCleanup,
+		"quota-reset":       buildQuotaReset,
+		"auto-rotate":       buildAutoRotate,
+		"upstream-health":   buildUpstreamHealth,
+		"fronting-update":   buildFrontingUpdate,
 	}
 	fn, ok := builders[name]
 	if !ok {
@@ -854,6 +856,13 @@ func buildUpstreamHealth(p schedulerTaskParams) func(context.Context) error {
 		return nil
 	}
 	return func(ctx context.Context) error { return p.upstreamSvc.CheckAllUpstreams(ctx) }
+}
+
+func buildFrontingUpdate(p schedulerTaskParams) func(context.Context) error {
+	if p.containerSvc == nil {
+		return nil
+	}
+	return func(ctx context.Context) error { return p.containerSvc.RefreshAllFrontingContent(ctx) }
 }
 
 func sendPeriodicReport(ctx context.Context, b *bot.Bot, settings *store.SettingsStore, secrets *store.SecretStore, trafficSvc *service.TrafficService) error {

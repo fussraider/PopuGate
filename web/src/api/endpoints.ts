@@ -227,6 +227,10 @@ export const instancesApi = {
 
   reload: (id: number) =>
     api.post(`/instances/${id}/reload`, {}, { timeout: 120000 }),
+  restart: (id: number) =>
+    api.post(`/instances/${id}/restart`, {}, { timeout: 300000 }),
+  reloadConfig: (id: number) =>
+    api.post(`/instances/${id}/reload-config`, {}, { timeout: 120000 }),
 
   status: (id: number) =>
     api.get<{ id: number; status: string }>(`/instances/${id}/status`).then((r) => r.data),
@@ -250,6 +254,7 @@ export const proxyApi = {
   stop: () => api.post('/proxy/stop', {}, { timeout: 300000 }),
   restart: () => api.post('/proxy/restart', {}, { timeout: 300000 }),
   reload: () => api.post('/proxy/reload', {}, { timeout: 120000 }),
+  reloadZeroDowntime: () => api.post('/proxy/reload-zero-downtime', {}, { timeout: 300000 }),
   status: () => api.get<ProxyStatus>('/proxy/status').then((r) => r.data),
   logs: (tail = '100', follow = false) =>
     api.get<string>(`/proxy/logs?tail=${tail}&follow=${follow}`).then((r) => r.data),

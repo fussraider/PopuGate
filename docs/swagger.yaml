@@ -1,5 +1,10 @@
 basePath: /api/v1
 definitions:
+  handler.SysctlRequest:
+    properties:
+      enabled:
+        type: boolean
+    type: object
   handler.addInstanceRequest:
     properties:
       fake_tls:
@@ -1874,6 +1879,65 @@ paths:
       summary: Reload an instance
       tags:
       - instances
+  /instances/{id}/reload-config:
+    post:
+      description: Reload configuration for a specific proxy instance using SIGHUP
+        without recreating the container
+      parameters:
+      - description: Instance ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Reload an instance config
+      tags:
+      - instances
+  /instances/{id}/restart:
+    post:
+      description: Restart a specific proxy instance container with brief downtime
+      parameters:
+      - description: Instance ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Restart an instance
+      tags:
+      - instances
   /instances/{id}/start:
     post:
       description: Start a specific proxy instance container
@@ -2057,6 +2121,30 @@ paths:
       summary: Reload proxy configuration
       tags:
       - proxy
+  /proxy/reload-zero-downtime:
+    post:
+      description: Recreate all proxy containers and switch traffic without downtime
+        using Swing Routing
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Zero-Downtime reload/restart of all proxy containers
+      tags:
+      - proxy
   /proxy/restart:
     post:
       description: Restart the proxy container
@@ -2122,6 +2210,20 @@ paths:
       security:
       - BearerAuth: []
       summary: Proxy status
+      tags:
+      - proxy
+  /proxy/status/ws:
+    get:
+      description: Upgrades HTTP connection to WebSocket to receive periodic and pinpoint
+        proxy and instance status updates.
+      responses:
+        "101":
+          description: Switching Protocols
+          schema:
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Stream real-time proxy status
       tags:
       - proxy
   /proxy/stop:
@@ -3724,6 +3826,45 @@ paths:
       security:
       - BearerAuth: []
       summary: Uninstall systemd service
+      tags:
+      - system
+  /system/sysctl:
+    post:
+      consumes:
+      - application/json
+      description: Enables or disables TCP BBR & FastOpen optimizations with rollback
+        to original settings
+      parameters:
+      - description: Tuning state
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handler.SysctlRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Configure sysctl network tuning
       tags:
       - system
   /templates:

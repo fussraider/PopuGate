@@ -56,6 +56,22 @@ func (h *InstanceHandler) List(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
+	if h.containerSvc != nil {
+		var runningContainers map[string]bool
+		if running, err := h.containerSvc.ListRunningContainerNames(c.Request.Context()); err == nil && running != nil {
+			runningContainers = running
+		} else {
+			runningContainers = make(map[string]bool)
+		}
+
+		for i := range instances {
+			if instances[i].Enabled {
+				activePort, activeMetricsPort := h.containerSvc.ResolveActivePortsWithMap(&instances[i], runningContainers)
+				instances[i].ActivePort = activePort
+				instances[i].ActiveMetricsPort = activeMetricsPort
+			}
+		}
+	}
 	c.JSON(http.StatusOK, instances)
 }
 
@@ -310,6 +326,9 @@ func (h *InstanceHandler) validateAndSaveInstance(c *gin.Context, id int64, inst
 		if err := h.containerSvc.ReconcileInstanceRules(c.Request.Context(), id); err != nil {
 			c.Header("X-Warning", fmt.Sprintf("iptables rules failed: %v", err))
 		}
+		activePort, activeMetricsPort := h.containerSvc.ResolveActivePorts(c.Request.Context(), inst)
+		inst.ActivePort = activePort
+		inst.ActiveMetricsPort = activeMetricsPort
 	}
 	c.JSON(http.StatusOK, inst)
 	return true
@@ -476,6 +495,52 @@ func (h *InstanceHandler) ReloadInstance(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to reload instance: %v", err)})
 		return
 	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+// RestartInstance handles POST /api/v1/instances/:id/restart
+// @Summary      Restart an instance
+// @Description  Restart a specific proxy instance container with brief downtime
+// @Tags         instances
+// @Produce      json
+// @Param        id  path  int  true  "Instance ID"
+// @Success      200  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /instances/{id}/restart [post]
+func (h *InstanceHandler) RestartInstance(c *gin.Context) {
+	id, ok := h.parseInstanceID(c)
+	if !ok {
+		return
+	}
+	if err := h.containerSvc.RestartInstance(c.Request.Context(), id); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to restart instance: %v", err)})
+		return
+	}
+	h.auditInstanceAction(c, "instance.restart", id)
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+// ReloadInstanceConfig handles POST /api/v1/instances/:id/reload-config
+// @Summary      Reload an instance config
+// @Description  Reload configuration for a specific proxy instance using SIGHUP without recreating the container
+// @Tags         instances
+// @Produce      json
+// @Param        id  path  int  true  "Instance ID"
+// @Success      200  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /instances/{id}/reload-config [post]
+func (h *InstanceHandler) ReloadInstanceConfig(c *gin.Context) {
+	id, ok := h.parseInstanceID(c)
+	if !ok {
+		return
+	}
+	if err := h.containerSvc.ReloadInstanceConfig(c.Request.Context(), id); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to reload instance config: %v", err)})
+		return
+	}
+	h.auditInstanceAction(c, "instance.reload_config", id)
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 

@@ -37,6 +37,7 @@ export interface Settings {
   telemt_version: string
   telemt_commit: string
   telemt_repo: string
+  sysctl_optimizations_enabled: boolean
 }
 
 export interface Secret {
@@ -116,6 +117,8 @@ export interface Instance {
   tcp_mss_enabled: boolean
   tcp_mss: number
   tls_fronting: boolean
+  active_port?: number
+  active_metrics_port?: number
 }
 
 export interface Slave {
@@ -202,6 +205,10 @@ export interface InstanceStatus {
   fake_tls: boolean
   status: string
   matching_secret_count: number
+  container_name?: string
+  active_port?: number
+  active_metrics_port?: number
+  draining?: boolean
 }
 
 export interface HealthStatus {

@@ -308,6 +308,27 @@ func (d *DockerClient) IsInstanceRunning(ctx context.Context, name string) (bool
 	return false, nil
 }
 
+// ListRunningContainerNames returns a set of names of all running Docker containers.
+func (d *DockerClient) ListRunningContainerNames(ctx context.Context) (map[string]bool, error) {
+	if d.cli == nil {
+		return nil, fmt.Errorf("docker client is not initialized")
+	}
+	containers, err := d.cli.ContainerList(ctx, container.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	names := make(map[string]bool)
+	for _, c := range containers {
+		if c.State == "running" {
+			for _, n := range c.Names {
+				names[strings.TrimPrefix(n, "/")] = true
+			}
+		}
+	}
+	return names, nil
+}
+
+
 // ResolveHostPath translates a container-local path to a host-relative path
 // if running inside a container with the data volume mounted.
 func (d *DockerClient) ResolveHostPath(path string) string {

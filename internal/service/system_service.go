@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/fussraider/PopuGate/internal/model"
+	"github.com/fussraider/PopuGate/internal/store"
 	"github.com/fussraider/PopuGate/pkg/fmtutil"
 	"github.com/fussraider/PopuGate/pkg/logger"
 )
@@ -324,3 +325,131 @@ func containsAny(s string, substrs ...string) bool {
 	}
 	return false
 }
+
+func backupOriginalSysctl(ctx context.Context, s *store.SettingsStore, settings *model.Settings) error {
+	if settings.OriginalQdisc != "" && settings.OriginalCongestionControl != "" {
+		return nil
+	}
+
+	originalQdisc, _ := readProcFile("/proc/sys/net/core/default_qdisc")
+	originalCC, _ := readProcFile("/proc/sys/net/ipv4/tcp_congestion_control")
+	originalTFO, _ := readProcFile("/proc/sys/net/ipv4/tcp_fastopen")
+
+	if originalQdisc == "" {
+		originalQdisc = "fq_codel"
+	}
+	if originalCC == "" {
+		originalCC = "cubic"
+	}
+	if originalTFO == "" {
+		originalTFO = "1"
+	}
+
+	updates := map[string]string{
+		"original_qdisc":              originalQdisc,
+		"original_congestion_control": originalCC,
+		"original_fastopen":           originalTFO,
+	}
+	if err := s.Save(ctx, updates); err != nil {
+		logger.WithScope("sysctl").Errorf("failed to save sysctl backup values to DB: %v", err)
+	}
+
+	settings.OriginalQdisc = originalQdisc
+	settings.OriginalCongestionControl = originalCC
+	settings.OriginalFastOpen = originalTFO
+	return nil
+}
+
+func applySysctlOptimizations(ctx context.Context, s *store.SettingsStore) error {
+	// 1. Load BBR module (best-effort)
+	_ = exec.Command("modprobe", "tcp_bbr").Run()
+
+	// 2. Write conf file
+	confPath := "/etc/sysctl.d/99-popugate.conf"
+	confContent := "# PopuGate — TCP BBR and FastOpen Optimizations\n" +
+		"net.core.default_qdisc = fq\n" +
+		"net.ipv4.tcp_congestion_control = bbr\n" +
+		"net.ipv4.tcp_fastopen = 3\n"
+	if err := os.WriteFile(confPath, []byte(confContent), 0644); err != nil {
+		return fmt.Errorf("failed to write sysctl conf file: %w", err)
+	}
+
+	// 3. Apply
+	if err := exec.Command("sysctl", "--system").Run(); err != nil {
+		return fmt.Errorf("failed to apply sysctl system configuration: %w", err)
+	}
+
+	// 4. Save state
+	if err := s.Save(ctx, map[string]string{"sysctl_optimizations_enabled": "true"}); err != nil {
+		return fmt.Errorf("failed to save sysctl state to DB: %w", err)
+	}
+	return nil
+}
+
+func restoreOriginalSysctl(ctx context.Context, s *store.SettingsStore, settings *model.Settings) error {
+	// 1. Remove conf file
+	_ = os.Remove("/etc/sysctl.d/99-popugate.conf")
+
+	// 2. Restore active settings in memory (fallback if originals not set)
+	qdisc := settings.OriginalQdisc
+	cc := settings.OriginalCongestionControl
+	tfo := settings.OriginalFastOpen
+
+	if qdisc == "" {
+		qdisc = "fq_codel"
+	}
+	if cc == "" {
+		cc = "cubic"
+	}
+	if tfo == "" {
+		tfo = "1"
+	}
+
+	_ = exec.Command("sysctl", "-w", fmt.Sprintf("net.core.default_qdisc=%s", qdisc)).Run()
+	_ = exec.Command("sysctl", "-w", fmt.Sprintf("net.ipv4.tcp_congestion_control=%s", cc)).Run()
+	_ = exec.Command("sysctl", "-w", fmt.Sprintf("net.ipv4.tcp_fastopen=%s", tfo)).Run()
+
+	// 3. Reload system config
+	_ = exec.Command("sysctl", "--system").Run()
+
+	// 4. Save state
+	if err := s.Save(ctx, map[string]string{"sysctl_optimizations_enabled": "false"}); err != nil {
+		return fmt.Errorf("failed to save sysctl state to DB: %w", err)
+	}
+	return nil
+}
+
+// ConfigureSysctl enables or disables TCP optimizations and saves the settings in SQLite.
+func ConfigureSysctl(ctx context.Context, s *store.SettingsStore, enabled bool) error {
+	if runtime.GOOS != "linux" {
+		return fmt.Errorf("sysctl network optimizations are only supported on Linux")
+	}
+
+	settings, err := s.Load(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to load settings: %w", err)
+	}
+
+	if enabled == settings.SysctlOptimizationsEnabled {
+		return nil
+	}
+
+	if enabled {
+		if err := backupOriginalSysctl(ctx, s, settings); err != nil {
+			return err
+		}
+		return applySysctlOptimizations(ctx, s)
+	}
+
+	return restoreOriginalSysctl(ctx, s, settings)
+}
+
+
+func readProcFile(path string) (string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(data)), nil
+}
+

@@ -19,6 +19,7 @@ import (
 	"github.com/fussraider/PopuGate/pkg/dockerutil"
 	"github.com/fussraider/PopuGate/pkg/logger"
 	"github.com/fussraider/PopuGate/pkg/netutil"
+	"github.com/fussraider/PopuGate/pkg/promutil"
 	"github.com/fussraider/PopuGate/pkg/telemt"
 )
 
@@ -44,6 +45,8 @@ type ContainerService struct {
 	notifyWithBtns atomic.Value
 	client         *http.Client
 	frontClient    *http.Client
+	mu             sync.RWMutex
+	subscribers    map[chan *model.ProxyStatus]struct{}
 }
 
 // NewContainerService creates a new ContainerService.
@@ -69,6 +72,43 @@ func NewContainerService(
 		iptables:    netutil.NewIptablesManager(),
 		client:      &http.Client{Timeout: 2 * time.Second},
 		frontClient: &http.Client{Timeout: 15 * time.Second},
+		subscribers: make(map[chan *model.ProxyStatus]struct{}),
+	}
+}
+
+// Subscribe returns a channel that receives ProxyStatus updates.
+func (s *ContainerService) Subscribe() (chan *model.ProxyStatus, func()) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	ch := make(chan *model.ProxyStatus, 1)
+	s.subscribers[ch] = struct{}{}
+
+	return ch, func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		delete(s.subscribers, ch)
+		close(ch)
+	}
+}
+
+func (s *ContainerService) broadcast(status *model.ProxyStatus) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	for ch := range s.subscribers {
+		select {
+		case ch <- status:
+		default:
+			// Buffer full, skip this subscriber
+		}
+	}
+}
+
+func (s *ContainerService) notifyStatusChange() {
+	status, err := s.Status(context.Background())
+	if err == nil {
+		s.broadcast(status)
 	}
 }
 
@@ -143,8 +183,15 @@ func (s *ContainerService) Stop(ctx context.Context) error {
 				defer wg.Done()
 				stopCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 				defer cancel()
-				if err := s.docker.StopInstance(stopCtx, inst.ContainerName(), 10); err != nil {
-					statusLog.Warnf("stop instance %s: %v", inst.ContainerName(), err)
+				activeSwingPort, swingRunning := s.GetActiveSwingPort(stopCtx, &inst)
+				activeName := s.GetActiveContainerName(stopCtx, &inst)
+				if err := s.docker.StopInstance(stopCtx, activeName, 10); err != nil {
+					statusLog.Warnf("stop instance %s: %v", activeName, err)
+				}
+				if swingRunning {
+					_ = s.iptables.RemovePortRedirect(inst.Port, activeSwingPort)
+				} else {
+					_ = s.iptables.RemovePortRedirect(inst.Port, inst.Port+10000)
 				}
 				s.cleanupInstanceRuntimeRules(&inst)
 			}(inst)
@@ -167,9 +214,52 @@ func (s *ContainerService) StopInstance(ctx context.Context, id int64) error {
 	}
 	stopCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	err = s.docker.StopInstance(stopCtx, inst.ContainerName(), 10)
+	activeSwingPort, swingRunning := s.GetActiveSwingPort(stopCtx, inst)
+	activeName := s.GetActiveContainerName(stopCtx, inst)
+	err = s.docker.StopInstance(stopCtx, activeName, 10)
+	if swingRunning {
+		_ = s.iptables.RemovePortRedirect(inst.Port, activeSwingPort)
+	} else {
+		_ = s.iptables.RemovePortRedirect(inst.Port, inst.Port+10000)
+	}
 	s.cleanupInstanceRuntimeRules(inst)
 	return err
+}
+
+// RestartInstance stops and starts a specific instance by ID.
+func (s *ContainerService) RestartInstance(ctx context.Context, id int64) error {
+	if err := s.StopInstance(ctx, id); err != nil {
+		statusLog.Warnf("failed to stop instance %d for restart: %v", id, err)
+	}
+	time.Sleep(1 * time.Second)
+	return s.StartInstance(ctx, id)
+}
+
+// ReloadInstanceConfig regenerates config for a specific instance and sends SIGHUP for hot-reload.
+func (s *ContainerService) ReloadInstanceConfig(ctx context.Context, id int64) error {
+	settings, err := s.settings.Load(ctx)
+	if err != nil {
+		return err
+	}
+	inst, err := s.instances.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if inst == nil {
+		return fmt.Errorf("instance %d not found", id)
+	}
+	if !inst.Enabled {
+		return fmt.Errorf("instance %d is disabled", id)
+	}
+	if err := s.generateInstanceConfig(ctx, settings, inst); err != nil {
+		return fmt.Errorf("generate config for instance %d: %w", inst.ID, err)
+	}
+	activeName := s.GetActiveContainerName(ctx, inst)
+	running, _ := s.docker.IsInstanceRunning(ctx, activeName)
+	if !running {
+		return fmt.Errorf("instance %d container is not running", id)
+	}
+	return s.docker.KillSignalInstance(ctx, activeName, "SIGHUP")
 }
 
 // StartInstance starts a specific instance by ID.
@@ -194,6 +284,8 @@ func (s *ContainerService) StartInstance(ctx context.Context, id int64) error {
 	if count == 0 {
 		return ErrNoMatchingSecrets
 	}
+
+	s.cleanStalePortRedirects(ctx, inst.Port)
 
 	tlsFrontDir, err := s.applyInstanceRuntimeRules(ctx, inst)
 	if err != nil {
@@ -227,7 +319,255 @@ func (s *ContainerService) Restart(ctx context.Context) error {
 	return s.Start(ctx)
 }
 
-// ReloadInstance regenerates config and sends SIGHUP for a specific instance.
+// GetActiveSwingPort finds if a swing container is currently running for the instance, and if so, what port it uses.
+func (s *ContainerService) GetActiveSwingPort(ctx context.Context, inst *model.Instance) (int, bool) {
+	if s.docker == nil {
+		return inst.Port + 10000, false
+	}
+	running, err := s.docker.ListRunningContainerNames(ctx)
+	if err != nil {
+		statusLog.Warnf("failed to list running containers: %v", err)
+		return inst.Port + 10000, false
+	}
+	return s.GetActiveSwingPortWithMap(inst, running)
+}
+
+// GetActiveSwingPortWithMap finds if a swing container is currently running using a pre-fetched running containers map.
+func (s *ContainerService) GetActiveSwingPortWithMap(inst *model.Instance, runningContainers map[string]bool) (int, bool) {
+	startPort := inst.Port + 10000
+	for i := 0; i < 100; i++ {
+		port := startPort + i
+		tempName := fmt.Sprintf("popugate-telemt-%d", port)
+		if runningContainers[tempName] {
+			return port, true
+		}
+	}
+	return startPort, false
+}
+
+// ResolveActivePorts determines the active port and metrics port for a given instance.
+func (s *ContainerService) ResolveActivePorts(ctx context.Context, inst *model.Instance) (int, int) {
+	if s.docker == nil {
+		return inst.Port, inst.MetricsPort
+	}
+	running, err := s.docker.ListRunningContainerNames(ctx)
+	if err != nil {
+		return inst.Port, inst.MetricsPort
+	}
+	return s.ResolveActivePortsWithMap(inst, running)
+}
+
+// ResolveActivePortsWithMap determines active ports using a pre-fetched running containers map.
+func (s *ContainerService) ResolveActivePortsWithMap(inst *model.Instance, runningContainers map[string]bool) (int, int) {
+	activePort := inst.Port
+	activeMetricsPort := inst.MetricsPort
+	if swingPort, running := s.GetActiveSwingPortWithMap(inst, runningContainers); running {
+		activePort = swingPort
+		activeMetricsPort = swingPort + 100
+	}
+	return activePort, activeMetricsPort
+}
+
+// ListRunningContainerNames returns a set of names of all running Docker containers.
+func (s *ContainerService) ListRunningContainerNames(ctx context.Context) (map[string]bool, error) {
+	if s.docker == nil {
+		return nil, fmt.Errorf("docker client is not initialized")
+	}
+	return s.docker.ListRunningContainerNames(ctx)
+}
+
+func (s *ContainerService) cleanStalePortRedirects(ctx context.Context, primaryPort int) {
+	startPort := primaryPort + 10000
+	for i := 0; i < 100; i++ {
+		port := startPort + i
+		redirected, err := s.iptables.HasPortRedirect(primaryPort, port)
+		if err == nil && redirected {
+			statusLog.Infof("Removing stale port redirect for port %d -> %d", primaryPort, port)
+			_ = s.iptables.RemovePortRedirect(primaryPort, port)
+		}
+	}
+}
+
+
+
+
+func isPortFree(port int) bool {
+	l, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
+	if err != nil {
+		return false
+	}
+	_ = l.Close()
+	return true
+}
+
+func (s *ContainerService) findFreeSwingPort(ctx context.Context, primaryPort int) (int, int) {
+	startPort := primaryPort + 10000
+	for i := 0; i < 100; i++ {
+		port := startPort + i
+		metricsPort := port + 100 // keep metrics port separated from proxy port
+
+		// Check if port is free on host
+		if !isPortFree(port) || !isPortFree(metricsPort) {
+			continue
+		}
+
+		// Check if any Docker container with this name is already running
+		tempName := fmt.Sprintf("popugate-telemt-%d", port)
+		running, _ := s.docker.IsInstanceRunning(ctx, tempName)
+		if running {
+			continue
+		}
+
+		return port, metricsPort
+	}
+	return startPort, primaryPort + 10100 // fallback
+}
+
+type swingRoutingState struct {
+	targetPort            int
+	targetMetricsPort     int
+	targetContainerName   string
+	drainingPort          int
+	drainingMetricsPort   int
+	drainingContainerName string
+	drainingRunning       bool
+	redirectActive        bool
+	tempPort              int
+}
+
+func (s *ContainerService) resolveSwingRoutingState(ctx context.Context, inst *model.Instance, runningContainers map[string]bool) (*swingRoutingState, error) {
+	primaryPort := inst.Port
+	primaryMetricsPort := inst.MetricsPort
+	primaryName := inst.ContainerName()
+
+	activeSwingPort, swingRunning := s.GetActiveSwingPortWithMap(inst, runningContainers)
+
+	var tempPort, tempMetricsPort int
+	if swingRunning {
+		tempPort = activeSwingPort
+		tempMetricsPort = activeSwingPort + 100
+	} else {
+		tempPort, tempMetricsPort = s.findFreeSwingPort(ctx, primaryPort)
+	}
+
+	tempName := fmt.Sprintf("popugate-telemt-%d", tempPort)
+
+	redirectActive, err := s.iptables.HasPortRedirect(primaryPort, tempPort)
+	if err != nil {
+		statusLog.Warnf("Failed to check iptables redirect for port %d: %v", primaryPort, err)
+		redirectActive = false
+	}
+	if !redirectActive {
+		primaryRunning := runningContainers[primaryName]
+		tempRunning := runningContainers[tempName]
+		if tempRunning && !primaryRunning {
+			redirectActive = true
+		}
+	}
+
+	state := &swingRoutingState{
+		tempPort:       tempPort,
+		redirectActive: redirectActive,
+	}
+
+	if redirectActive {
+		state.targetPort = primaryPort
+		state.targetMetricsPort = primaryMetricsPort
+		state.targetContainerName = primaryName
+
+		state.drainingPort = tempPort
+		state.drainingMetricsPort = tempMetricsPort
+		state.drainingContainerName = tempName
+	} else {
+		state.targetPort = tempPort
+		state.targetMetricsPort = tempMetricsPort
+		state.targetContainerName = tempName
+
+		state.drainingPort = primaryPort
+		state.drainingMetricsPort = primaryMetricsPort
+		state.drainingContainerName = primaryName
+	}
+
+	state.drainingRunning = runningContainers[state.drainingContainerName]
+	if !state.drainingRunning {
+		state.targetPort = primaryPort
+		state.targetMetricsPort = primaryMetricsPort
+		state.targetContainerName = primaryName
+		_ = s.iptables.RemovePortRedirect(primaryPort, tempPort)
+	}
+
+	return state, nil
+}
+
+func (s *ContainerService) setupTargetRuntimeRules(ctx context.Context, settings *model.Settings, inst *model.Instance, targetPort, targetMetricsPort int) (string, error) {
+	if inst.TCPMSSEnabled {
+		if err := s.iptables.SetTCPMSSRule(targetPort, inst.TCPMSS); err != nil {
+			statusLog.Warnf("Failed to set tcpmss rule for target port %d: %v", targetPort, err)
+		}
+	}
+
+	if err := s.generateInstanceConfigForSwing(ctx, settings, inst, targetPort, targetMetricsPort); err != nil {
+		return "", fmt.Errorf("generate swing config: %w", err)
+	}
+
+	var tlsFrontDir string
+	if inst.TLSFronting && inst.FakeTLS {
+		if err := s.downloadFrontingContent(ctx, inst.TLSDomain, inst.TLSFrontDirPath()); err != nil {
+			statusLog.Warnf("download fronting content: %v", err)
+		} else {
+			tlsFrontDir = inst.TLSFrontDirPath()
+		}
+	}
+
+	return tlsFrontDir, nil
+}
+
+func (s *ContainerService) startSwingDraining(inst *model.Instance, state *swingRoutingState) {
+	if !state.drainingRunning {
+		return
+	}
+
+	primaryPort := inst.Port
+	if state.redirectActive {
+		if err := s.iptables.RemovePortRedirect(primaryPort, state.tempPort); err != nil {
+			statusLog.Warnf("Failed to remove port redirect: %v", err)
+		}
+	} else {
+		if err := s.iptables.AddPortRedirect(primaryPort, state.tempPort); err != nil {
+			statusLog.Warnf("Failed to add port redirect: %v", err)
+		}
+	}
+
+	go func(name string, port, metricsPort int) {
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+		timeout := time.After(3 * time.Minute)
+
+		for {
+			select {
+			case <-timeout:
+				statusLog.Infof("Draining timeout reached for container %s, stopping now", name)
+				s.stopAndCleanContainer(name, port)
+				return
+			case <-ticker.C:
+				conns, err := s.getActiveConnections(context.Background(), metricsPort)
+				if err != nil {
+					statusLog.Warnf("Failed to query metrics for draining container %s: %v", name, err)
+					s.stopAndCleanContainer(name, port)
+					return
+				}
+				statusLog.Infof("Draining container %s: %d active connections remaining", name, conns)
+				if conns <= 0 {
+					statusLog.Infof("Draining complete for container %s, stopping now", name)
+					s.stopAndCleanContainer(name, port)
+					return
+				}
+			}
+		}
+	}(state.drainingContainerName, state.drainingPort, state.drainingMetricsPort)
+}
+
+// ReloadInstance performs a Zero-Downtime Swing Routing update of the instance container.
 func (s *ContainerService) ReloadInstance(ctx context.Context, id int64) error {
 	settings, err := s.settings.Load(ctx)
 	if err != nil {
@@ -242,11 +582,116 @@ func (s *ContainerService) ReloadInstance(ctx context.Context, id int64) error {
 		return fmt.Errorf("instance %d not found", id)
 	}
 
-	if err := s.generateInstanceConfig(ctx, settings, inst); err != nil {
+	runningContainers, err := s.docker.ListRunningContainerNames(ctx)
+	if err != nil {
+		runningContainers = make(map[string]bool)
+	}
+
+	state, err := s.resolveSwingRoutingState(ctx, inst, runningContainers)
+	if err != nil {
 		return err
 	}
 
-	return s.docker.KillSignalInstance(ctx, inst.ContainerName(), "SIGHUP")
+	tlsFrontDir, err := s.setupTargetRuntimeRules(ctx, settings, inst, state.targetPort, state.targetMetricsPort)
+	if err != nil {
+		return err
+	}
+
+	_, err = s.docker.RunInstance(ctx, dockerutil.InstanceRunOptions{
+		RunOptions: dockerutil.RunOptions{
+			Image:      model.DockerImageBase + ":latest",
+			ConfigPath: filepath.Join(model.InstallDir, fmt.Sprintf("mtproxy/config-%d.toml", state.targetPort)),
+			CPUs:       settings.ProxyCPUs,
+			Memory:     settings.ProxyMemory,
+		},
+		Name:        state.targetContainerName,
+		Port:        state.targetPort,
+		TLSFrontDir: tlsFrontDir,
+	})
+	if err != nil {
+		return fmt.Errorf("start swing container: %w", err)
+	}
+
+	time.Sleep(2 * time.Second)
+
+	s.startSwingDraining(inst, state)
+
+	return nil
+}
+
+
+// GetActiveContainerName returns the name of the currently running container for the instance,
+// checking both the primary container and the temporary swing container.
+func (s *ContainerService) GetActiveContainerName(ctx context.Context, inst *model.Instance) string {
+	if s.docker == nil {
+		return inst.ContainerName()
+	}
+	running, err := s.docker.ListRunningContainerNames(ctx)
+	if err != nil {
+		return inst.ContainerName()
+	}
+	return s.GetActiveContainerNameWithMap(inst, running)
+}
+
+// GetActiveContainerNameWithMap returns the name of the currently running container using a pre-fetched running containers map.
+func (s *ContainerService) GetActiveContainerNameWithMap(inst *model.Instance, runningContainers map[string]bool) string {
+	if swingPort, running := s.GetActiveSwingPortWithMap(inst, runningContainers); running {
+		return fmt.Sprintf("popugate-telemt-%d", swingPort)
+	}
+	return inst.ContainerName()
+}
+
+
+func (s *ContainerService) getActiveConnections(ctx context.Context, metricsPort int) (int, error) {
+	url := fmt.Sprintf("http://127.0.0.1:%d/metrics", metricsPort)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return 0, err
+	}
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("unexpected status: %d", resp.StatusCode)
+	}
+
+	live, err := promutil.FetchAndParse(resp.Body)
+	if err != nil {
+		return 0, err
+	}
+
+	return int(live.ConnsCurrent), nil
+}
+
+func (s *ContainerService) stopAndCleanContainer(name string, port int) {
+	stopCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	if err := s.docker.StopInstance(stopCtx, name, 10); err != nil {
+		statusLog.Warnf("failed to stop draining container %s: %v", name, err)
+	}
+	if err := s.iptables.RemoveTCPMSSRules(port); err != nil {
+		statusLog.Warnf("failed to remove tcpmss rule for port %d: %v", port, err)
+	}
+	configPath := filepath.Join(model.InstallDir, fmt.Sprintf("mtproxy/config-%d.toml", port))
+	_ = os.Remove(configPath)
+	statusLog.Infof("Stopped and cleaned up draining container %s", name)
+	s.notifyStatusChange()
+}
+
+func (s *ContainerService) generateInstanceConfigForSwing(ctx context.Context, settings *model.Settings, inst *model.Instance, port, metricsPort int) error {
+	upstreamEntries, err := s.listUpstreamEntries(ctx)
+	if err != nil {
+		return err
+	}
+
+	instCopy := *inst
+	instCopy.Port = port
+	instCopy.MetricsPort = metricsPort
+
+	return s.generateInstanceConfigWith(ctx, settings, &instCopy, upstreamEntries)
 }
 
 // Reload regenerates config and sends SIGHUP for hot-reload.
@@ -280,6 +725,43 @@ func (s *ContainerService) Reload(ctx context.Context) error {
 	return nil
 }
 
+// ReloadZeroDowntime reloads all enabled proxy instances using the Zero-Downtime Swing Routing mechanism.
+func (s *ContainerService) ReloadZeroDowntime(ctx context.Context) error {
+	insts, err := s.instances.List(ctx)
+	if err != nil {
+		return err
+	}
+	var wg sync.WaitGroup
+	var errs []error
+	var errsMu sync.Mutex
+
+	for _, inst := range insts {
+		if !inst.Enabled {
+			continue
+		}
+		wg.Add(1)
+		go func(inst model.Instance) {
+			defer func() {
+				if r := recover(); r != nil {
+					statusLog.Warnf("goroutine panic (swing reload instance %d): %v", inst.ID, r)
+				}
+				wg.Done()
+			}()
+			if err := s.ReloadInstance(ctx, inst.ID); err != nil {
+				errsMu.Lock()
+				errs = append(errs, fmt.Errorf("instance %d: %w", inst.ID, err))
+				errsMu.Unlock()
+			}
+		}(inst)
+	}
+	wg.Wait()
+
+	if len(errs) > 0 {
+		return fmt.Errorf("zero-downtime reload failed for some instances: %v", errs)
+	}
+	return nil
+}
+
 func (s *ContainerService) buildSecretCounts(ctx context.Context, insts []model.Instance) (map[int64]int, error) {
 	dbSecrets, err := s.secrets.List(ctx)
 	if err != nil {
@@ -299,7 +781,7 @@ func (s *ContainerService) buildSecretCounts(ctx context.Context, insts []model.
 	return counts, nil
 }
 
-func buildInstanceStatus(inst model.Instance, running bool, matchingSecrets int) model.InstanceStatus {
+func buildInstanceStatus(inst model.Instance, running bool, containerName string, activePort, activeMetricsPort int, draining bool, matchingSecrets int) model.InstanceStatus {
 	is := model.InstanceStatus{
 		ID:                  inst.ID,
 		Port:                inst.Port,
@@ -307,7 +789,10 @@ func buildInstanceStatus(inst model.Instance, running bool, matchingSecrets int)
 		Label:               inst.Label,
 		TLSDomain:           inst.TLSDomain,
 		FakeTLS:             inst.FakeTLS,
-		ContainerName:       inst.ContainerName(),
+		ContainerName:       containerName,
+		ActivePort:          activePort,
+		ActiveMetricsPort:   activeMetricsPort,
+		Draining:            draining,
 		MatchingSecretCount: matchingSecrets,
 	}
 	if running {
@@ -319,7 +804,8 @@ func buildInstanceStatus(inst model.Instance, running bool, matchingSecrets int)
 }
 
 func (s *ContainerService) enrichWithRuntimeInfo(ctx context.Context, status *model.ProxyStatus, inst *model.Instance) {
-	info, err := s.docker.ContainerInspect(ctx, inst.ContainerName())
+	activeName := s.GetActiveContainerName(ctx, inst)
+	info, err := s.docker.ContainerInspect(ctx, activeName)
 	if err == nil {
 		status.ContainerID = info.ID[:12]
 		if t, err := time.Parse(time.RFC3339Nano, info.State.StartedAt); err == nil {
@@ -354,10 +840,26 @@ func (s *ContainerService) Status(ctx context.Context) (*model.ProxyStatus, erro
 		secretCounts = make(map[int64]int)
 	}
 
+	var runningContainers map[string]bool
+	if s.docker != nil {
+		runningContainers, _ = s.docker.ListRunningContainerNames(ctx)
+	}
+	if runningContainers == nil {
+		runningContainers = make(map[string]bool)
+	}
+
 	var firstRunningInst *model.Instance
 	for i, inst := range insts {
-		running, _ := s.docker.IsInstanceRunning(ctx, inst.ContainerName())
-		status.Instances = append(status.Instances, buildInstanceStatus(inst, running, secretCounts[inst.ID]))
+		activeName := s.GetActiveContainerNameWithMap(&inst, runningContainers)
+		running := runningContainers[activeName]
+
+		activePort, activeMetricsPort := s.ResolveActivePortsWithMap(&inst, runningContainers)
+
+		primaryRunning := runningContainers[inst.ContainerName()]
+		_, tempRunning := s.GetActiveSwingPortWithMap(&inst, runningContainers)
+		draining := primaryRunning && tempRunning
+
+		status.Instances = append(status.Instances, buildInstanceStatus(inst, running, activeName, activePort, activeMetricsPort, draining, secretCounts[inst.ID]))
 		if running {
 			status.Running = true
 			if firstRunningInst == nil {
@@ -369,6 +871,7 @@ func (s *ContainerService) Status(ctx context.Context) (*model.ProxyStatus, erro
 	if firstRunningInst != nil {
 		s.enrichWithRuntimeInfo(ctx, status, firstRunningInst)
 	}
+
 
 	if global, err := s.traffic.GetGlobal(ctx); err == nil && global != nil {
 		status.TrafficIn = global.BytesIn
@@ -388,7 +891,8 @@ func (s *ContainerService) InstanceStatus(ctx context.Context, id int64) (string
 		return "", fmt.Errorf("instance %d not found", id)
 	}
 
-	running, err := s.docker.IsInstanceRunning(ctx, inst.ContainerName())
+	activeName := s.GetActiveContainerName(ctx, inst)
+	running, err := s.docker.IsInstanceRunning(ctx, activeName)
 	if err != nil {
 		return "error", nil
 	}
@@ -396,9 +900,11 @@ func (s *ContainerService) InstanceStatus(ctx context.Context, id int64) (string
 		return "stopped", nil
 	}
 
+	_, metricsPort := s.ResolveActivePorts(ctx, inst)
+
 	// Check metrics endpoint
 	addr := dockerutil.DockerHostAddr()
-	resp, err := s.client.Get(fmt.Sprintf("http://%s:%d/metrics", addr, inst.MetricsPort))
+	resp, err := s.client.Get(fmt.Sprintf("http://%s:%d/metrics", addr, metricsPort))
 	if err != nil || resp.StatusCode != 200 {
 		if resp != nil {
 			_ = resp.Body.Close()
@@ -444,15 +950,22 @@ func (s *ContainerService) RevalidateAllInstances(ctx context.Context) {
 		if !inst.Enabled {
 			continue
 		}
-		running, _ := s.docker.IsInstanceRunning(ctx, inst.ContainerName())
+		activeSwingPort, swingRunning := s.GetActiveSwingPort(ctx, &inst)
+		activeName := s.GetActiveContainerName(ctx, &inst)
+		running, _ := s.docker.IsInstanceRunning(ctx, activeName)
 		if !running {
 			continue
 		}
 		if secretCounts[inst.ID] == 0 {
 			statusLog.Infof("stopping instance %d (%s): no matching secrets after secret change", inst.Port, inst.Label)
 			stopCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-			if err := s.docker.StopInstance(stopCtx, inst.ContainerName(), 10); err != nil {
-				statusLog.Warnf("revalidate: stop instance %s: %v", inst.ContainerName(), err)
+			if err := s.docker.StopInstance(stopCtx, activeName, 10); err != nil {
+				statusLog.Warnf("revalidate: stop instance %s: %v", activeName, err)
+			}
+			if swingRunning {
+				_ = s.iptables.RemovePortRedirect(inst.Port, activeSwingPort)
+			} else {
+				_ = s.iptables.RemovePortRedirect(inst.Port, inst.Port+10000)
 			}
 			cancel()
 			if fn := s.getNotifyWithBtns(); fn != nil {
@@ -471,7 +984,9 @@ func (s *ContainerService) RevalidateInstance(ctx context.Context, id int64) {
 	if err != nil || inst == nil {
 		return
 	}
-	running, _ := s.docker.IsInstanceRunning(ctx, inst.ContainerName())
+	activeSwingPort, swingRunning := s.GetActiveSwingPort(ctx, inst)
+	activeName := s.GetActiveContainerName(ctx, inst)
+	running, _ := s.docker.IsInstanceRunning(ctx, activeName)
 	if !running {
 		return
 	}
@@ -483,8 +998,13 @@ func (s *ContainerService) RevalidateInstance(ctx context.Context, id int64) {
 	if counts[inst.ID] == 0 {
 		statusLog.Infof("stopping instance %d (%s): no matching secrets after instance change", inst.Port, inst.Label)
 		stopCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-		if err := s.docker.StopInstance(stopCtx, inst.ContainerName(), 10); err != nil {
-			statusLog.Warnf("revalidate: stop instance %s: %v", inst.ContainerName(), err)
+		if err := s.docker.StopInstance(stopCtx, activeName, 10); err != nil {
+			statusLog.Warnf("revalidate: stop instance %s: %v", activeName, err)
+		}
+		if swingRunning {
+			_ = s.iptables.RemovePortRedirect(inst.Port, activeSwingPort)
+		} else {
+			_ = s.iptables.RemovePortRedirect(inst.Port, inst.Port+10000)
 		}
 		cancel()
 		if fn := s.getNotifyWithBtns(); fn != nil {
@@ -640,6 +1160,7 @@ func (s *ContainerService) startContainersParallel(ctx context.Context, insts []
 				}
 			}()
 			defer wg.Done()
+			s.cleanStalePortRedirects(ctx, inst.Port)
 
 			if err := s.applyTCPMSSRules(&inst); err != nil {
 				mu.Lock()
@@ -891,4 +1412,24 @@ func (s *ContainerService) EnsureDefaultInstance(ctx context.Context, proxyPort,
 		TCPMSS:      88,
 	}
 	return s.instances.Create(ctx, inst)
+}
+
+// RefreshAllFrontingContent refreshes fronting HTML cache for all enabled instances that have TLSFronting turned on.
+func (s *ContainerService) RefreshAllFrontingContent(ctx context.Context) error {
+	insts, err := s.instances.List(ctx)
+	if err != nil {
+		return err
+	}
+	var lastErr error
+	for _, inst := range insts {
+		if inst.Enabled && inst.TLSFronting && inst.FakeTLS {
+			if err := s.downloadFrontingContent(ctx, inst.TLSDomain, inst.TLSFrontDirPath()); err != nil {
+				statusLog.Errorf("failed to auto-refresh fronting for instance on port %d: %v", inst.Port, err)
+				lastErr = err
+			} else {
+				statusLog.Infof("successfully refreshed fronting content for instance on port %d", inst.Port)
+			}
+		}
+	}
+	return lastErr
 }

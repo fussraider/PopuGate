@@ -22,7 +22,7 @@ const languages = [
   { code: 'ru', label: 'RU' }
 ]
 
-function setLanguage(lang: string) {
+const setLanguage = (lang: string) => {
   locale.value = lang
   localStorage.setItem('locale', lang)
 }
@@ -40,15 +40,20 @@ function setLanguage(lang: string) {
 }
 
 .lang-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 22px;
   background: none;
   border: none;
-  padding: 4px 8px;
+  padding: 0 8px;
   font-size: $font-size-xs;
   font-weight: $font-weight-semibold;
   color: $text-muted;
   cursor: pointer;
   border-radius: $border-radius;
   transition: all $transition-fast;
+  line-height: 1;
 
   &:hover {
     color: $text-primary;

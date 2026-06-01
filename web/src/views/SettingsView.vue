@@ -125,6 +125,16 @@
         </div>
       </div>
 
+      <!-- TCP Optimizations -->
+      <div class="card mb-lg">
+        <h3 class="mb-md">{{ t('settings_view.tcp_optimizations') }}</h3>
+        <p class="text-muted text-sm mb-md">{{ t('settings_view.tcp_optimizations_desc') }}</p>
+        <label class="checkbox-label">
+          <input v-model="form.sysctl_optimizations_enabled" type="checkbox" />
+          {{ t('settings_view.enable_tcp_optimizations') }}
+        </label>
+      </div>
+
       <!-- Backup -->
       <div class="card mb-lg">
         <h3 class="mb-md">{{ t('settings_view.backup_title') }}</h3>

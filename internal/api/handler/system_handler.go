@@ -4,17 +4,19 @@ import (
 	"net/http"
 
 	"github.com/fussraider/PopuGate/internal/service"
+	"github.com/fussraider/PopuGate/internal/store"
 	"github.com/gin-gonic/gin"
 )
 
 // SystemHandler handles system-level endpoints.
 type SystemHandler struct {
-	notify service.NotifyFunc
+	settings *store.SettingsStore
+	notify   service.NotifyFunc
 }
 
 // NewSystemHandler creates a new SystemHandler.
-func NewSystemHandler() *SystemHandler {
-	return &SystemHandler{}
+func NewSystemHandler(settings *store.SettingsStore) *SystemHandler {
+	return &SystemHandler{settings: settings}
 }
 
 // SetNotify sets the notification function for alerting.
@@ -174,3 +176,41 @@ func (h *SystemHandler) ReloadService(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true, "message": "service reload signaled"})
 }
+
+type SysctlRequest struct {
+	Enabled bool `json:"enabled"`
+}
+
+// ConfigureSysctl handles POST /api/v1/system/sysctl
+// @Summary      Configure sysctl network tuning
+// @Description  Enables or disables TCP BBR & FastOpen optimizations with rollback to original settings
+// @Tags         system
+// @Accept       json
+// @Produce      json
+// @Param        request body SysctlRequest true "Tuning state"
+// @Success      200  {object}  map[string]string
+// @Failure      400  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /system/sysctl [post]
+func (h *SystemHandler) ConfigureSysctl(c *gin.Context) {
+	var req SysctlRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		HandleError(c, http.StatusBadRequest, "invalid request body", err)
+		return
+	}
+
+	if err := service.ConfigureSysctl(c.Request.Context(), h.settings, req.Enabled); err != nil {
+		HandleError(c, http.StatusInternalServerError, "failed to configure sysctl", err)
+		return
+	}
+
+	action := "system.sysctl_enable"
+	if !req.Enabled {
+		action = "system.sysctl_disable"
+	}
+	auditLog(c, action, "sysctl network optimizations configured")
+
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+

@@ -161,3 +161,18 @@ func TestContainerService_BuildSecretCounts_NoSecrets(t *testing.T) {
 		t.Fatalf("expected 0 with no secrets, got %d", counts[inst.ID])
 	}
 }
+
+func TestContainerService_GetActiveContainerName(t *testing.T) {
+	svc, _, _ := newTestContainerService(t)
+	ctx := context.Background()
+
+	inst := &model.Instance{Port: 443, MetricsPort: 9090, Enabled: true, Label: "Test"}
+
+	// When s.docker is nil, it should gracefully fall back to the primary container name.
+	activeName := svc.GetActiveContainerName(ctx, inst)
+	expectedName := inst.ContainerName()
+	if activeName != expectedName {
+		t.Errorf("expected active container name %q, got %q", expectedName, activeName)
+	}
+}
+

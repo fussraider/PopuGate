@@ -188,6 +188,15 @@ func (h *DockerHandler) Build(c *gin.Context) {
 }
 
 // CheckUpdate handles GET /api/v1/docker/update/status
+// @Summary      Host Docker Engine update status
+// @Description  Returns current host Docker version, latest available version, and update status
+// @Tags         docker
+// @Accept       json
+// @Produce      json
+// @Success      200  {object}  service.DockerUpdateStatus
+// @Failure      500  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /docker/update/status [get]
 func (h *DockerHandler) CheckUpdate(c *gin.Context) {
 	if h.dockerUpdateSvc == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "docker update service not available"})
@@ -202,6 +211,15 @@ func (h *DockerHandler) CheckUpdate(c *gin.Context) {
 }
 
 // TriggerCheckUpdate handles POST /api/v1/docker/update/check
+// @Summary      Check for host Docker updates
+// @Description  Checks remote repositories for newer versions of host Docker daemon
+// @Tags         docker
+// @Accept       json
+// @Produce      json
+// @Success      200  {object}  service.DockerUpdateStatus
+// @Failure      500  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /docker/update/check [post]
 func (h *DockerHandler) TriggerCheckUpdate(c *gin.Context) {
 	if h.dockerUpdateSvc == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "docker update service not available"})
@@ -216,6 +234,15 @@ func (h *DockerHandler) TriggerCheckUpdate(c *gin.Context) {
 }
 
 // ApplyUpdate handles POST /api/v1/docker/update/apply
+// @Summary      Apply host Docker update
+// @Description  Triggers asynchronous host Docker package upgrade and proxy container state restoration
+// @Tags         docker
+// @Accept       json
+// @Produce      json
+// @Success      200  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /docker/update/apply [post]
 func (h *DockerHandler) ApplyUpdate(c *gin.Context) {
 	if h.dockerUpdateSvc == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "docker update service not available"})

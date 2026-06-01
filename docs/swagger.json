@@ -1091,6 +1091,120 @@
                 }
             }
         },
+        "/docker/update/apply": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Triggers asynchronous host Docker package upgrade and proxy container state restoration",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "docker"
+                ],
+                "summary": "Apply host Docker update",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/docker/update/check": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Checks remote repositories for newer versions of host Docker daemon",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "docker"
+                ],
+                "summary": "Check for host Docker updates",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/service.DockerUpdateStatus"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/docker/update/status": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns current host Docker version, latest available version, and update status",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "docker"
+                ],
+                "summary": "Host Docker Engine update status",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/service.DockerUpdateStatus"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/engine/build": {
             "post": {
                 "security": [
@@ -6422,6 +6536,32 @@
                 "uptime": {
                     "description": "seconds",
                     "type": "integer"
+                }
+            }
+        },
+        "service.DockerUpdateStatus": {
+            "type": "object",
+            "properties": {
+                "changelog_url": {
+                    "type": "string"
+                },
+                "current_version": {
+                    "type": "string"
+                },
+                "last_checked": {
+                    "type": "string"
+                },
+                "latest_version": {
+                    "type": "string"
+                },
+                "live_restore_enabled": {
+                    "type": "boolean"
+                },
+                "update_available": {
+                    "type": "boolean"
+                },
+                "updating": {
+                    "type": "boolean"
                 }
             }
         }

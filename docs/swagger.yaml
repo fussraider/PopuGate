@@ -410,6 +410,23 @@ definitions:
         description: seconds
         type: integer
     type: object
+  service.DockerUpdateStatus:
+    properties:
+      changelog_url:
+        type: string
+      current_version:
+        type: string
+      last_checked:
+        type: string
+      latest_version:
+        type: string
+      live_restore_enabled:
+        type: boolean
+      update_available:
+        type: boolean
+      updating:
+        type: boolean
+    type: object
 host: localhost:8090
 info:
   contact:
@@ -1116,6 +1133,79 @@ paths:
       security:
       - BearerAuth: []
       summary: Docker status
+      tags:
+      - docker
+  /docker/update/apply:
+    post:
+      consumes:
+      - application/json
+      description: Triggers asynchronous host Docker package upgrade and proxy container
+        state restoration
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Apply host Docker update
+      tags:
+      - docker
+  /docker/update/check:
+    post:
+      consumes:
+      - application/json
+      description: Checks remote repositories for newer versions of host Docker daemon
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/service.DockerUpdateStatus'
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Check for host Docker updates
+      tags:
+      - docker
+  /docker/update/status:
+    get:
+      consumes:
+      - application/json
+      description: Returns current host Docker version, latest available version,
+        and update status
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/service.DockerUpdateStatus'
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Host Docker Engine update status
       tags:
       - docker
   /engine/build:

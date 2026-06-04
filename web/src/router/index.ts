@@ -49,8 +49,7 @@ const routes = [
       },
       {
         path: 'docker',
-        name: 'Docker',
-        component: () => import('@/views/DockerView.vue'),
+        redirect: '/system',
       },
       {
         path: 'geoblock',
@@ -74,8 +73,7 @@ const routes = [
       },
       {
         path: 'updates',
-        name: 'Updates',
-        component: () => import('@/views/UpdatesView.vue'),
+        redirect: '/system',
       },
       {
         path: 'backups',

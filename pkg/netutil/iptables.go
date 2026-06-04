@@ -402,4 +402,3 @@ func (m *IptablesManager) HasPortRedirect(primaryPort, tempPort int) (bool, erro
 	}
 	return false, nil
 }
-

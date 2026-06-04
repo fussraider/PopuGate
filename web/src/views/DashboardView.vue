@@ -15,7 +15,7 @@
     <div v-if="updateStore.status?.update_available && !isFullscreen" class="update-banner mb-lg">
       <Package :size="16" class="update-banner-icon" />
       <span>{{ t('dashboard.update_banner', { current: updateStore.status.current, latest: updateStore.status.latest }) }}</span>
-      <router-link :to="{ name: 'Updates' }" class="btn btn-sm btn-warning" style="margin-left: auto;">
+      <router-link :to="{ name: 'System' }" class="btn btn-sm btn-warning" style="margin-left: auto;">
         {{ t('updates.check') }} <ArrowUpRight :size="12" />
       </router-link>
     </div>
@@ -208,7 +208,7 @@
         <div class="card">
           <h3 class="mb-md card-header">
             {{ t('dashboard.engine') }}
-            <router-link :to="{ name: 'Docker' }" class="card-header-link">
+            <router-link :to="{ name: 'System' }" class="card-header-link">
               <ArrowUpRight :size="14" />
             </router-link>
           </h3>

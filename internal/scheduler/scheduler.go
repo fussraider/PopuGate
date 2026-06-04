@@ -334,23 +334,24 @@ func (s *Scheduler) wrapTask(task *Task) func() {
 // Each task's Fn should be set by the caller with access to services.
 func DefaultTasks() []Task {
 	return []Task{
-		{Name: "traffic-flush", Schedule: "0 */1 * * * *"},                              // every minute
-		{Name: "quota-check", Schedule: "0 */5 * * * *"},                                // every 5 min
-		{Name: "expiry-check", Schedule: "0 */5 * * * *"},                               // every 5 min
-		{Name: "health-check", Schedule: "0 */5 * * * *"},                               // every 5 min
-		{Name: "telegram-report", Schedule: "0 0 */6 * * *"},                            // every 6 hours
-		{Name: "replication-sync", Schedule: "0 */1 * * * *", Timeout: 3 * time.Minute}, // SSH transfers can be slow
-		{Name: "update-check", Schedule: "0 0 */6 * * *"},                               // every 6 hours
-		{Name: "telemt-check", Schedule: "0 0 */6 * * *", Timeout: 30 * time.Second},    // every 6 hours
-		{Name: "docker-host-check", Schedule: "0 0 */6 * * *", Timeout: 30 * time.Second}, // every 6 hours
-		{Name: "token-cleanup", Schedule: "0 0 */1 * * *"},                              // every hour
-		{Name: "daily-backup", Schedule: "0 0 3 * * *", Timeout: 5 * time.Minute},       // daily at 3:00
-		{Name: "backup-cleanup", Schedule: "0 30 3 * * *"},                              // daily at 3:30
-		{Name: "history-cleanup", Schedule: "0 0 4 * * *"},                              // daily at 4:00
-		{Name: "quota-reset", Schedule: "0 0 0 1 * *", Timeout: 2 * time.Minute},        // monthly on 1st
-		{Name: "auto-rotate", Schedule: "0 0 4 * * *", Disabled: true},                  // daily at 4:00 (off by default)
-		{Name: "upstream-health", Schedule: "0 */5 * * * *", Timeout: 2 * time.Minute},  // every 5 min
-		{Name: "fronting-update", Schedule: "0 0 5 * * *", Timeout: 5 * time.Minute},    // daily at 5:00
+		{Name: "traffic-flush", Schedule: "0 */1 * * * *"},                                        // every minute
+		{Name: "quota-check", Schedule: "0 */5 * * * *"},                                          // every 5 min
+		{Name: "expiry-check", Schedule: "0 */5 * * * *"},                                         // every 5 min
+		{Name: "health-check", Schedule: "0 */5 * * * *"},                                         // every 5 min
+		{Name: "telegram-report", Schedule: "0 0 */6 * * *"},                                      // every 6 hours
+		{Name: "replication-sync", Schedule: "0 */1 * * * *", Timeout: 3 * time.Minute},           // SSH transfers can be slow
+		{Name: "update-check", Schedule: "0 0 */6 * * *"},                                         // every 6 hours
+		{Name: "auto-update", Schedule: "0 0 4 * * *", Disabled: true, Timeout: 15 * time.Minute}, // daily at 4:00 (off by default)
+		{Name: "telemt-check", Schedule: "0 0 */6 * * *", Timeout: 30 * time.Second},              // every 6 hours
+		{Name: "docker-host-check", Schedule: "0 0 */6 * * *", Timeout: 30 * time.Second},         // every 6 hours
+		{Name: "token-cleanup", Schedule: "0 0 */1 * * *"},                                        // every hour
+		{Name: "daily-backup", Schedule: "0 0 3 * * *", Timeout: 5 * time.Minute},                 // daily at 3:00
+		{Name: "backup-cleanup", Schedule: "0 30 3 * * *"},                                        // daily at 3:30
+		{Name: "history-cleanup", Schedule: "0 0 4 * * *"},                                        // daily at 4:00
+		{Name: "quota-reset", Schedule: "0 0 0 1 * *", Timeout: 2 * time.Minute},                  // monthly on 1st
+		{Name: "auto-rotate", Schedule: "0 0 4 * * *", Disabled: true},                            // daily at 4:00 (off by default)
+		{Name: "upstream-health", Schedule: "0 */5 * * * *", Timeout: 2 * time.Minute},            // every 5 min
+		{Name: "fronting-update", Schedule: "0 0 5 * * *", Timeout: 5 * time.Minute},              // daily at 5:00
 	}
 }
 

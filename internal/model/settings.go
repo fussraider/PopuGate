@@ -81,9 +81,9 @@ type Settings struct {
 
 	// Kernel Network Tuning (TCP BBR & FastOpen)
 	SysctlOptimizationsEnabled bool   `json:"sysctl_optimizations_enabled"`
-	OriginalQdisc             string `json:"original_qdisc"`
+	OriginalQdisc              string `json:"original_qdisc"`
 	OriginalCongestionControl  string `json:"original_congestion_control"`
-	OriginalFastOpen          string `json:"original_fastopen"`
+	OriginalFastOpen           string `json:"original_fastopen"`
 }
 
 // DefaultSSHKeyPath returns the default SSH key location.

@@ -388,9 +388,6 @@ func (s *ContainerService) cleanStalePortRedirects(ctx context.Context, primaryP
 	}
 }
 
-
-
-
 func isPortFree(port int) bool {
 	l, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
 	if err != nil {
@@ -619,7 +616,6 @@ func (s *ContainerService) ReloadInstance(ctx context.Context, id int64) error {
 	return nil
 }
 
-
 // GetActiveContainerName returns the name of the currently running container for the instance,
 // checking both the primary container and the temporary swing container.
 func (s *ContainerService) GetActiveContainerName(ctx context.Context, inst *model.Instance) string {
@@ -640,7 +636,6 @@ func (s *ContainerService) GetActiveContainerNameWithMap(inst *model.Instance, r
 	}
 	return inst.ContainerName()
 }
-
 
 func (s *ContainerService) getActiveConnections(ctx context.Context, metricsPort int) (int, error) {
 	url := fmt.Sprintf("http://127.0.0.1:%d/metrics", metricsPort)
@@ -871,7 +866,6 @@ func (s *ContainerService) Status(ctx context.Context) (*model.ProxyStatus, erro
 	if firstRunningInst != nil {
 		s.enrichWithRuntimeInfo(ctx, status, firstRunningInst)
 	}
-
 
 	if global, err := s.traffic.GetGlobal(ctx); err == nil && global != nil {
 		status.TrafficIn = global.BytesIn

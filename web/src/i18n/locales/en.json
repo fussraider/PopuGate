@@ -373,6 +373,7 @@
     "installed": "Installed",
     "not_installed": "Not Installed",
     "install": "Install Docker",
+    "installing": "Installing...",
     "engine_title": "Telemt Engine",
     "image_ready": "Image Ready",
     "no_image": "No Image",
@@ -593,7 +594,20 @@
     "success": "Updated from v{old} to v{new}. Restart the service to apply changes.",
     "success_docker": "Updated from v{old} to v{new}. The container is being recreated, the page will refresh automatically...",
     "release_notes": "Release Notes",
-    "changelog": "Changelog"
+    "changelog": "Changelog",
+    "section_title": "PopuGate Updates",
+    "auto_update_title": "Auto-Update",
+    "auto_update_enabled": "Enabled",
+    "auto_update_disabled": "Disabled",
+    "auto_update_desc": "When enabled, PopuGate will automatically download and apply updates on schedule. Telegram notifications will be sent if bot is configured.",
+    "auto_update_enable": "Enable Auto-Update",
+    "auto_update_disable": "Disable Auto-Update",
+    "auto_update_run_now": "Run now",
+    "confirm_run_now_msg": "Are you sure you want to run the auto-update task now? If an update is available, the service will be updated and restarted.",
+    "run_now_btn": "Run",
+    "run_now_success": "Auto-update task triggered successfully.",
+    "auto_update_scheduler_link": "Edit schedule in Scheduler →",
+    "auto_update_warning": "⚠️ Auto-update will restart the service. Enable only if you understand the implications."
   },
   "upstreams": {
     "add": "Add Upstream",
@@ -877,6 +891,10 @@
       "update-check": {
         "name": "Update Check",
         "description": "Checks for new PopuGate releases and notifies via the Telegram bot."
+      },
+      "auto-update": {
+        "name": "Auto-Update",
+        "description": "Checks for new PopuGate releases, installs them and restarts the service automatically."
       },
       "telemt-check": {
         "name": "Engine Version Check",

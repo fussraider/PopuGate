@@ -212,18 +212,14 @@ Automatic daily backups (database, engine configs, SSH keys) with retention-base
 ### 🕐 Scheduler
 Background task management: enable/disable, change schedules (cron), manual runs, execution history with error details.
 
-**Default tasks:** traffic-flush, quota-check, expiry-check, health-check, upstream-health, telegram-report, replication-sync, update-check, telemt-check, token-cleanup, daily-backup, backup-cleanup, history-cleanup, quota-reset, auto-rotate.
+**Default tasks:** traffic-flush, quota-check, expiry-check, health-check, upstream-health, telegram-report, replication-sync, update-check, auto-update, telemt-check, docker-host-check, token-cleanup, daily-backup, backup-cleanup, history-cleanup, quota-reset, auto-rotate.
 
-### 🆙 Updates
-Automatic update checks and manual application. Binary mode — downloads from GitHub + restarts systemd. Docker mode — pulls a new image + recreates the container.
-
-### 🐳 Docker
-Docker availability check, installation, building and updating the `telemt` engine image.
-
-### 🖥️ System Menu
-Install/remove the systemd service, restart, view status and system information.
-
-- **TCP Network Tuning**: One-click enable/disable of TCP BBR congestion control and TCP FastOpen kernel optimizations (sysctl) with automatic backup and rollback to original values
+### 🖥️ System
+Consolidated page for system status, resources telemetry, OS info, systemd service management, Docker integration, and update operations:
+- **Systemd Service**: One-click install/remove, restart, and status logs.
+- **Docker Integration**: Docker availability checks, daemon updates, and building/updating the `telemt` proxy engine image.
+- **Updates**: Auto-update scheduler task configurations (with failure Telegram alerts) and manual updates (systemd restart in binary mode, container recreation in Docker mode).
+- **TCP Network Tuning**: One-click enable/disable of TCP BBR congestion control and TCP FastOpen kernel optimizations (sysctl) with automatic backup and rollback to original values.
 
 ### ⚙️ Settings
 Global parameters: Docker CPU/memory limits, custom IP, FakeTLS, PROXY protocol, custom Telegram URLs, Ad Tag, secret auto-rotation, maintenance mode, backup rotation, debug mode.

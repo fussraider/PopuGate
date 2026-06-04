@@ -89,7 +89,6 @@ import LiveBadge from '@/components/common/LiveBadge.vue'
 import {
   Bot,
   CalendarClock,
-  Container,
   FileText,
   GitBranch,
   Globe,
@@ -99,7 +98,6 @@ import {
   LogOut,
   Menu,
   Monitor,
-  Package,
   RefreshCw,
   Save,
   Maximize,
@@ -147,7 +145,6 @@ const navItems = computed(() => [
   { path: '/',            icon: LayoutDashboard, label: t('common.dashboard'),   group: 'overview' },
   { path: '/instances',   icon: Server,          label: t('common.instances'),   group: 'proxy' },
   { path: '/upstreams',   icon: GitBranch,       label: t('common.upstreams'),   group: 'proxy' },
-  { path: '/docker',      icon: Container,       label: t('common.docker'),      group: 'proxy' },
   { path: '/secrets',     icon: KeyRound,        label: t('common.secrets'),     group: 'security' },
   { path: '/templates',   icon: LayoutTemplate,  label: t('common.templates'),   group: 'security' },
   { path: '/geoblock',    icon: Globe,           label: t('common.geoblock'),    group: 'security' },
@@ -155,7 +152,6 @@ const navItems = computed(() => [
   { path: '/audit',       icon: FileText,        label: t('common.audit'),       group: 'monitoring' },
   { path: '/bot',         icon: Bot,             label: t('common.bot'),         group: 'integrations' },
   { path: '/replication', icon: RefreshCw,       label: t('common.replication'), group: 'integrations' },
-  { path: '/updates',     icon: Package,         label: t('common.updates'),     group: 'system' },
   { path: '/scheduler',   icon: CalendarClock,   label: t('common.scheduler'),   group: 'system' },
   { path: '/backups',     icon: Save,            label: t('common.backups'),     group: 'system' },
   { path: '/settings',    icon: Settings,        label: t('common.settings'),    group: 'system' },
@@ -181,8 +177,7 @@ const groupedNavItems = computed(() => {
 })
 
 const showBadge = computed(() => (path: string) => {
-  if (path === '/updates') return !!updateStore.status?.update_available
-  if (path === '/docker') return !!dockerStore.telemtUpdateStatus?.update_available || !!dockerStore.hostUpdateStatus?.update_available
+  if (path === '/system') return !!updateStore.status?.update_available || !!dockerStore.telemtUpdateStatus?.update_available || !!dockerStore.hostUpdateStatus?.update_available
   if (path === '/scheduler') return schedulerStore.tasks.some(t => t.last_run?.status === 'error')
   if (path === '/secrets') return secretsStore.secrets.some(s => {
     if (!s.enabled || !s.expires_at || s.expires_at === '0') return false
@@ -193,13 +188,16 @@ const showBadge = computed(() => (path: string) => {
 })
 
 const badgeTooltip = (path: string): string => {
-  if (path === '/updates') return t('nav.badge.updates')
-  if (path === '/docker') {
+  if (path === '/system') {
+    const popugate = !!updateStore.status?.update_available
     const telemt = !!dockerStore.telemtUpdateStatus?.update_available
     const host = !!dockerStore.hostUpdateStatus?.update_available
+    if (popugate && telemt && host) return t('nav.badge.updates') + ' & ' + t('nav.badge.docker_both')
+    if (popugate) return t('nav.badge.updates')
     if (telemt && host) return t('nav.badge.docker_both')
     if (host) return t('nav.badge.docker_host')
-    return t('nav.badge.docker')
+    if (telemt) return t('nav.badge.docker')
+    return t('nav.badge.updates')
   }
   if (path === '/scheduler') return t('nav.badge.scheduler')
   if (path === '/secrets') return t('nav.badge.secrets')

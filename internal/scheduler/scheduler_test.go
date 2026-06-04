@@ -47,6 +47,8 @@ func TestDefaultTasks(t *testing.T) {
 		"traffic-flush", "quota-check", "expiry-check", "health-check",
 		"telegram-report", "replication-sync", "update-check", "telemt-check",
 		"token-cleanup", "daily-backup", "backup-cleanup", "history-cleanup",
+		"docker-host-check", "auto-update", "quota-reset", "auto-rotate",
+		"upstream-health", "fronting-update",
 	}
 	for _, name := range expected {
 		if !names[name] {

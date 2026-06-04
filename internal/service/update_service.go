@@ -26,10 +26,11 @@ import (
 	"github.com/fussraider/PopuGate/pkg/logger"
 )
 
+var githubReleasesAPI = "https://api.github.com/repos/%s/releases/latest"
+
 const (
-	githubReleasesAPI = "https://api.github.com/repos/%s/releases/latest"
-	webImageRef       = "ghcr.io/fussraider/popugate-web:latest"
-	webDistAssetName  = "popugate-web-dist.tar.gz"
+	webImageRef      = "ghcr.io/fussraider/popugate-web:latest"
+	webDistAssetName = "popugate-web-dist.tar.gz"
 )
 
 // UpdateService handles checking and applying self-updates.
@@ -120,6 +121,71 @@ func (s *UpdateService) Check(ctx context.Context) (*UpdateStatus, error) {
 		HTMLURL:         release.HTMLURL,
 		Mode:            mode,
 	}, nil
+}
+
+// AutoUpdate checks for a new PopuGate release and applies it if available.
+// Sends Telegram notifications on success or failure.
+// This method is intended for use by the scheduler's "auto-update" task.
+func (s *UpdateService) AutoUpdate(ctx context.Context, notify NotifyFunc) error {
+	log := logger.WithScope("update")
+
+	status, err := s.Check(ctx)
+	if err != nil {
+		return fmt.Errorf("auto-update check failed: %w", err)
+	}
+
+	if !status.UpdateAvailable {
+		log.Infof("auto-update: already up to date (v%s)", status.Current)
+		return nil
+	}
+
+	log.Infof("auto-update: update available v%s → v%s, applying...", status.Current, status.Latest)
+
+	if notify != nil {
+		notify(ctx, "🔄 *%s* Auto-update started: v%s → v%s", status.Current, status.Latest)
+	}
+
+	result, err := s.Apply(ctx)
+	if err != nil {
+		if notify != nil {
+			notify(ctx, "❌ *%s* Auto-update failed: %v\n\n"+
+				"*Рекомендации по исправлению:*\n"+
+				"1. Проверьте свободное место на диске: `df -h`\n"+
+				"2. Проверьте подключение к сети и доступность GitHub API.\n"+
+				"3. Изучите системные логи: `journalctl -u popugate -n 50 --no-pager` или `docker logs popugate`.",
+				err)
+		}
+		return fmt.Errorf("auto-update apply failed: %w", err)
+	}
+
+	if notify != nil {
+		notify(ctx, "✅ *%s* Auto-update applied: v%s → v%s. Restarting...",
+			result.PreviousVersion, result.NewVersion)
+	}
+
+	// Restart in goroutine so Notify can complete
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Errorf("goroutine panic (AutoUpdate RestartSelf): %v", r)
+			}
+		}()
+		time.Sleep(2 * time.Second)
+		if err := s.RestartSelf(result.ImagePulled); err != nil {
+			log.Warnf("auto-update restart failed: %v", err)
+			if notify != nil {
+				notify(context.Background(), "⚠️ *%s* Auto-update restart failed: %v\n\n"+
+					"*Что делать:*\n"+
+					"Обновление было успешно скачано и применено, но служба не смогла перезапуститься автоматически.\n"+
+					"- Выполните ручной перезапуск службы:\n"+
+					"  • Для бинарной версии: `sudo systemctl restart popugate`\n"+
+					"  • Для docker версии: `docker compose restart`",
+					err)
+			}
+		}
+	}()
+
+	return nil
 }
 
 // Apply downloads and installs the update.

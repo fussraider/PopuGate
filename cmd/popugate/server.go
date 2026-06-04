@@ -125,7 +125,7 @@ func runServer(cmd *cobra.Command, args []string) {
 		backupStore: stores.backup, activeBot: &activeBot, botMu: &botMu,
 		updateSvc: svcs.update, telemtUpdateSvc: svcs.telemtUpdate, telemtCfg: svcs.telemtCfg,
 		dockerUpdateSvc: svcs.dockerUpdate,
-		notify: notifyFn, notifyWithBtns: notifyWithBtns, trafficStore: stores.traffic, secretSvc: svcs.secret,
+		notify:          notifyFn, notifyWithBtns: notifyWithBtns, trafficStore: stores.traffic, secretSvc: svcs.secret,
 		upstreamSvc: svcs.upstream, auditSvc: auditSvc, containerSvc: svcs.container,
 	})
 
@@ -609,6 +609,7 @@ func buildTaskFn(name string, p schedulerTaskParams) func(context.Context) error
 		"backup-cleanup":    buildBackupCleanup,
 		"telegram-report":   buildTelegramReport,
 		"update-check":      buildUpdateCheck,
+		"auto-update":       buildAutoUpdate,
 		"telemt-check":      buildTelemtCheck,
 		"docker-host-check": buildDockerHostCheck,
 		"history-cleanup":   buildHistoryCleanup,
@@ -737,11 +738,20 @@ func buildUpdateCheck(p schedulerTaskParams) func(context.Context) error {
 				buttons = append(buttons, service.KeyboardButton{Text: "Release Notes", URL: status.HTMLURL})
 			}
 			if webURL != "" {
-				buttons = append(buttons, service.KeyboardButton{Text: "Updates", URL: webURL + "/updates"})
+				buttons = append(buttons, service.KeyboardButton{Text: "Updates", URL: webURL + "/system"})
 			}
 			p.notifyWithBtns(ctx, "🆕 *%s* New PopuGate version available: v%s\nCurrent: v%s", buttons, status.Latest, status.Current)
 		}
 		return nil
+	}
+}
+
+func buildAutoUpdate(p schedulerTaskParams) func(context.Context) error {
+	if p.updateSvc == nil {
+		return nil
+	}
+	return func(ctx context.Context) error {
+		return p.updateSvc.AutoUpdate(ctx, p.notify)
 	}
 }
 

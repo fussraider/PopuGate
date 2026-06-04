@@ -175,4 +175,3 @@ func TestContainerService_GetActiveContainerName(t *testing.T) {
 		t.Errorf("expected active container name %q, got %q", expectedName, activeName)
 	}
 }
-

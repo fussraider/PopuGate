@@ -212,18 +212,14 @@ Master-Slave синхронизация настроек и секретов м�
 ### 🕐 Планировщик (Scheduler)
 Управление фоновыми задачами: включение/отключение, изменение расписания (cron), ручной запуск, история выполнения с деталями ошибок.
 
-**Стандартные задачи:** traffic-flush, quota-check, expiry-check, health-check, upstream-health, telegram-report, replication-sync, update-check, telemt-check, token-cleanup, daily-backup, backup-cleanup, history-cleanup, quota-reset, auto-rotate.
+**Стандартные задачи:** traffic-flush, quota-check, expiry-check, health-check, upstream-health, telegram-report, replication-sync, update-check, auto-update, telemt-check, docker-host-check, token-cleanup, daily-backup, backup-cleanup, history-cleanup, quota-reset, auto-rotate.
 
-### 🆙 Обновления (Updates)
-Автоматическая проверка и ручное применение обновлений. Бинарный режим — скачивание с GitHub + перезапуск systemd. Docker-режим — pull нового образа + пересоздание контейнера.
-
-### 🐳 Docker
-Проверка наличия Docker, установка, сборка и обновление образа движка `telemt`.
-
-### 🖥️ Системное меню (System)
-Установка/удаление systemd-службы, перезапуск, просмотр статуса и информации о системе.
-
-- **Настройка TCP-сети**: Включение/отключение оптимизаций ядра TCP BBR и TCP FastOpen (sysctl) одним кликом, с автоматическим резервным копированием и возможностью отката к исходным значениям
+### 🖥️ Система (System)
+Консолидированный раздел для мониторинга ресурсов, информации об ОС, управления системной службой systemd, интеграции с Docker и обновлений приложения:
+- **Служба Systemd**: Установка/удаление службы systemd в один клик, перезапуск и логирование состояния.
+- **Интеграция с Docker**: Проверка статуса демона Docker на хосте, обновление Docker, сборка и обновление образа прокси-движка `telemt`.
+- **Обновления**: Настройка расписания автоматического обновления PopuGate с уведомлением в Telegram при ошибках, а также ручное обновление (перезапуск systemd в бинарном режиме, пересоздание контейнера в режиме Docker).
+- **Настройка TCP-сети**: Включение/отключение оптимизаций ядра TCP BBR и TCP FastOpen (sysctl) в один клик с автоматическим резервным копированием и возможностью отката к исходным значениям.
 
 ### ⚙️ Настройки (Settings)
 Глобальные параметры: CPU/memory лимиты Docker, кастомный IP, FakeTLS, PROXY-протокол, кастомные URL Telegram, Ad Tag, авторотация секретов, режим обслуживания, ротация бекапов, режим отладки.

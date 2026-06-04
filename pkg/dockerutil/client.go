@@ -328,7 +328,6 @@ func (d *DockerClient) ListRunningContainerNames(ctx context.Context) (map[strin
 	return names, nil
 }
 
-
 // ResolveHostPath translates a container-local path to a host-relative path
 // if running inside a container with the data volume mounted.
 func (d *DockerClient) ResolveHostPath(path string) string {

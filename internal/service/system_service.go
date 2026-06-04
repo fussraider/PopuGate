@@ -444,7 +444,6 @@ func ConfigureSysctl(ctx context.Context, s *store.SettingsStore, enabled bool) 
 	return restoreOriginalSysctl(ctx, s, settings)
 }
 
-
 func readProcFile(path string) (string, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -452,4 +451,3 @@ func readProcFile(path string) (string, error) {
 	}
 	return strings.TrimSpace(string(data)), nil
 }
-

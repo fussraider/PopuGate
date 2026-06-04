@@ -3,6 +3,10 @@ package service
 import (
 	"archive/tar"
 	"compress/gzip"
+	"context"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,6 +16,7 @@ import (
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/go-connections/nat"
+	"github.com/fussraider/PopuGate/internal/model"
 )
 
 func TestIsDockerEnvironment(t *testing.T) {
@@ -627,4 +632,94 @@ func TestApplyDispatchesByMode(t *testing.T) {
 			t.Error("expected isDocker=false")
 		}
 	})
+}
+
+func TestAutoUpdateNoUpdateAvailable(t *testing.T) {
+	// Spin up a mock HTTP server for GitHub API
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		// Return tag_name that matches the current version to simulate "no update available"
+		_, _ = w.Write([]byte(`{"tag_name": "v1.2.3", "html_url": "https://github.com/foo/bar"}`))
+	}))
+	defer ts.Close()
+
+	// Override API endpoint
+	oldAPI := githubReleasesAPI
+	githubReleasesAPI = ts.URL + "/%s"
+	defer func() { githubReleasesAPI = oldAPI }()
+
+	// Mock the version
+	origVersion := model.Version
+	model.Version = "1.2.3"
+	defer func() { model.Version = origVersion }()
+
+	svc := NewUpdateService(nil)
+	ctx := context.Background()
+
+	// Notify function to track calls
+	var notifyCalls []string
+	notifyFn := func(c context.Context, format string, args ...interface{}) {
+		notifyCalls = append(notifyCalls, fmt.Sprintf(format, args...))
+	}
+
+	err := svc.AutoUpdate(ctx, notifyFn)
+	if err != nil {
+		t.Fatalf("expected nil error, got: %v", err)
+	}
+
+	if len(notifyCalls) != 0 {
+		t.Errorf("expected 0 notifications when no update is available, got: %v", notifyCalls)
+	}
+}
+
+func TestAutoUpdateUpdateAvailableApplyFails(t *testing.T) {
+	// Spin up a mock HTTP server for GitHub API returning a newer version
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"tag_name": "v2.0.0", "html_url": "https://github.com/foo/bar"}`))
+	}))
+	defer ts.Close()
+
+	// Override API endpoint
+	oldAPI := githubReleasesAPI
+	githubReleasesAPI = ts.URL + "/%s"
+	defer func() { githubReleasesAPI = oldAPI }()
+
+	// Mock the version
+	origVersion := model.Version
+	model.Version = "1.2.3"
+	defer func() { model.Version = origVersion }()
+
+	svc := NewUpdateService(nil)
+	ctx := context.Background()
+
+	// Notify function to track calls
+	var notifyCalls []string
+	notifyFn := func(c context.Context, format string, args ...interface{}) {
+		notifyCalls = append(notifyCalls, fmt.Sprintf(format, args...))
+	}
+
+	// Applying the update will fail because we are in binary mode and have not mocked the actual release assets download url etc.
+	err := svc.AutoUpdate(ctx, notifyFn)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	// Verify that notification was sent on start and on failure
+	if len(notifyCalls) < 2 {
+		t.Fatalf("expected at least 2 notifications (started and failed), got: %d", len(notifyCalls))
+	}
+
+	if !strings.Contains(notifyCalls[0], "Auto-update started") {
+		t.Errorf("expected first notification to be Auto-update started, got: %s", notifyCalls[0])
+	}
+
+	if !strings.Contains(notifyCalls[1], "Auto-update failed") {
+		t.Errorf("expected second notification to be Auto-update failed, got: %s", notifyCalls[1])
+	}
+
+	// Verify it contains the Russian recommendations
+	if !strings.Contains(notifyCalls[1], "Рекомендации по исправлению") {
+		t.Errorf("expected recommendations in notification, got: %s", notifyCalls[1])
+	}
 }

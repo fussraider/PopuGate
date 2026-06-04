@@ -254,9 +254,9 @@
           </tr>
         </tbody>
       </table>
-      <div class="modal-footer-inline mt-md">
+      <template #footer>
         <button class="btn btn-secondary" @click="topModal = false">{{ t('common.cancel') }}</button>
-      </div>
+      </template>
     </Modal>
 
     <!-- Bulk Extend Modal -->
@@ -306,13 +306,13 @@
       <p v-if="importPreview > 0" class="text-muted mb-md">
         {{ t('secrets.import_preview', { count: importPreview }) }}
       </p>
-      <div class="modal-footer-inline">
+      <template #footer>
         <button class="btn btn-secondary" @click="importModal = false">{{ t('common.cancel') }}</button>
         <button class="btn btn-primary" :disabled="importPreview === 0 || importing" @click="handleImport">
           <Loader2 v-if="importing" :size="16" class="animate-spin" />
           {{ t('secrets.import') }}
         </button>
-      </div>
+      </template>
     </Modal>
 
     <!-- Confirm Dialog -->

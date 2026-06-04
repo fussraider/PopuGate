@@ -91,10 +91,10 @@
           <option v-for="s in secretsStore.secrets" :key="s.label" :value="s.label">{{ s.label }}</option>
         </select>
       </div>
-      <div class="modal-footer-inline">
+      <template #footer>
         <button class="btn btn-secondary" @click="applyModal = false">{{ t('common.cancel') }}</button>
         <button class="btn btn-primary" :disabled="!applyTarget" @click="handleApply">{{ t('templates.apply') }}</button>
-      </div>
+      </template>
     </Modal>
 
     <!-- Mobile Action Sheet -->

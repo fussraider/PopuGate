@@ -118,6 +118,7 @@
     "no_backups": "No backups",
     "services": "Services",
     "geoblock": "Geo-block",
+    "unavailable": "Unavailable",
     "not_configured": "Not configured",
     "activity": "Recent Activity",
     "update_banner": "PopuGate {latest} is available (current: {current}).",
@@ -419,7 +420,9 @@
     "help": "Help",
     "blacklist_help": "Blacklist mode: Traffic from listed countries will be blocked.",
     "whitelist_help": "Whitelist mode: Only traffic from listed countries will be allowed.",
-    "help_tip": "Country codes should be 2-letter ISO codes (e.g., US, DE, CN, RU). Changes take effect immediately via iptables/ipset rules."
+    "help_tip": "Country codes should be 2-letter ISO codes (e.g., US, DE, CN, RU). Changes take effect immediately via iptables/ipset rules.",
+    "unavailable": "Geo-blocking is unavailable on this system.",
+    "unavailable_reason": "Reason: {reason}"
   },
   "instances": {
     "add_instance": "Add Instance",
@@ -480,6 +483,7 @@
     "antiblock_section": "Anti-Blocking",
     "tcp_mss_enabled": "TCPMSS Fragmentation",
     "tcp_mss_enabled_hint": "Fragment ClientHello packets to defeat DPI reassembly. Requires iptables on the host.",
+    "tcp_mss_unavailable": "Requires iptables",
     "tcp_mss": "MSS Value",
     "tcp_mss_hint": "Maximum Segment Size (1-1460). Lower = more fragmentation. Default: 88.",
     "tls_fronting": "TLS Fronting Content",

@@ -7,12 +7,30 @@ export const useGeoblockStore = defineStore('geoblock', () => {
   const mode = ref<'blacklist' | 'whitelist'>('blacklist')
   const countries = ref<string[]>([])
   const loading = ref(false)
+  const available = ref(true)
+  const error = ref('')
 
-  function load(settings: Settings) {
-    mode.value = settings.geoblock_mode
-    countries.value = settings.blocklist_countries
-      ? settings.blocklist_countries.split(',').filter(Boolean)
-      : []
+  async function load(settings?: Settings) {
+    if (settings) {
+      mode.value = settings.geoblock_mode
+      countries.value = settings.blocklist_countries
+        ? settings.blocklist_countries.split(',').filter(Boolean)
+        : []
+    }
+    loading.value = true
+    try {
+      const res = await geoblockApi.get()
+      mode.value = res.mode
+      countries.value = res.countries
+        ? res.countries.split(',').filter(Boolean)
+        : []
+      available.value = res.available !== false
+      error.value = res.error || ''
+    } catch {
+      // Ignored: API interceptor shows error toasts
+    } finally {
+      loading.value = false
+    }
   }
 
   async function addCountry(code: string) {
@@ -58,5 +76,5 @@ export const useGeoblockStore = defineStore('geoblock', () => {
     }
   }
 
-  return { mode, countries, loading, load, addCountry, removeCountry, clear, setMode }
+  return { mode, countries, loading, available, error, load, addCountry, removeCountry, clear, setMode }
 })

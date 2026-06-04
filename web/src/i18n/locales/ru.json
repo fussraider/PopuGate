@@ -118,6 +118,7 @@
     "no_backups": "Нет бэкапов",
     "services": "Сервисы",
     "geoblock": "Геоблок",
+    "unavailable": "Недоступен",
     "not_configured": "Не настроена",
     "activity": "Последние события",
     "update_banner": "Доступна PopuGate {latest} (текущая: {current}).",
@@ -419,7 +420,9 @@
     "help": "Справка",
     "blacklist_help": "Режим черного списка: Трафик из перечисленных стран будет заблокирован.",
     "whitelist_help": "Режим белого списка: Разрешен будет только трафик из перечисленных стран.",
-    "help_tip": "Коды стран должны быть в формате ISO (2 буквы, например: RU, US, DE). Изменения вступают в силу немедленно через iptables/ipset."
+    "help_tip": "Коды стран должны быть в формате ISO (2 буквы, например: RU, US, DE). Изменения вступают в силу немедленно через iptables/ipset.",
+    "unavailable": "Геоблокировка недоступна в этой системе.",
+    "unavailable_reason": "Причина: {reason}"
   },
   "instances": {
     "add_instance": "Добавить инстанс",
@@ -480,6 +483,7 @@
     "antiblock_section": "Антиблокировка",
     "tcp_mss_enabled": "Фрагментация TCPMSS",
     "tcp_mss_enabled_hint": "Фрагментировать пакеты ClientHello для обхода реассемблера DPI. Требует iptables на хосте.",
+    "tcp_mss_unavailable": "Требуется iptables",
     "tcp_mss": "Значение MSS",
     "tcp_mss_hint": "Maximum Segment Size (1-1460). Ниже значение — больше фрагментация. По умолчанию: 88.",
     "tls_fronting": "Содержимое TLS-фронтинга",

@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -37,6 +38,17 @@ func NewGeoblockService(settings *store.SettingsStore, instances *store.Instance
 		cache:     cache,
 		iptables:  netutil.NewIptablesManager(),
 	}
+}
+
+// IsAvailable checks if iptables and ipset command line utilities are available on the system.
+func (s *GeoblockService) IsAvailable() (bool, string) {
+	if _, err := exec.LookPath("iptables"); err != nil {
+		return false, "iptables is not installed or not found in PATH"
+	}
+	if _, err := exec.LookPath("ipset"); err != nil {
+		return false, "ipset is not installed or not found in PATH"
+	}
+	return true, ""
 }
 
 func (s *GeoblockService) collectPorts(ctx context.Context, primaryPort int) []string {

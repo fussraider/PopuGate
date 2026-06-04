@@ -261,10 +261,13 @@
       <div class="form-card">
         <h4 class="form-card-title">{{ t('instances.antiblock_section') }}</h4>
         <div class="form-group mb-md">
-          <label class="checkbox-label">
-            <input v-model="form.tcp_mss_enabled" type="checkbox" />
+          <label class="checkbox-label" :class="{ 'text-muted': !geoblockStore.available }">
+            <input v-model="form.tcp_mss_enabled" type="checkbox" :disabled="!geoblockStore.available" />
             <span>{{ t('instances.tcp_mss_enabled') }}</span>
-            <Tooltip :text="t('instances.tcp_mss_enabled_hint')">
+            <span v-if="!geoblockStore.available" class="text-xs text-danger ml-sm">
+              ({{ t('instances.tcp_mss_unavailable') }})
+            </span>
+            <Tooltip v-else :text="t('instances.tcp_mss_enabled_hint')">
               <Info :size="14" class="text-muted" />
             </Tooltip>
           </label>
@@ -351,6 +354,7 @@ import {useI18n} from 'vue-i18n'
 import {useInstancesStore} from '@/stores/instances'
 import {useProxyStore} from '@/stores/proxy'
 import {useToastStore} from '@/stores/toast'
+import {useGeoblockStore} from '@/stores/geoblock'
 import {useConfirmDialog} from '@/composables/useConfirmDialog'
 import {useActionMenu} from '@/composables/useActionMenu'
 import {instancesApi} from '@/api/endpoints'
@@ -387,6 +391,7 @@ const { t } = useI18n()
 const store = useInstancesStore()
 const proxyStore = useProxyStore()
 const toast = useToastStore()
+const geoblockStore = useGeoblockStore()
 const instanceActions = useActionMenu<Instance>()
 
 const selectedIds = ref<Set<number>>(new Set())
@@ -751,6 +756,7 @@ onMounted(() => {
   store.load()
   proxyStore.loadStatus()
   proxyStore.startStatusStream()
+  geoblockStore.load()
 })
 
 onUnmounted(() => {

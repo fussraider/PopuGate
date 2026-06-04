@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -38,14 +39,37 @@ func (h *GeoblockHandler) Get(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
+	available := true
+	reason := ""
+	if h.geoSvc != nil {
+		available, reason = h.geoSvc.IsAvailable()
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"mode":      settings.GeoblockMode,
 		"countries": settings.BlocklistCountries,
+		"available": available,
+		"error":     reason,
 	})
 }
 
 type geoRequest struct {
 	Country string `json:"country" binding:"required,alpha,len=2"`
+}
+
+func (r *geoRequest) UnmarshalJSON(data []byte) error {
+	type alias geoRequest
+	var temp struct {
+		alias
+		CountryCode string `json:"country_code"`
+	}
+	if err := json.Unmarshal(data, &temp); err != nil {
+		return err
+	}
+	r.Country = temp.Country
+	if r.Country == "" {
+		r.Country = temp.CountryCode
+	}
+	return nil
 }
 
 // Add handles POST /api/v1/geoblock/add
@@ -61,6 +85,13 @@ type geoRequest struct {
 // @Security     BearerAuth
 // @Router       /geoblock/add [post]
 func (h *GeoblockHandler) Add(c *gin.Context) {
+	if h.geoSvc != nil {
+		if ok, reason := h.geoSvc.IsAvailable(); !ok {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("geoblocking is not available: %s", reason)})
+			return
+		}
+	}
+
 	var req geoRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		HandleBindError(c, err)
@@ -86,7 +117,8 @@ func (h *GeoblockHandler) Add(c *gin.Context) {
 		}
 	}
 
-	countries := settings.BlocklistCountries
+	oldCountries := settings.BlocklistCountries
+	countries := oldCountries
 	if countries != "" {
 		countries += ","
 	}
@@ -100,6 +132,7 @@ func (h *GeoblockHandler) Add(c *gin.Context) {
 	// Apply rules
 	if h.geoSvc != nil {
 		if err := h.geoSvc.Apply(ctx); err != nil {
+			_ = h.settings.Save(ctx, map[string]string{"blocklist_countries": oldCountries})
 			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to apply iptables rules: %v", err)})
 			return
 		}
@@ -122,6 +155,13 @@ func (h *GeoblockHandler) Add(c *gin.Context) {
 // @Security     BearerAuth
 // @Router       /geoblock/remove [post]
 func (h *GeoblockHandler) Remove(c *gin.Context) {
+	if h.geoSvc != nil {
+		if ok, reason := h.geoSvc.IsAvailable(); !ok {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("geoblocking is not available: %s", reason)})
+			return
+		}
+	}
+
 	var req geoRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		HandleBindError(c, err)
@@ -134,8 +174,9 @@ func (h *GeoblockHandler) Remove(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
+	oldCountries := settings.BlocklistCountries
 	var remaining []string
-	for _, c := range splitCountries(settings.BlocklistCountries) {
+	for _, c := range splitCountries(oldCountries) {
 		if c != req.Country {
 			remaining = append(remaining, c)
 		}
@@ -148,6 +189,7 @@ func (h *GeoblockHandler) Remove(c *gin.Context) {
 	// Re-apply rules
 	if h.geoSvc != nil {
 		if err := h.geoSvc.Apply(ctx); err != nil {
+			_ = h.settings.Save(ctx, map[string]string{"blocklist_countries": oldCountries})
 			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to apply iptables rules: %v", err)})
 			return
 		}
@@ -168,6 +210,13 @@ func (h *GeoblockHandler) Remove(c *gin.Context) {
 // @Security     BearerAuth
 // @Router       /geoblock/clear [post]
 func (h *GeoblockHandler) Clear(c *gin.Context) {
+	if h.geoSvc != nil {
+		if ok, reason := h.geoSvc.IsAvailable(); !ok {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("geoblocking is not available: %s", reason)})
+			return
+		}
+	}
+
 	ctx := c.Request.Context()
 
 	if h.geoSvc != nil {
@@ -202,6 +251,13 @@ type modeRequest struct {
 // @Security     BearerAuth
 // @Router       /geoblock/mode [put]
 func (h *GeoblockHandler) SetMode(c *gin.Context) {
+	if h.geoSvc != nil {
+		if ok, reason := h.geoSvc.IsAvailable(); !ok {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("geoblocking is not available: %s", reason)})
+			return
+		}
+	}
+
 	var req modeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		HandleBindError(c, err)
@@ -209,6 +265,13 @@ func (h *GeoblockHandler) SetMode(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
+	settings, err := h.settings.Load(ctx)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		return
+	}
+	oldMode := settings.GeoblockMode
+
 	if err := h.settings.Save(ctx, map[string]string{"geoblock_mode": req.Mode}); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
@@ -217,6 +280,7 @@ func (h *GeoblockHandler) SetMode(c *gin.Context) {
 	// Re-apply rules with new mode
 	if h.geoSvc != nil {
 		if err := h.geoSvc.Apply(ctx); err != nil {
+			_ = h.settings.Save(ctx, map[string]string{"geoblock_mode": oldMode})
 			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to apply iptables rules: %v", err)})
 			return
 		}

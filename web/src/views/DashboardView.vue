@@ -138,7 +138,10 @@
 
           <router-link :to="{ name: 'Geoblock' }" class="mini-card">
             <span class="mini-card-label">{{ t('dashboard.geoblock') }}</span>
-            <StatusBadge v-if="geoblockStore.countries.length > 0" variant="success">
+            <StatusBadge v-if="!geoblockStore.available" variant="danger">
+              {{ t('dashboard.unavailable') }}
+            </StatusBadge>
+            <StatusBadge v-else-if="geoblockStore.countries.length > 0" variant="success">
               {{ geoblockStore.mode === 'blacklist' ? '✕' : '✓' }} {{ geoblockStore.countries.length }}
             </StatusBadge>
             <StatusBadge v-else variant="neutral">{{ t('dashboard.disabled') }}</StatusBadge>

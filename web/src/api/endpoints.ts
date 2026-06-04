@@ -284,8 +284,8 @@ export const dockerApi = {
 
 export const geoblockApi = {
   get: () => api.get('/geoblock').then((r) => r.data),
-  add: (countryCode: string) => api.post('/geoblock/add', { country_code: countryCode }),
-  remove: (countryCode: string) => api.post('/geoblock/remove', { country_code: countryCode }),
+  add: (countryCode: string) => api.post('/geoblock/add', { country: countryCode }),
+  remove: (countryCode: string) => api.post('/geoblock/remove', { country: countryCode }),
   clear: () => api.post('/geoblock/clear'),
   setMode: (mode: 'blacklist' | 'whitelist') =>
     api.put('/geoblock/mode', { mode }),

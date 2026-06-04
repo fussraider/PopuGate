@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/fussraider/PopuGate/internal/service"
 	"github.com/fussraider/PopuGate/internal/store"
 	"github.com/fussraider/PopuGate/internal/testutil"
 )
@@ -88,6 +90,29 @@ func TestGeoblockAdd_ValidCountry(t *testing.T) {
 	r, _ := setupGeoblockTestRouter(t)
 
 	body, _ := json.Marshal(map[string]string{"country": "ru"})
+	req := httptest.NewRequest(http.MethodPost, "/geoblock/add", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp["ok"] != true {
+		t.Error("expected ok=true")
+	}
+	if resp["country"] != "ru" {
+		t.Errorf("expected country 'ru', got %v", resp["country"])
+	}
+}
+
+func TestGeoblockAdd_ValidCountryCodeAlias(t *testing.T) {
+	r, _ := setupGeoblockTestRouter(t)
+
+	body, _ := json.Marshal(map[string]string{"country_code": "ru"})
 	req := httptest.NewRequest(http.MethodPost, "/geoblock/add", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -506,5 +531,59 @@ func TestGeoblockRemove_SettingsLoadFailure(t *testing.T) {
 
 	if w.Code != http.StatusInternalServerError {
 		t.Fatalf("expected 500 when settings.Load fails, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestGeoblockHandler_Unavailable(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db := testutil.OpenTestDB(t)
+	settingsStore := store.NewSettingsStore(db)
+	
+	// Create a real GeoblockService. On macOS, this will be unavailable because there is no iptables/ipset.
+	instancesStore := store.NewInstanceStore(db)
+	cacheStore := store.NewGeoblockCacheStore(db)
+	geoSvc := service.NewGeoblockService(settingsStore, instancesStore, cacheStore)
+	
+	// If by any chance they are installed (e.g. running on Linux CI with iptables), we skip or check the status.
+	available, _ := geoSvc.IsAvailable()
+	if available {
+		t.Skip("iptables/ipset are available, skipping unavailable test")
+	}
+
+	handler := NewGeoblockHandler(settingsStore, geoSvc)
+
+	r := gin.New()
+	r.POST("/geoblock/add", handler.Add)
+	r.GET("/geoblock", handler.Get)
+
+	// Test Get shows available = false
+	req := httptest.NewRequest(http.MethodGet, "/geoblock", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	var resp map[string]interface{}
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp["available"] != false {
+		t.Errorf("expected available to be false, got %v", resp["available"])
+	}
+
+	// Test Add returns 400 Bad Request
+	body, _ := json.Marshal(map[string]string{"country": "ru"})
+	req = httptest.NewRequest(http.MethodPost, "/geoblock/add", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 Bad Request, got %d: %s", w.Code, w.Body.String())
+	}
+	
+	var errResp map[string]interface{}
+	_ = json.Unmarshal(w.Body.Bytes(), &errResp)
+	if !strings.Contains(errResp["error"].(string), "geoblocking is not available") {
+		t.Errorf("expected error message about availability, got: %v", errResp["error"])
 	}
 }

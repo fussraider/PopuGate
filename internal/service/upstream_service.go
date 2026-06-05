@@ -24,6 +24,7 @@ type UpstreamService struct {
 	notify         NotifyFunc
 	notifyWithBtns NotifyWithButtonsFunc
 	settings       *store.SettingsStore
+	containerSvc   *ContainerService
 }
 
 // NewUpstreamService creates a new UpstreamService.
@@ -45,6 +46,10 @@ func (s *UpstreamService) SetNotifyWithButtons(fn NotifyWithButtonsFunc) {
 
 func (s *UpstreamService) SetSettings(settings *store.SettingsStore) {
 	s.settings = settings
+}
+
+func (s *UpstreamService) SetContainerSvc(svc *ContainerService) {
+	s.containerSvc = svc
 }
 
 func resolveTestResult(res *model.UpstreamTestResult, testErr error) (bool, int64, string) {
@@ -73,6 +78,11 @@ func (s *UpstreamService) handleFailover(ctx context.Context, name string, errMs
 	}
 	if err := s.upstreams.DisableAutomatically(ctx, name, time.Now().Unix()); err == nil {
 		log.Warnf("upstream %s auto-disabled after %d failures", name, latest.FailCount)
+		if s.containerSvc != nil {
+			if err := s.containerSvc.Reload(ctx, fmt.Sprintf("upstream %s auto-disabled", name)); err != nil {
+				log.Warnf("handleFailover: failed to hot-reload instances: %v", err)
+			}
+		}
 		var btn KeyboardButton
 		if s.settings != nil {
 			s2, _ := s.settings.Load(ctx)
@@ -91,6 +101,11 @@ func (s *UpstreamService) handleFailover(ctx context.Context, name string, errMs
 func (s *UpstreamService) handleAutoRecovery(ctx context.Context, name string, latency int64) {
 	if err := s.upstreams.EnableAutomatically(ctx, name); err == nil {
 		log.Infof("upstream %s auto-recovered and re-enabled", name)
+		if s.containerSvc != nil {
+			if err := s.containerSvc.Reload(ctx, fmt.Sprintf("upstream %s auto-recovered", name)); err != nil {
+				log.Warnf("handleAutoRecovery: failed to hot-reload instances: %v", err)
+			}
+		}
 		var btn KeyboardButton
 		if s.settings != nil {
 			s2, _ := s.settings.Load(ctx)
@@ -182,6 +197,7 @@ func (s *UpstreamService) Add(ctx context.Context, u *model.Upstream) error {
 }
 
 func (s *UpstreamService) runInitialHealthCheck(name string, u *model.Upstream) {
+	log.Infof("running initial health check for upstream %s (%s)", name, u.Address)
 	bgCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -197,6 +213,9 @@ func (s *UpstreamService) runInitialHealthCheck(name string, u *model.Upstream) 
 	if res != nil {
 		latency = res.LatencyMs
 	}
+	
+	log.Infof("initial health check completed for %s: ok=%v, latency=%dms, err=%s", name, ok, latency, errMsg)
+
 	if err := s.upstreams.UpdateHealth(bgCtx, name, ok, latency, errMsg); err != nil {
 		log.Errorf("failed to update initial health for %s: %v", name, err)
 	}
@@ -416,3 +435,164 @@ func (s *UpstreamService) testSOCKS4(ctx context.Context, u *model.Upstream) (*m
 		LatencyMs: latency,
 	}, nil
 }
+
+// ParseProxyLine parses a proxy string in various formats and returns a model.Upstream.
+func ParseProxyLine(line string) (*model.Upstream, error) {
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return nil, fmt.Errorf("empty line")
+	}
+
+	u := &model.Upstream{
+		Type:   model.UpstreamSOCKS5, // Default type
+		Weight: 10,                   // Default weight
+	}
+
+	// 1. Extract scheme
+	if strings.HasPrefix(line, "socks5://") {
+		u.Type = model.UpstreamSOCKS5
+		line = line[len("socks5://"):]
+	} else if strings.HasPrefix(line, "socks4://") {
+		u.Type = model.UpstreamSOCKS4
+		line = line[len("socks4://"):]
+	}
+
+	// 2. Check for @ format: credentials@host:port
+	if idx := strings.LastIndex(line, "@"); idx != -1 {
+		creds := line[:idx]
+		addr := line[idx+1:]
+
+		u.Address = addr
+
+		// Split credentials
+		if cIdx := strings.Index(creds, ":"); cIdx != -1 {
+			u.Username = creds[:cIdx]
+			u.Password = creds[cIdx+1:]
+		} else {
+			u.Username = creds
+		}
+	} else {
+		// 3. Check for suffix credentials or host:port: host:port:user:pass or host:port
+		parts := strings.Split(line, ":")
+		if len(parts) >= 4 {
+			// host:port:user:pass
+			u.Address = fmt.Sprintf("%s:%s", parts[0], parts[1])
+			u.Username = parts[2]
+			u.Password = strings.Join(parts[3:], ":") // In case password has colons
+		} else if len(parts) == 3 {
+			// host:port:user
+			u.Address = fmt.Sprintf("%s:%s", parts[0], parts[1])
+			u.Username = parts[2]
+		} else if len(parts) == 2 {
+			// host:port
+			u.Address = line
+		} else {
+			return nil, fmt.Errorf("invalid proxy format: %s", line)
+		}
+	}
+
+	// Basic validation of address
+	if u.Address == "" {
+		return nil, fmt.Errorf("missing address")
+	}
+	if _, _, err := net.SplitHostPort(u.Address); err != nil {
+		return nil, fmt.Errorf("invalid host:port address: %s", u.Address)
+	}
+
+	return u, nil
+}
+
+// GenerateBulkUpstreamName generates a unique, valid upstream name for a bulk proxy.
+func GenerateBulkUpstreamName(u *model.Upstream) string {
+	prefix := "s5"
+	if u.Type == model.UpstreamSOCKS4 {
+		prefix = "s4"
+	} else if u.Type == model.UpstreamDirect {
+		prefix = "dir"
+	}
+
+	host, port, err := net.SplitHostPort(u.Address)
+	if err != nil {
+		host = u.Address
+		port = "0"
+	}
+
+	// Clean host: replace non-alphanumeric chars with dashes
+	cleanedHost := ""
+	for _, r := range host {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
+			cleanedHost += string(r)
+		} else {
+			cleanedHost += "-"
+		}
+	}
+	// Clean duplicate dashes
+	for strings.Contains(cleanedHost, "--") {
+		cleanedHost = strings.ReplaceAll(cleanedHost, "--", "-")
+	}
+	cleanedHost = strings.Trim(cleanedHost, "-")
+
+	var name string
+	maxHostLenWithoutHash := 32 - len(prefix) - 2 - len(port)
+	if len(cleanedHost) <= maxHostLenWithoutHash {
+		name = fmt.Sprintf("%s-%s-%s", prefix, cleanedHost, port)
+	} else {
+		// Format with hash: prefix + "-" + cleanedHostPrefix + "-" + hashStr + "-" + port
+		// Total dashes: 3
+		h := uint32(0)
+		for i := 0; i < len(host); i++ {
+			h = h*31 + uint32(host[i])
+		}
+		hashStr := fmt.Sprintf("%x", h)
+
+		maxHostPrefixLen := 32 - len(prefix) - 3 - len(hashStr) - len(port)
+		if maxHostPrefixLen < 0 {
+			maxHostPrefixLen = 0
+		}
+
+		if len(cleanedHost) > maxHostPrefixLen {
+			cleanedHost = cleanedHost[:maxHostPrefixLen]
+		}
+		cleanedHost = strings.Trim(cleanedHost, "-")
+
+		name = fmt.Sprintf("%s-%s-%s-%s", prefix, cleanedHost, hashStr, port)
+	}
+
+	// Clean duplicate dashes and trailing/leading dashes on final name
+	for strings.Contains(name, "--") {
+		name = strings.ReplaceAll(name, "--", "-")
+	}
+	name = strings.Trim(name, "-")
+	return name
+}
+
+// AddMultiple inserts multiple upstreams inside a transaction.
+// Returns the number of successfully inserted upstreams.
+func (s *UpstreamService) AddMultiple(ctx context.Context, upstreams []*model.Upstream) (int, error) {
+	for _, u := range upstreams {
+		if err := u.Validate(); err != nil {
+			return 0, err
+		}
+		u.Enabled = true
+	}
+	count, err := s.upstreams.CreateMultiple(ctx, upstreams)
+	if err != nil {
+		return 0, err
+	}
+
+	// Run initial health checks asynchronously for all newly added upstreams.
+	for _, u := range upstreams {
+		go func(name string, upstreamCopy model.Upstream) {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Warnf("goroutine panic (initial health check %s): %v", name, r)
+				}
+			}()
+			s.runInitialHealthCheck(name, &upstreamCopy)
+		}(u.Name, *u)
+	}
+
+	return count, nil
+}
+
+

@@ -282,6 +282,7 @@ func initServices(s appStores, dataDir string) appServices {
 		svcs.container = service.NewContainerService(
 			dataDir, dockerClient, s.secret, s.upstream, s.instance, s.traffic, s.settings, svcs.traffic,
 		)
+		svcs.upstream.SetContainerSvc(svcs.container)
 		svcs.health = service.NewHealthService(dockerClient, s.settings, s.instance)
 		svcs.health.SetContainerSvc(svcs.container)
 		svcs.repl = service.NewReplicationService(s.settings, s.slave, s.instance)

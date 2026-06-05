@@ -471,3 +471,147 @@ func TestUpstreamService_AutoRecovery(t *testing.T) {
 		t.Fatal("expected Telegram notification on recovery")
 	}
 }
+
+func TestParseProxyLine(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		want    *model.Upstream
+		wantErr bool
+	}{
+		{
+			name:  "socks5 with credentials",
+			input: "socks5://user:pass@1.2.3.4:1080",
+			want: &model.Upstream{
+				Type:     model.UpstreamSOCKS5,
+				Address:  "1.2.3.4:1080",
+				Username: "user",
+				Password: "pass",
+				Weight:   10,
+			},
+			wantErr: false,
+		},
+		{
+			name:  "socks4 scheme only",
+			input: "socks4://8.8.8.8:8080",
+			want: &model.Upstream{
+				Type:    model.UpstreamSOCKS4,
+				Address: "8.8.8.8:8080",
+				Weight:  10,
+			},
+			wantErr: false,
+		},
+		{
+			name:  "no scheme default socks5",
+			input: "192.168.1.1:1080",
+			want: &model.Upstream{
+				Type:    model.UpstreamSOCKS5,
+				Address: "192.168.1.1:1080",
+				Weight:  10,
+			},
+			wantErr: false,
+		},
+		{
+			name:  "suffix credentials",
+			input: "1.2.3.4:1080:username:password123",
+			want: &model.Upstream{
+				Type:     model.UpstreamSOCKS5,
+				Address:  "1.2.3.4:1080",
+				Username: "username",
+				Password: "password123",
+				Weight:   10,
+			},
+			wantErr: false,
+		},
+		{
+			name:  "suffix credentials username only",
+			input: "1.2.3.4:1080:usernameOnly",
+			want: &model.Upstream{
+				Type:     model.UpstreamSOCKS5,
+				Address:  "1.2.3.4:1080",
+				Username: "usernameOnly",
+				Weight:   10,
+			},
+			wantErr: false,
+		},
+		{
+			name:    "invalid address format",
+			input:   "not-an-ip",
+			wantErr: true,
+		},
+		{
+			name:    "empty line",
+			input:   "   ",
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ParseProxyLine(tt.input)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("ParseProxyLine() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if tt.wantErr {
+				return
+			}
+			if got.Type != tt.want.Type {
+				t.Errorf("Type = %v, want %v", got.Type, tt.want.Type)
+			}
+			if got.Address != tt.want.Address {
+				t.Errorf("Address = %q, want %q", got.Address, tt.want.Address)
+			}
+			if got.Username != tt.want.Username {
+				t.Errorf("Username = %q, want %q", got.Username, tt.want.Username)
+			}
+			if got.Password != tt.want.Password {
+				t.Errorf("Password = %q, want %q", got.Password, tt.want.Password)
+			}
+		})
+	}
+}
+
+func TestGenerateBulkUpstreamName(t *testing.T) {
+	tests := []struct {
+		name  string
+		proto model.UpstreamType
+		addr  string
+		want  string
+	}{
+		{
+			name:  "simple socks5 name",
+			proto: model.UpstreamSOCKS5,
+			addr:  "192.168.1.1:1080",
+			want:  "s5-192-168-1-1-1080",
+		},
+		{
+			name:  "socks4 name",
+			proto: model.UpstreamSOCKS4,
+			addr:  "8.8.8.8:80",
+			want:  "s4-8-8-8-8-80",
+		},
+		{
+			name:  "long domain truncation",
+			proto: model.UpstreamSOCKS5,
+			addr:  "very-long-subdomain-that-exceeds-thirty-two-chars.example.com:1080",
+			want:  "s5-very-long-subdo-2c94ec11-1080", // 15 chars of host + hash
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			u := &model.Upstream{
+				Type:    tt.proto,
+				Address: tt.addr,
+			}
+			got := GenerateBulkUpstreamName(u)
+			if got != tt.want {
+				t.Errorf("GenerateBulkUpstreamName() = %q, want %q", got, tt.want)
+			}
+			if len(got) > 32 {
+				t.Errorf("len(got) = %d exceeds 32", len(got))
+			}
+		})
+	}
+}
+

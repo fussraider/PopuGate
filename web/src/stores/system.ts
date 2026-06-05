@@ -75,12 +75,14 @@ export const useSystemStore = defineStore('system', () => {
 
     const wsUrl = '/api/v1/system/resources/ws'
     
-    wsControls = useWebSocket({
+    const currentControls = useWebSocket({
       url: wsUrl,
       onMessage: (data) => {
+        if (wsControls !== currentControls) return
         resources.value = data
       }
     })
+    wsControls = currentControls
     wsControls.connect()
   }
 

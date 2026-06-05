@@ -48,13 +48,15 @@ watch(() => props.modelValue, (v) => {
 })
 
 watch(visible, (v) => {
-  if (!v) emit('update:modelValue', false)
+  if (!v) {
+    confirming.value = false
+    emit('update:modelValue', false)
+    emit('cancel')
+  }
 })
 
 function cancel() {
-  confirming.value = false
-  emit('update:modelValue', false)
-  emit('cancel')
+  visible.value = false
 }
 
 function handleConfirm() {

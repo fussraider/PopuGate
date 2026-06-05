@@ -647,7 +647,7 @@ func (s *ContainerService) getActiveConnections(ctx context.Context, metricsPort
 	if err != nil {
 		return 0, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return 0, fmt.Errorf("unexpected status: %d", resp.StatusCode)

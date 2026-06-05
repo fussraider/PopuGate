@@ -1,7 +1,7 @@
 <template>
   <div>
     <Transition name="content-fade" mode="out-in">
-      <SkeletonLoader v-if="loading || !initialized" key="skeleton" variant="table" :rows="skeletonRows" :columns="columns.length" />
+      <SkeletonLoader v-if="(loading && !items?.length) || !initialized" key="skeleton" variant="table" :rows="skeletonRows" :columns="columns.length" />
 
       <EmptyState v-else-if="!items?.length" key="empty" :icon="emptyIcon!" :message="emptyMessage ?? ''" />
 

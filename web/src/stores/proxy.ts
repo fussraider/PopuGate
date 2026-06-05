@@ -142,18 +142,22 @@ export const useProxyStore = defineStore('proxy', () => {
   function startStatusStream() {
     if (wsControls) return
     const wsUrl = '/api/v1/proxy/status/ws'
-    wsControls = useWebSocket({
+    const currentControls = useWebSocket({
       url: wsUrl,
       onMessage: (data) => {
+        if (wsControls !== currentControls) return
         status.value = data
       },
       onError: () => {
+        if (wsControls !== currentControls) return
         wsStatus.value = 'connecting'
       }
     })
+    wsControls = currentControls
     wsControls.connect()
 
-    wsWatcher = watch(wsControls.connected, (val) => {
+    wsWatcher = watch(currentControls.connected, (val) => {
+      if (wsControls !== currentControls) return
       wsStatus.value = val ? 'connected' : 'connecting'
     }, { immediate: true })
   }

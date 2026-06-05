@@ -116,12 +116,12 @@ func (h *HealthService) checkInstanceCounts(insts []model.Instance, runningConta
 
 		if runningContainers[activeName] {
 			running++
-		}
-		if h.isPortListening(inst.Port) || h.isPortListening(activePort) {
-			listening++
-		}
-		if h.isMetricsResponding(activeMetricsPort) {
-			metrics++
+			if h.isPortListening(inst.Port) || h.isPortListening(activePort) {
+				listening++
+			}
+			if h.isMetricsResponding(activeMetricsPort) {
+				metrics++
+			}
 		}
 	}
 	return

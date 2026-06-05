@@ -129,9 +129,10 @@ export const useDockerStore = defineStore('docker', () => {
 
     const wsUrl = '/api/v1/engine/update/ws'
 
-    wsControls = useWebSocket({
+    const currentControls = useWebSocket({
       url: wsUrl,
       onMessage: (data) => {
+        if (wsControls !== currentControls) return
         telemtUpdateStatus.value = data
         if (!data.updating) {
           stopUpdateStream()
@@ -139,6 +140,7 @@ export const useDockerStore = defineStore('docker', () => {
         }
       },
     })
+    wsControls = currentControls
     wsControls.connect()
   }
 

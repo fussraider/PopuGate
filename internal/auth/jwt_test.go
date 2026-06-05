@@ -121,7 +121,7 @@ func TestGenerateJTI_IsCryptoRandom(t *testing.T) {
 func TestGenerateJTI_IsHexEncoded(t *testing.T) {
 	jti := GenerateJTI()
 	for _, c := range jti {
-		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
 			t.Errorf("JTI contains non-hex char: %c", c)
 		}
 	}

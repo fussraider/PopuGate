@@ -30,22 +30,26 @@ export function useWebSocket(options: UseWebSocketOptions) {
     ws = new WebSocket(wsUrl)
 
     ws.onopen = () => {
+      if (stopped) return
       connected.value = true
       backoff = 1000
     }
 
     ws.onmessage = (event) => {
+      if (stopped) return
       try {
         onMessage(JSON.parse(event.data))
       } catch { /* ignore malformed */ }
     }
 
     ws.onclose = () => {
+      if (stopped) return
       connected.value = false
-      if (!stopped) scheduleReconnect()
+      scheduleReconnect()
     }
 
     ws.onerror = () => {
+      if (stopped) return
       onError?.()
     }
   }

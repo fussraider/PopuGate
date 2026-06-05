@@ -36,11 +36,20 @@ defineEmits<{
 <style scoped lang="scss">
 .modal-enter-active,
 .modal-leave-active {
-  transition: opacity 0.2s ease, transform 0.2s ease;
+  transition: opacity 0.2s ease;
+
+  .modal {
+    transition: opacity 0.2s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
 }
+
 .modal-enter-from,
 .modal-leave-to {
   opacity: 0;
-  transform: scale(0.95);
+
+  .modal {
+    opacity: 0;
+    transform: scale(0.95);
+  }
 }
 </style>

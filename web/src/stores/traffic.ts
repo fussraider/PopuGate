@@ -58,16 +58,19 @@ export const useTrafficStore = defineStore('traffic', () => {
     stopWS()
     const wsUrl = '/api/v1/traffic/live/ws'
 
-    wsControls = useWebSocket({
+    const currentControls = useWebSocket({
       url: wsUrl,
       onMessage: (data) => {
+        if (wsControls !== currentControls) return
         live.value = data
         liveError.value = false
       },
       onError: () => {
+        if (wsControls !== currentControls) return
         liveError.value = true
       },
     })
+    wsControls = currentControls
     wsControls.connect()
     wsConnected.value = true
   }

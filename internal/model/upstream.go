@@ -28,7 +28,9 @@ type Upstream struct {
 	LastCheckOK *bool  `json:"last_check_ok" db:"last_check_ok"` // nil=never tested
 	LatencyMs   int64  `json:"latency_ms" db:"latency_ms"`       // last test latency
 	LastError   string `json:"last_error" db:"last_error"`       // last error message
-	FailCount   int    `json:"fail_count" db:"fail_count"`       // consecutive failures
+	FailCount      int          `json:"fail_count" db:"fail_count"`       // consecutive failures
+	AutoDisabled   bool         `json:"auto_disabled" db:"auto_disabled"`
+	AutoDisabledAt int64        `json:"auto_disabled_at" db:"auto_disabled_at"`
 }
 
 // Validate checks upstream fields.

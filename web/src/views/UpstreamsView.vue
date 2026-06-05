@@ -35,9 +35,18 @@
         </template>
       </template>
       <template #cell-status="{ item }">
-        <StatusBadge :variant="item.enabled ? 'success' : 'neutral'">
-          {{ item.enabled ? t('instances.enabled') : t('instances.disabled') }}
-        </StatusBadge>
+        <div class="flex items-center gap-xs">
+          <StatusBadge :variant="item.enabled ? 'success' : 'neutral'">
+            {{ item.enabled ? t('instances.enabled') : t('instances.disabled') }}
+          </StatusBadge>
+          <span v-if="!item.enabled && item.auto_disabled" class="text-danger flex items-center"
+                v-tooltip="t('upstreams.auto_disabled_tooltip', {
+                  time: item.auto_disabled_at ? formatDate(item.auto_disabled_at) : '—',
+                  last_check: item.last_check_at ? formatDate(item.last_check_at) : '—'
+                })">
+            <AlertCircle :size="14" />
+          </span>
+        </div>
       </template>
       <template #mobile-actions="{ item }">
         <button class="btn btn-ghost btn-sm" @click="upstreamActions.open(item)">
@@ -184,7 +193,8 @@ import DataTable from '@/components/common/DataTable.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import PageHeader from '@/components/common/PageHeader.vue'
 import ActionSheet from '@/components/common/ActionSheet.vue'
-import {FlaskConical, GitBranch, Loader2, MoreVertical, Pause, Pencil, Play, Trash2} from '@lucide/vue'
+import {formatDate} from '@/utils/format'
+import {AlertCircle, FlaskConical, GitBranch, Loader2, MoreVertical, Pause, Pencil, Play, Trash2} from '@lucide/vue'
 
 const { t } = useI18n()
 const store = useUpstreamsStore()

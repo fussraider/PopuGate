@@ -413,3 +413,61 @@ func TestUpstreamService_Toggle_NotFound(t *testing.T) {
 		t.Errorf("error = %q, want 'not found'", err.Error())
 	}
 }
+
+func TestUpstreamService_AutoRecovery(t *testing.T) {
+	svc := newTestUpstreamService(t)
+	ctx := context.Background()
+
+	// 1. Add upstream
+	err := svc.Add(ctx, &model.Upstream{
+		Name:    "test-rec",
+		Type:    model.UpstreamSOCKS5,
+		Address: "127.0.0.1:9999",
+		Weight:  10,
+	})
+	if err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+
+	// 2. Set fail_count to 3 and trigger handleFailover
+	for i := 0; i < 3; i++ {
+		_ = svc.upstreams.UpdateHealth(ctx, "test-rec", false, 0, "offline")
+	}
+
+	var notified bool
+	svc.SetNotify(func(ctx context.Context, format string, args ...any) {
+		notified = true
+	})
+
+	svc.handleFailover(ctx, "test-rec", "offline")
+
+	got, _ := svc.Get(ctx, "test-rec")
+	if got.Enabled {
+		t.Fatal("expected enabled=false after failover")
+	}
+	if !got.AutoDisabled {
+		t.Fatal("expected auto_disabled=true after failover")
+	}
+	if !notified {
+		t.Fatal("expected Telegram notification on failover")
+	}
+
+	// 3. Test handleAutoRecovery
+	var recoveredNotified bool
+	svc.SetNotify(func(ctx context.Context, format string, args ...any) {
+		recoveredNotified = true
+	})
+
+	svc.handleAutoRecovery(ctx, "test-rec", 45)
+
+	got, _ = svc.Get(ctx, "test-rec")
+	if !got.Enabled {
+		t.Fatal("expected enabled=true after recovery")
+	}
+	if got.AutoDisabled {
+		t.Fatal("expected auto_disabled=false after recovery")
+	}
+	if !recoveredNotified {
+		t.Fatal("expected Telegram notification on recovery")
+	}
+}

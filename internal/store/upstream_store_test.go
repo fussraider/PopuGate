@@ -325,3 +325,54 @@ func TestUpstreamStore_GetByNameNonexistent(t *testing.T) {
 		t.Fatal("expected nil for nonexistent name")
 	}
 }
+
+func TestUpstreamStore_DisableAndEnableAutomatically(t *testing.T) {
+	db := testutil.OpenTestDB(t)
+	s := NewUpstreamStore(db)
+	ctx := context.Background()
+
+	if err := s.Create(ctx, &model.Upstream{
+		Name: "test-auto", Type: model.UpstreamDirect, Weight: 10, Enabled: true,
+	}); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	// Disable automatically
+	ts := int64(123456789)
+	if err := s.DisableAutomatically(ctx, "test-auto", ts); err != nil {
+		t.Fatalf("DisableAutomatically: %v", err)
+	}
+
+	got, err := s.GetByName(ctx, "test-auto")
+	if err != nil {
+		t.Fatalf("GetByName: %v", err)
+	}
+	if got.Enabled {
+		t.Fatal("expected enabled=false")
+	}
+	if !got.AutoDisabled {
+		t.Fatal("expected auto_disabled=true")
+	}
+	if got.AutoDisabledAt != ts {
+		t.Fatalf("expected auto_disabled_at=%d, got %d", ts, got.AutoDisabledAt)
+	}
+
+	// Enable automatically
+	if err := s.EnableAutomatically(ctx, "test-auto"); err != nil {
+		t.Fatalf("EnableAutomatically: %v", err)
+	}
+
+	got, err = s.GetByName(ctx, "test-auto")
+	if err != nil {
+		t.Fatalf("GetByName: %v", err)
+	}
+	if !got.Enabled {
+		t.Fatal("expected enabled=true")
+	}
+	if got.AutoDisabled {
+		t.Fatal("expected auto_disabled=false")
+	}
+	if got.AutoDisabledAt != 0 {
+		t.Fatalf("expected auto_disabled_at=0, got %d", got.AutoDisabledAt)
+	}
+}

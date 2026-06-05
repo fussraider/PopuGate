@@ -276,41 +276,39 @@
       <div class="dashboard-col">
         <!-- Right Column: Secrets Health, Top Users, Recent Activity, Scheduler Status -->
 
-        <!-- Secrets Health -->
-        <div class="card secrets-card">
+        <!-- System Health Status -->
+        <div class="card system-health-card">
           <h3 class="mb-md card-header">
-            {{ t('dashboard.secrets_health') }}
-            <router-link :to="{ name: 'Secrets' }" class="card-header-link">
-              <Loader2 v-if="isSecretsLoading" :size="14" class="animate-spin" />
-              <ArrowUpRight v-else :size="14" />
-            </router-link>
+            {{ t('dashboard.system_health_title') }}
+            <Loader2 v-if="isSecretsLoading || isUpstreamsLoading || isSchedulerLoading || isReplicationLoading || isBotLoading" :size="14" class="animate-spin card-header-loader" />
           </h3>
-          <div v-if="secretsStore.secrets.length === 0" class="no-data-placeholder-small">
-            <AlertCircle :size="14" class="text-muted" />
-            <span>{{ t('dashboard.no_data') }}</span>
+
+          <div v-if="healthIssues.length === 0" class="system-health-ok">
+            <CheckCircle :size="18" />
+            <span>{{ t('dashboard.system_ok') }}</span>
           </div>
-          <div v-else-if="secretsAttention === 0" class="scheduler-ok">
-            <CheckCircle :size="14" />
-            <span>{{ t('dashboard.secrets_ok') }}</span>
-          </div>
-          <div v-else class="secrets-issues">
-            <div v-if="expiredSecrets > 0" class="secrets-issue">
-              <AlertCircle :size="14" class="secrets-issue-icon secrets-issue-danger" />
-              <span><strong>{{ expiredSecrets }}</strong> {{ t('dashboard.secrets_expired') }}</span>
+
+          <div v-else class="system-health-issues">
+            <div v-for="(issue, index) in healthIssues" :key="index" class="system-health-issue" :class="'issue-' + issue.level">
+              <div class="issue-main">
+                <AlertCircle v-if="issue.level === 'danger' || issue.level === 'warning'" :size="16" class="issue-icon" />
+                <Info v-else :size="16" class="issue-icon" />
+                
+                <span class="issue-message">{{ issue.message }}</span>
+                
+                <router-link v-if="issue.route" :to="issue.route" class="issue-link">
+                  <ArrowUpRight :size="12" />
+                </router-link>
+              </div>
+
+              <!-- Details (if any, e.g. list of failed upstreams or tasks) -->
+              <div v-if="issue.details && issue.details.length" class="issue-details-list">
+                <div v-for="(det, dIdx) in issue.details" :key="dIdx" class="issue-detail-item">
+                  <span class="detail-label">{{ det.label }}</span>
+                  <span v-if="det.extra" class="detail-extra">({{ det.extra }})</span>
+                </div>
+              </div>
             </div>
-            <div v-if="quotaWarnSecrets > 0" class="secrets-issue">
-              <AlertCircle :size="14" class="secrets-issue-icon secrets-issue-warn" />
-              <span><strong>{{ quotaWarnSecrets }}</strong> {{ t('dashboard.secrets_quota') }}</span>
-            </div>
-            <div v-if="disabledSecrets > 0" class="secrets-issue">
-              <AlertCircle :size="14" class="secrets-issue-icon secrets-issue-muted" />
-              <span><strong>{{ disabledSecrets }}</strong> {{ t('dashboard.secrets_disabled') }}</span>
-            </div>
-            <router-link v-if="noSecretInstances > 0" :to="{ name: 'Instances' }" class="secrets-issue secrets-issue-link">
-              <AlertCircle :size="14" class="secrets-issue-icon secrets-issue-danger" />
-              <span><strong>{{ noSecretInstances }}</strong> {{ t('dashboard.no_secret_instances') }}</span>
-              <ArrowUpRight :size="12" class="secrets-issue-arrow" />
-            </router-link>
           </div>
         </div>
 
@@ -363,46 +361,6 @@
             </div>
           </div>
         </div>
-
-        <!-- Scheduler Status -->
-        <div class="card">
-          <h3 class="mb-md card-header">
-            {{ t('dashboard.scheduler') }}
-            <span v-if="schedulerStore.tasks.length > 0 && errorTasks.length" class="badge badge-danger scheduler-badge">{{ errorTasks.length }}</span>
-            <router-link :to="{ name: 'Scheduler' }" class="card-header-link">
-              <Loader2 v-if="isSchedulerLoading" :size="14" class="animate-spin" />
-              <ArrowUpRight v-else :size="14" />
-            </router-link>
-          </h3>
-
-          <div v-if="schedulerStore.tasks.length === 0" class="no-data-placeholder">
-            <AlertCircle :size="20" class="text-muted mb-xs" />
-            <span>{{ t('dashboard.no_data') }}</span>
-          </div>
-          <div v-else class="scheduler-content" :class="{ 'scheduler-content-ok': errorTasks.length === 0 }">
-            <div v-if="errorTasks.length" class="scheduler-errors mb-md">
-              <div v-for="task in errorTasks.slice(0, 2)" :key="task.name" class="scheduler-error-item">
-                <AlertCircle :size="14" class="scheduler-error-icon" />
-                <div class="scheduler-error-info">
-                  <span class="scheduler-error-name">{{ t(`scheduler.tasks.${task.name}.name`) }}</span>
-                  <span v-if="task.last_run?.error" class="scheduler-error-msg">{{ task.last_run.error }}</span>
-                </div>
-              </div>
-              <router-link v-if="errorTasks.length > 2" :to="{ name: 'Scheduler' }" class="scheduler-more">
-                +{{ errorTasks.length - 2 }} {{ t('dashboard.more_errors') }}
-              </router-link>
-            </div>
-
-            <div class="scheduler-footer">
-              <div v-if="errorTasks.length === 0" class="scheduler-ok">
-                <CheckCircle :size="14" />
-                <span>{{ t('dashboard.scheduler_ok') }}</span>
-              </div>
-              <span class="text-muted">{{ enabledCount }}/{{ schedulerStore.tasks.length }} {{ t('dashboard.scheduler_active') }}</span>
-              <span v-if="lastActivity" class="text-muted scheduler-last"> · {{ formatDate(lastActivity.last_run!.started_at) }}</span>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
     <ConfirmDialog v-bind="confirmState" @confirm="handleConfirm" @cancel="handleCancel" />
@@ -422,12 +380,13 @@ import {
   useProxyStore,
   useReplicationStore,
   useSecretsStore,
-  useSystemStore
+  useSystemStore,
+  useUpstreamsStore
 } from '@/stores'
 import {useTrafficStore} from '@/stores/traffic'
 import {useSchedulerStore} from '@/stores/scheduler'
 import {useToastStore} from '@/stores/toast'
-import {formatBytes, formatDate, timeAgo} from '@/utils/format'
+import {formatBytes, timeAgo} from '@/utils/format'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import Tooltip from '@/components/common/Tooltip.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
@@ -441,6 +400,7 @@ import {
   Cpu,
   Database,
   HardDrive,
+  Info,
   KeyRound,
   Loader2,
   Minimize,
@@ -470,6 +430,7 @@ const botStore = useBotStore()
 const backupStore = useBackupStore()
 const auditStore = useAuditStore()
 const geoblockStore = useGeoblockStore()
+const upstreamsStore = useUpstreamsStore()
 
 const { confirm, confirmState, handleConfirm, handleCancel } = useConfirmDialog()
 
@@ -480,6 +441,9 @@ const proxyRunning = computed(() => proxyStore.status?.running)
 
 const runningInstances = computed(() => proxyStore.status?.instances?.filter(i => i.running).length ?? 0)
 const totalInstances = computed(() => proxyStore.status?.instances?.length ?? 0)
+const instancesRunningState = computed(() =>
+  (proxyStore.status?.instances ?? []).map(i => `${i.id}:${i.running}`).join(',')
+)
 const totalTraffic = computed(() => {
   const s = proxyStore.status
   if (!s) return '0 B'
@@ -502,17 +466,7 @@ const errorTasks = computed(() =>
   schedulerStore.tasks.filter(t => t.last_run?.status === 'error')
 )
 
-const enabledCount = computed(() =>
-  schedulerStore.tasks.filter(t => t.enabled).length
-)
 
-const lastActivity = computed(() => {
-  const withRun = schedulerStore.tasks.filter(t => t.last_run)
-  if (!withRun.length) return null
-  return withRun.reduce((a, b) =>
-    a.last_run!.started_at > b.last_run!.started_at ? a : b
-  )
-})
 
 const expiredSecrets = computed(() => {
   const now = Date.now()
@@ -538,7 +492,7 @@ const noSecretInstances = computed(() =>
   (proxyStore.status?.instances ?? []).filter(i => i.matching_secret_count === 0).length
 )
 
-const secretsAttention = computed(() => expiredSecrets.value + quotaWarnSecrets.value + disabledSecrets.value + noSecretInstances.value)
+
 
 const connectionsDelta = computed(() => {
   const h = trafficStore.history
@@ -561,6 +515,127 @@ const lastBackup = computed(() => {
 const backupAgeHours = computed(() => {
   if (!lastBackup.value) return Infinity
   return (Date.now() - new Date(lastBackup.value.created_at).getTime()) / 3600000
+})
+
+interface HealthIssue {
+  category: 'proxy' | 'secrets' | 'upstreams' | 'replication' | 'scheduler' | 'bot'
+  level: 'danger' | 'warning' | 'info'
+  message: string
+  details?: { label: string; extra?: string }[]
+  route?: { name: string }
+}
+
+const healthIssues = computed<HealthIssue[]>(() => {
+  const issues: HealthIssue[] = []
+
+  // 1. Docker / Proxy engine health
+  if (proxyStore.health) {
+    if (healthStatus(proxyStore.health.docker) === 'danger') {
+      issues.push({
+        category: 'proxy',
+        level: 'danger',
+        message: t('dashboard.health_docker_error') || 'Docker Daemon is not running or not installed',
+        route: { name: 'System' }
+      })
+    }
+    if (healthStatus(proxyStore.health.container) === 'danger') {
+      issues.push({
+        category: 'proxy',
+        level: 'danger',
+        message: t('dashboard.health_container_error') || 'Proxy containers are stopped',
+        route: { name: 'Instances' }
+      })
+    }
+  }
+
+  // 2. Secrets health
+  if (expiredSecrets.value > 0) {
+    issues.push({
+      category: 'secrets',
+      level: 'danger',
+      message: t('dashboard.secrets_expired_alert', { count: expiredSecrets.value }),
+      route: { name: 'Secrets' }
+    })
+  }
+  if (quotaWarnSecrets.value > 0) {
+    issues.push({
+      category: 'secrets',
+      level: 'warning',
+      message: t('dashboard.secrets_quota_alert', { count: quotaWarnSecrets.value }),
+      route: { name: 'Secrets' }
+    })
+  }
+  if (noSecretInstances.value > 0) {
+    issues.push({
+      category: 'secrets',
+      level: 'danger',
+      message: t('dashboard.no_secret_instances_alert', { count: noSecretInstances.value }),
+      route: { name: 'Instances' }
+    })
+  }
+  if (disabledSecrets.value > 0) {
+    issues.push({
+      category: 'secrets',
+      level: 'info',
+      message: t('dashboard.secrets_disabled_alert', { count: disabledSecrets.value }),
+      route: { name: 'Secrets' }
+    })
+  }
+
+  // 3. Upstreams health
+  if (autoDisabledUpstreams.value.length > 0) {
+    issues.push({
+      category: 'upstreams',
+      level: 'warning',
+      message: t('dashboard.upstreams_auto_disabled', { count: autoDisabledUpstreams.value.length }),
+      details: autoDisabledUpstreams.value.map(u => ({
+        label: u.name,
+        extra: `${t('dashboard.since')} ${timeAgo((u.auto_disabled_at || 0) * 1000)}`
+      })),
+      route: { name: 'Upstreams' }
+    })
+  }
+
+  // 4. Replication health
+  const offlineSlaves = replicationStore.slaves.filter(s => s.status !== 'connected')
+  if (replicationStore.slaves.length > 0 && offlineSlaves.length > 0) {
+    issues.push({
+      category: 'replication',
+      level: 'warning',
+      message: t('dashboard.replication_slave_error', { count: offlineSlaves.length }) || `Replication: ${offlineSlaves.length} node(s) offline`,
+      details: offlineSlaves.map(s => ({
+        label: s.label || s.host,
+        extra: s.status
+      })),
+      route: { name: 'Replication' }
+    })
+  }
+
+  // 5. Bot health
+  if (botStore.enabled && !botStore.running) {
+    issues.push({
+      category: 'bot',
+      level: 'warning',
+      message: t('dashboard.bot_stopped_error') || 'Telegram Bot is configured but not running',
+      route: { name: 'Bot' }
+    })
+  }
+
+  // 6. Scheduler health
+  if (errorTasks.value.length > 0) {
+    issues.push({
+      category: 'scheduler',
+      level: 'danger',
+      message: `${errorTasks.value.length} ${t('dashboard.scheduler_errors') || 'scheduler tasks failed'}`,
+      details: errorTasks.value.map(task => ({
+        label: t(`scheduler.tasks.${task.name}.name`) || task.name,
+        extra: task.last_run?.error || ''
+      })),
+      route: { name: 'Scheduler' }
+    })
+  }
+
+  return issues
 })
 
 const recentActivity = computed(() => auditStore.entries.slice(0, 5))
@@ -779,6 +854,11 @@ const isSchedulerLoading = ref(false)
 const isBotLoading = ref(false)
 const isBackupLoading = ref(false)
 const isReplicationLoading = ref(false)
+const isUpstreamsLoading = ref(false)
+
+const autoDisabledUpstreams = computed(() => {
+  return upstreamsStore.upstreams.filter(u => u.auto_disabled)
+})
 
 const dashboardRef = ref<HTMLElement | null>(null)
 const isFullscreen = ref(false)
@@ -818,6 +898,7 @@ async function reloadDashboardData() {
     botStore.loadStatus(),
     backupStore.load(),
     auditStore.load(),
+    upstreamsStore.load(),
   ]).catch(() => {
     // Suppress API errors to allow safe initialization
   })
@@ -836,6 +917,21 @@ watch(() => proxyStore.wsStatus, (status) => {
   }
 })
 
+watch(instancesRunningState, () => {
+  // Immediate check
+  proxyStore.loadHealth()
+  // Delayed checks to allow telemt processes in container to start and open ports
+  setTimeout(() => {
+    proxyStore.loadHealth()
+  }, 5000)
+  setTimeout(() => {
+    proxyStore.loadHealth()
+  }, 10000)
+  setTimeout(() => {
+    proxyStore.loadHealth()
+  }, 20000)
+})
+
 onMounted(async () => {
   document.addEventListener('fullscreenchange', handleFullscreenChange)
 
@@ -852,6 +948,9 @@ onMounted(async () => {
 
     isAuditLoading.value = true
     auditStore.load(100, 0, true).finally(() => { isAuditLoading.value = false })
+
+    isUpstreamsLoading.value = true
+    upstreamsStore.load().finally(() => { isUpstreamsLoading.value = false })
   }, 15000)
 
   schedulerInterval = setInterval(async () => {
@@ -875,6 +974,7 @@ onMounted(async () => {
 
     dockerStore.loadEngineStatus()
     dockerStore.loadTelemtUpdateStatus()
+    proxyStore.loadHealth()
 
     const currentNow = Math.floor(Date.now() / 1000)
     trafficStore.loadHistory(currentNow - 3600, currentNow, undefined, 'none', true)
@@ -1550,6 +1650,121 @@ onUnmounted(() => {
   }
   .resource-value, .resource-footer span {
     color: $text-muted !important;
+  }
+}
+
+.system-health-card {
+  min-height: 100px;
+}
+
+.card-header-loader {
+  margin-left: auto;
+  color: $text-secondary;
+  opacity: 0.5;
+}
+
+.system-health-ok {
+  display: flex;
+  align-items: center;
+  gap: $spacing-sm;
+  color: var(--color-success);
+  font-size: $font-size-sm;
+  padding: $spacing-sm 0;
+  font-weight: $font-weight-medium;
+}
+
+.system-health-issues {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-sm;
+}
+
+.system-health-issue {
+  display: flex;
+  flex-direction: column;
+  padding: $spacing-sm;
+  border-radius: $border-radius-lg;
+  background: var(--bg-body);
+  border: 1px solid var(--border-color);
+  
+  &.issue-danger {
+    border-color: rgba(239, 68, 68, 0.2);
+    background: rgba(239, 68, 68, 0.03);
+    .issue-icon { color: var(--color-danger); }
+  }
+  
+  &.issue-warning {
+    border-color: rgba(245, 158, 11, 0.2);
+    background: rgba(245, 158, 11, 0.03);
+    .issue-icon { color: var(--color-warning); }
+  }
+  
+  &.issue-info {
+    border-color: var(--border-color);
+    .issue-icon { color: var(--text-secondary); }
+  }
+}
+
+.issue-main {
+  display: flex;
+  align-items: center;
+  gap: $spacing-sm;
+  font-size: $font-size-sm;
+}
+
+.issue-icon {
+  flex-shrink: 0;
+}
+
+.issue-message {
+  font-weight: $font-weight-medium;
+  color: var(--text-primary);
+}
+
+.issue-link {
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-secondary);
+  opacity: 0.5;
+  transition: opacity 0.15s, color 0.15s;
+  margin-left: auto;
+  
+  &:hover {
+    opacity: 1;
+    color: var(--color-primary);
+  }
+}
+
+.issue-details-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: $spacing-xs;
+  padding-left: 24px;
+}
+
+.issue-detail-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: $font-size-xs;
+  color: var(--text-secondary);
+  
+  .detail-label {
+    font-weight: $font-weight-medium;
+    color: var(--text-primary);
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  
+  .detail-extra {
+    color: var(--text-muted);
+    max-width: 250px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 }
 </style>

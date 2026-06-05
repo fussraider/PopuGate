@@ -2,6 +2,7 @@ package handler
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -366,5 +367,57 @@ func TestUpstreamHandler_Update_InvalidType(t *testing.T) {
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestUpstreamHandler_AutoDisabledFields(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db := testutil.OpenTestDB(t)
+	upstreamStore := store.NewUpstreamStore(db)
+	upstreamSvc := service.NewUpstreamService(upstreamStore)
+	handler := NewUpstreamHandler(upstreamSvc)
+
+	r := gin.New()
+	r.GET("/api/v1/upstreams", handler.List)
+	r.POST("/api/v1/upstreams", handler.Add)
+
+	// Add an upstream manually
+	body, _ := json.Marshal(map[string]interface{}{
+		"name": "auto-check", "type": "direct", "weight": 10,
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/upstreams", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("add: expected 201, got %d", w.Code)
+	}
+
+	// Trigger automatic disablement via store
+	ctx := context.Background()
+	_ = upstreamStore.DisableAutomatically(ctx, "auto-check", 987654321)
+
+	// Fetch upstreams list
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/upstreams", nil)
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp []map[string]interface{}
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+
+	if len(resp) != 1 {
+		t.Fatalf("expected 1 upstream in list, got %d", len(resp))
+	}
+
+	u := resp[0]
+	if u["auto_disabled"] != true {
+		t.Errorf("expected auto_disabled=true, got %v", u["auto_disabled"])
+	}
+	if u["auto_disabled_at"] != float64(987654321) {
+		t.Errorf("expected auto_disabled_at=987654321, got %v", u["auto_disabled_at"])
 	}
 }

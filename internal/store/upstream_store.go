@@ -23,7 +23,8 @@ func NewUpstreamStore(db *sql.DB) *UpstreamStore {
 func (s *UpstreamStore) List(ctx context.Context) ([]model.Upstream, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, name, type, address, username, password, weight, iface, enabled,
-		       last_check_at, last_check_ok, latency_ms, last_error, fail_count
+		       last_check_at, last_check_ok, latency_ms, last_error, fail_count,
+		       auto_disabled, auto_disabled_at
 		FROM upstreams ORDER BY id
 	`)
 	if err != nil {
@@ -35,13 +36,16 @@ func (s *UpstreamStore) List(ctx context.Context) ([]model.Upstream, error) {
 	for rows.Next() {
 		var u model.Upstream
 		var enabled int
+		var autoDisabled int
 		var lastCheckOK sql.NullInt64
 		if err := rows.Scan(&u.ID, &u.Name, &u.Type, &u.Address, &u.Username,
 			&u.Password, &u.Weight, &u.Iface, &enabled,
-			&u.LastCheckAt, &lastCheckOK, &u.LatencyMs, &u.LastError, &u.FailCount); err != nil {
+			&u.LastCheckAt, &lastCheckOK, &u.LatencyMs, &u.LastError, &u.FailCount,
+			&autoDisabled, &u.AutoDisabledAt); err != nil {
 			return nil, fmt.Errorf("scan upstream: %w", err)
 		}
 		u.Enabled = intToBool(enabled)
+		u.AutoDisabled = intToBool(autoDisabled)
 		if lastCheckOK.Valid {
 			v := intToBool(int(lastCheckOK.Int64))
 			u.LastCheckOK = &v
@@ -59,13 +63,16 @@ func (s *UpstreamStore) GetByName(ctx context.Context, name string) (*model.Upst
 	var u model.Upstream
 	var enabled int
 	var lastCheckOK sql.NullInt64
+	var autoDisabled int
 	err := s.db.QueryRowContext(ctx, `
 		SELECT id, name, type, address, username, password, weight, iface, enabled,
-		       last_check_at, last_check_ok, latency_ms, last_error, fail_count
+		       last_check_at, last_check_ok, latency_ms, last_error, fail_count,
+		       auto_disabled, auto_disabled_at
 		FROM upstreams WHERE name = ?
 	`, name).Scan(&u.ID, &u.Name, &u.Type, &u.Address, &u.Username,
 		&u.Password, &u.Weight, &u.Iface, &enabled,
-		&u.LastCheckAt, &lastCheckOK, &u.LatencyMs, &u.LastError, &u.FailCount)
+		&u.LastCheckAt, &lastCheckOK, &u.LatencyMs, &u.LastError, &u.FailCount,
+		&autoDisabled, &u.AutoDisabledAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -73,6 +80,7 @@ func (s *UpstreamStore) GetByName(ctx context.Context, name string) (*model.Upst
 		return nil, fmt.Errorf("get upstream %s: %w", name, err)
 	}
 	u.Enabled = intToBool(enabled)
+	u.AutoDisabled = intToBool(autoDisabled)
 	if lastCheckOK.Valid {
 		v := intToBool(int(lastCheckOK.Int64))
 		u.LastCheckOK = &v
@@ -84,7 +92,8 @@ func (s *UpstreamStore) GetByName(ctx context.Context, name string) (*model.Upst
 func (s *UpstreamStore) ListEnabled(ctx context.Context) ([]model.Upstream, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, name, type, address, username, password, weight, iface, enabled,
-		       last_check_at, last_check_ok, latency_ms, last_error, fail_count
+		       last_check_at, last_check_ok, latency_ms, last_error, fail_count,
+		       auto_disabled, auto_disabled_at
 		FROM upstreams WHERE enabled = 1 ORDER BY id
 	`)
 	if err != nil {
@@ -96,13 +105,16 @@ func (s *UpstreamStore) ListEnabled(ctx context.Context) ([]model.Upstream, erro
 	for rows.Next() {
 		var u model.Upstream
 		var enabled int
+		var autoDisabled int
 		var lastCheckOK sql.NullInt64
 		if err := rows.Scan(&u.ID, &u.Name, &u.Type, &u.Address, &u.Username,
 			&u.Password, &u.Weight, &u.Iface, &enabled,
-			&u.LastCheckAt, &lastCheckOK, &u.LatencyMs, &u.LastError, &u.FailCount); err != nil {
+			&u.LastCheckAt, &lastCheckOK, &u.LatencyMs, &u.LastError, &u.FailCount,
+			&autoDisabled, &u.AutoDisabledAt); err != nil {
 			return nil, fmt.Errorf("scan upstream: %w", err)
 		}
 		u.Enabled = intToBool(enabled)
+		u.AutoDisabled = intToBool(autoDisabled)
 		if lastCheckOK.Valid {
 			v := intToBool(int(lastCheckOK.Int64))
 			u.LastCheckOK = &v
@@ -145,7 +157,8 @@ func (s *UpstreamStore) Update(ctx context.Context, name string, u *model.Upstre
 		enabled = 1
 	}
 	result, err := s.db.ExecContext(ctx, `
-		UPDATE upstreams SET type = ?, address = ?, username = ?, password = ?, weight = ?, iface = ?, enabled = ?
+		UPDATE upstreams SET type = ?, address = ?, username = ?, password = ?, weight = ?, iface = ?, enabled = ?,
+		                     auto_disabled = 0, auto_disabled_at = 0
 		WHERE name = ?
 	`, u.Type, u.Address, u.Username, u.Password, u.Weight, u.Iface, enabled, name)
 	if err != nil {
@@ -184,7 +197,31 @@ func (s *UpstreamStore) UpdateEnabled(ctx context.Context, name string, enabled 
 	if enabled {
 		v = 1
 	}
-	_, err := s.db.ExecContext(ctx, "UPDATE upstreams SET enabled = ? WHERE name = ?", v, name)
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE upstreams 
+		SET enabled = ?, auto_disabled = 0, auto_disabled_at = 0 
+		WHERE name = ?
+	`, v, name)
+	return err
+}
+
+// DisableAutomatically automatically disables an upstream due to health failures.
+func (s *UpstreamStore) DisableAutomatically(ctx context.Context, name string, timestamp int64) error {
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE upstreams 
+		SET enabled = 0, auto_disabled = 1, auto_disabled_at = ? 
+		WHERE name = ?
+	`, timestamp, name)
+	return err
+}
+
+// EnableAutomatically automatically re-enables a recovered upstream.
+func (s *UpstreamStore) EnableAutomatically(ctx context.Context, name string) error {
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE upstreams 
+		SET enabled = 1, auto_disabled = 0, auto_disabled_at = 0, fail_count = 0 
+		WHERE name = ?
+	`, name)
 	return err
 }
 

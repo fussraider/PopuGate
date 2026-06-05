@@ -88,6 +88,8 @@ export interface Upstream {
   latency_ms?: number
   last_error?: string
   fail_count?: number
+  auto_disabled?: boolean
+  auto_disabled_at?: number
 }
 
 export interface NetInterface {

@@ -71,7 +71,7 @@ func (s *UpstreamService) handleFailover(ctx context.Context, name string, errMs
 	if latest == nil || latest.FailCount < 3 || !latest.Enabled {
 		return
 	}
-	if err := s.upstreams.UpdateEnabled(ctx, name, false); err == nil {
+	if err := s.upstreams.DisableAutomatically(ctx, name, time.Now().Unix()); err == nil {
 		log.Warnf("upstream %s auto-disabled after %d failures", name, latest.FailCount)
 		var btn KeyboardButton
 		if s.settings != nil {
@@ -88,6 +88,26 @@ func (s *UpstreamService) handleFailover(ctx context.Context, name string, errMs
 	}
 }
 
+func (s *UpstreamService) handleAutoRecovery(ctx context.Context, name string, latency int64) {
+	if err := s.upstreams.EnableAutomatically(ctx, name); err == nil {
+		log.Infof("upstream %s auto-recovered and re-enabled", name)
+		var btn KeyboardButton
+		if s.settings != nil {
+			s2, _ := s.settings.Load(ctx)
+			if s2 != nil && s2.WebURL != "" {
+				btn = KeyboardButton{Text: "Upstreams", URL: s2.WebURL + "/upstreams"}
+			}
+		}
+		if s.notifyWithBtns != nil && btn.URL != "" {
+			s.notifyWithBtns(ctx, "✅ *%s* Upstream auto-recovered and re-enabled (latency: %dms)", []KeyboardButton{btn}, name, latency)
+		} else if s.notify != nil {
+			s.notify(ctx, "✅ *%s* Upstream auto-recovered and re-enabled (latency: %dms)", name, latency)
+		}
+	} else {
+		log.Errorf("failed to auto-enable upstream %s: %v", name, err)
+	}
+}
+
 func (s *UpstreamService) checkUpstream(ctx context.Context, u model.Upstream) {
 	res, testErr := s.testUpstream(ctx, &u)
 	ok, latency, errMsg := resolveTestResult(res, testErr)
@@ -98,10 +118,12 @@ func (s *UpstreamService) checkUpstream(ctx context.Context, u model.Upstream) {
 
 	if !ok {
 		s.handleFailover(ctx, u.Name, errMsg)
+	} else if u.AutoDisabled {
+		s.handleAutoRecovery(ctx, u.Name, latency)
 	}
 }
 
-// CheckAllUpstreams iterates through all enabled upstreams and performs health checks.
+// CheckAllUpstreams iterates through all enabled or auto-disabled upstreams and performs health checks.
 func (s *UpstreamService) CheckAllUpstreams(ctx context.Context) error {
 	upstreams, err := s.upstreams.List(ctx)
 	if err != nil {
@@ -109,7 +131,7 @@ func (s *UpstreamService) CheckAllUpstreams(ctx context.Context) error {
 	}
 
 	for _, u := range upstreams {
-		if !u.Enabled {
+		if !u.Enabled && !u.AutoDisabled {
 			continue
 		}
 		s.checkUpstream(ctx, u)

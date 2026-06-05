@@ -44,7 +44,12 @@ func TestOpen_RetriesOnTransientFailure(t *testing.T) {
 	Reset()
 
 	// First call with impossible path should fail
-	_, err := Open(Config{Path: "/nonexistent/deeply/nested/that/cannot/be/created/test.db"})
+	tmpFile := filepath.Join(t.TempDir(), "not-a-dir")
+	if err := os.WriteFile(tmpFile, []byte("hello"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	invalidPath := filepath.Join(tmpFile, "nested", "test.db")
+	_, err := Open(Config{Path: invalidPath})
 	if err == nil {
 		t.Fatal("expected error for invalid path")
 	}

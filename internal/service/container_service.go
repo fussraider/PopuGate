@@ -205,6 +205,9 @@ func (s *ContainerService) Stop(ctx context.Context) error {
 
 // StopInstance stops a specific instance by ID.
 func (s *ContainerService) StopInstance(ctx context.Context, id int64) error {
+	if s.docker == nil {
+		return fmt.Errorf("docker client is not initialized")
+	}
 	inst, err := s.instances.GetByID(ctx, id)
 	if err != nil {
 		return err
@@ -237,6 +240,9 @@ func (s *ContainerService) RestartInstance(ctx context.Context, id int64) error 
 
 // ReloadInstanceConfig regenerates config for a specific instance and sends SIGHUP for hot-reload.
 func (s *ContainerService) ReloadInstanceConfig(ctx context.Context, id int64) error {
+	if s.docker == nil {
+		return fmt.Errorf("docker client is not initialized")
+	}
 	settings, err := s.settings.Load(ctx)
 	if err != nil {
 		return err
@@ -264,6 +270,9 @@ func (s *ContainerService) ReloadInstanceConfig(ctx context.Context, id int64) e
 
 // StartInstance starts a specific instance by ID.
 func (s *ContainerService) StartInstance(ctx context.Context, id int64) error {
+	if s.docker == nil {
+		return fmt.Errorf("docker client is not initialized")
+	}
 	settings, err := s.settings.Load(ctx)
 	if err != nil {
 		return fmt.Errorf("load settings: %w", err)

@@ -626,7 +626,7 @@ func TestApplyDispatchesByMode(t *testing.T) {
 	})
 
 	t.Run("binary mode", func(t *testing.T) {
-		_ = os.Setenv("POPUGATE_DEPLOYMENT", "")
+		_ = os.Setenv("POPUGATE_DEPLOYMENT", "binary")
 		svc := NewUpdateService(nil)
 		if svc.isDocker {
 			t.Error("expected isDocker=false")
@@ -635,6 +635,10 @@ func TestApplyDispatchesByMode(t *testing.T) {
 }
 
 func TestAutoUpdateNoUpdateAvailable(t *testing.T) {
+	origDeploy := os.Getenv("POPUGATE_DEPLOYMENT")
+	_ = os.Setenv("POPUGATE_DEPLOYMENT", "binary")
+	t.Cleanup(func() { _ = os.Setenv("POPUGATE_DEPLOYMENT", origDeploy) })
+
 	// Spin up a mock HTTP server for GitHub API
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -673,6 +677,10 @@ func TestAutoUpdateNoUpdateAvailable(t *testing.T) {
 }
 
 func TestAutoUpdateUpdateAvailableApplyFails(t *testing.T) {
+	origDeploy := os.Getenv("POPUGATE_DEPLOYMENT")
+	_ = os.Setenv("POPUGATE_DEPLOYMENT", "binary")
+	t.Cleanup(func() { _ = os.Setenv("POPUGATE_DEPLOYMENT", origDeploy) })
+
 	// Spin up a mock HTTP server for GitHub API returning a newer version
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

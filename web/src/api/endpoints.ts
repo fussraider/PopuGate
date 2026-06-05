@@ -192,6 +192,10 @@ export const upstreamsApi = {
 
   testConfig: (data: { type: string; address?: string; username?: string; password?: string; iface?: string }) =>
     api.post<UpstreamTestResult>('/upstreams/test', data).then((r) => r.data),
+
+  bulkAdd: (data: {
+    upstreams: { type: string; address?: string; username?: string; password?: string; weight?: number; iface?: string }[]
+  }) => api.post<{ ok: boolean; count: number; names?: string[] }>('/upstreams/bulk', data).then((r) => r.data),
 }
 
 // ─── Instances ─────────────────────────────────────────────────

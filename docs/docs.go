@@ -6043,6 +6043,94 @@ const docTemplate = `{
                 }
             }
         },
+        "/upstreams/bulk": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Create multiple upstream proxy configurations in a transaction",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "upstreams"
+                ],
+                "summary": "Bulk add upstreams",
+                "parameters": [
+                    {
+                        "description": "List of upstreams to add",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handler.bulkAddRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/upstreams/bulk-check": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Check availability of multiple proxies in real-time, streaming results back via SSE",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "text/event-stream"
+                ],
+                "tags": [
+                    "upstreams"
+                ],
+                "summary": "Bulk check proxies",
+                "parameters": [
+                    {
+                        "description": "List of proxies to check",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handler.bulkCheckRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "SSE stream of check progress",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
         "/upstreams/interfaces": {
             "get": {
                 "security": [
@@ -6459,6 +6547,71 @@ const docTemplate = `{
             "properties": {
                 "secret_label": {
                     "type": "string"
+                }
+            }
+        },
+        "handler.bulkAddRequest": {
+            "type": "object",
+            "required": [
+                "upstreams"
+            ],
+            "properties": {
+                "upstreams": {
+                    "type": "array",
+                    "maxItems": 100,
+                    "minItems": 1,
+                    "items": {
+                        "$ref": "#/definitions/handler.bulkAddRequestItem"
+                    }
+                }
+            }
+        },
+        "handler.bulkAddRequestItem": {
+            "type": "object",
+            "required": [
+                "type"
+            ],
+            "properties": {
+                "address": {
+                    "type": "string"
+                },
+                "iface": {
+                    "type": "string"
+                },
+                "password": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "direct",
+                        "socks5",
+                        "socks4"
+                    ]
+                },
+                "username": {
+                    "type": "string"
+                },
+                "weight": {
+                    "type": "integer",
+                    "maximum": 100,
+                    "minimum": 1
+                }
+            }
+        },
+        "handler.bulkCheckRequest": {
+            "type": "object",
+            "required": [
+                "proxies"
+            ],
+            "properties": {
+                "proxies": {
+                    "type": "array",
+                    "maxItems": 100,
+                    "minItems": 1,
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         },

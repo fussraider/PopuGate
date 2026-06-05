@@ -1,8 +1,31 @@
 <template>
   <div>
     <PageHeader>
-      <button class="btn btn-primary" @click="openAddModal">+ {{ t('upstreams.add') }}</button>
+      <div class="flex gap-sm">
+        <button class="btn btn-primary" @click="openAddModal">+ {{ t('upstreams.add') }}</button>
+        <button class="btn btn-secondary" @click="openBulkModal">{{ t('upstreams.bulk_add') }}</button>
+      </div>
     </PageHeader>
+
+    <!-- Bulk action toolbar -->
+    <div v-if="selectedNames.size > 0" class="bulk-toolbar card mb-md">
+      <span class="badge badge-info">{{ selectedNames.size }} {{ t('upstreams.selected') }}</span>
+      <button class="btn btn-secondary btn-sm" @click="handleBulkTest" :disabled="store.bulkLoading">
+        <FlaskConical :size="14" /> {{ t('upstreams.bulk_test') }}
+      </button>
+      <button class="btn btn-secondary btn-sm" @click="handleBulkToggle(true)" :disabled="store.bulkLoading">
+        <Play :size="14" /> {{ t('upstreams.bulk_enable') }}
+      </button>
+      <button class="btn btn-secondary btn-sm" @click="handleBulkToggle(false)" :disabled="store.bulkLoading">
+        <Pause :size="14" /> {{ t('upstreams.bulk_disable') }}
+      </button>
+      <button class="btn btn-danger btn-sm" @click="handleBulkRemove" :disabled="store.bulkLoading">
+        <Trash2 :size="14" /> {{ t('upstreams.bulk_delete') }}
+      </button>
+      <button class="btn btn-ghost btn-sm" @click="selectedNames = new Set()">
+        {{ t('secrets.clear_selection') }}
+      </button>
+    </div>
 
     <DataTable
       :columns="columns"
@@ -11,6 +34,9 @@
       :empty-icon="GitBranch"
       :empty-message="t('upstreams.empty')"
       row-key="name"
+      selectable
+      :selected-keys="selectedNames"
+      @update:selected-keys="onSelectionChange"
     >
       <template #cell-name="{ item }"><code>{{ item.name }}</code></template>
       <template #cell-type="{ item }">
@@ -56,16 +82,16 @@
       <template #actions="{ item }">
         <div class="actions-desktop">
           <button class="btn btn-ghost btn-sm" v-tooltip="t('upstreams.test')"
-                  :disabled="store.testing === item.name" @click="testUpstream(item.name)">
-            <Loader2 v-if="store.testing === item.name" :size="16" class="animate-spin" />
+                  :disabled="store.testing.has(item.name)" @click="testUpstream(item.name)">
+            <Loader2 v-if="store.testing.has(item.name)" :size="16" class="animate-spin" />
             <FlaskConical v-else :size="16" />
           </button>
           <button class="btn btn-ghost btn-sm" v-tooltip="t('upstreams.edit')" @click="openEditModal(item)">
             <Pencil :size="16" />
           </button>
           <button class="btn btn-ghost btn-sm" v-tooltip="item.enabled ? t('secrets.disable') : t('secrets.enable')"
-                  :disabled="store.toggling === item.name" @click="store.toggle(item.name, !item.enabled)">
-            <Loader2 v-if="store.toggling === item.name" :size="16" class="animate-spin" />
+                  :disabled="store.toggling.has(item.name)" @click="store.toggle(item.name, !item.enabled)">
+            <Loader2 v-if="store.toggling.has(item.name)" :size="16" class="animate-spin" />
             <component v-else :is="item.enabled ? Pause : Play" :size="16" />
           </button>
           <button class="btn btn-ghost btn-sm" v-tooltip="t('upstreams.delete')" @click="handleRemove(item.name)">
@@ -77,7 +103,7 @@
 
     <!-- Mobile Action Sheet -->
     <ActionSheet v-model="upstreamActions.isOpen.value" :title="upstreamActions.activeItem.value?.name">
-      <button class="action-sheet-item" :disabled="store.testing === upstreamActions.activeItem.value?.name"
+      <button class="action-sheet-item" :disabled="store.testing.has(upstreamActions.activeItem.value?.name ?? '')"
               @click="testUpstream(upstreamActions.activeItem.value!.name); upstreamActions.close()">
         <FlaskConical :size="16" /> {{ t('upstreams.test') }}
       </button>
@@ -85,7 +111,7 @@
         <Pencil :size="16" /> {{ t('upstreams.edit') }}
       </button>
       <button class="action-sheet-item"
-              :disabled="store.toggling === upstreamActions.activeItem.value?.name"
+              :disabled="store.toggling.has(upstreamActions.activeItem.value?.name ?? '')"
               @click="store.toggle(upstreamActions.activeItem.value!.name, !upstreamActions.activeItem.value!.enabled); upstreamActions.close()">
         <component :is="upstreamActions.activeItem.value?.enabled ? Pause : Play" :size="16" />
         {{ upstreamActions.activeItem.value?.enabled ? t('secrets.disable') : t('secrets.enable') }}
@@ -177,6 +203,7 @@
     </FormModal>
 
     <ConfirmDialog v-bind="confirmState" @confirm="handleConfirm" @cancel="handleCancel" />
+    <BulkAddModal v-model="bulkModalOpen" @added="store.load()" />
   </div>
 </template>
 
@@ -193,6 +220,7 @@ import DataTable from '@/components/common/DataTable.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import PageHeader from '@/components/common/PageHeader.vue'
 import ActionSheet from '@/components/common/ActionSheet.vue'
+import BulkAddModal from '@/components/upstreams/BulkAddModal.vue'
 import {formatDate} from '@/utils/format'
 import {AlertCircle, FlaskConical, GitBranch, Loader2, MoreVertical, Pause, Pencil, Play, Trash2} from '@lucide/vue'
 
@@ -214,6 +242,51 @@ const columns = [
 // Confirm dialog
 const { confirmState, confirm, handleConfirm, handleCancel } = useConfirmDialog()
 
+// Selection
+const selectedNames = ref<Set<string>>(new Set())
+function onSelectionChange(keys: Set<string | number>) {
+  selectedNames.value = new Set([...keys] as string[])
+}
+
+async function handleBulkToggle(enable: boolean) {
+  const names = [...selectedNames.value]
+  if (!await confirm({
+    title: enable ? t('upstreams.bulk_enable') : t('upstreams.bulk_disable'),
+    message: enable ? t('upstreams.bulk_enable_confirm', { count: names.length }) : t('upstreams.bulk_disable_confirm', { count: names.length }),
+    confirmText: enable ? t('upstreams.bulk_enable') : t('upstreams.bulk_disable'),
+  })) return
+
+  try {
+    const succeeded = await store.bulkToggle(names, enable)
+    toast.success(enable ? t('upstreams.bulk_enabled', { count: succeeded }) : t('upstreams.bulk_disabled', { count: succeeded }))
+    selectedNames.value = new Set()
+  } catch { /* interceptor handles errors */ }
+}
+
+async function handleBulkRemove() {
+  const names = [...selectedNames.value]
+  if (!await confirm({
+    title: t('upstreams.bulk_delete'),
+    message: t('upstreams.bulk_delete_confirm', { count: names.length }),
+    confirmText: t('upstreams.delete'),
+  })) return
+
+  try {
+    const succeeded = await store.bulkRemove(names)
+    toast.success(t('upstreams.bulk_deleted', { count: succeeded }))
+    selectedNames.value = new Set()
+  } catch { /* interceptor handles errors */ }
+}
+
+async function handleBulkTest() {
+  const names = [...selectedNames.value]
+  try {
+    toast.success(t('upstreams.bulk_tested', { count: names.length }))
+    selectedNames.value = new Set()
+    await store.bulkTest(names)
+  } catch { /* interceptor handles errors */ }
+}
+
 function getHealthVariant(ok: boolean | null | undefined) {
   if (ok === null || ok === undefined) return 'neutral'
   return ok ? 'success' : 'danger'
@@ -234,9 +307,14 @@ async function handleRemove(name: string) {
 
 // Modal state
 const modalOpen = ref(false)
+const bulkModalOpen = ref(false)
 const isEdit = ref(false)
 const editTarget = ref('')
 const form = ref({ name: '', type: 'direct' as string, address: '', username: '', password: '', weight: 1, iface: '' })
+
+function openBulkModal() {
+  bulkModalOpen.value = true
+}
 
 const defaultForm = { name: '', type: 'direct' as string, address: '', username: '', password: '', weight: 1, iface: '' }
 
@@ -335,3 +413,14 @@ async function testUpstream(name: string) {
 
 onMounted(() => store.load())
 </script>
+
+<style scoped lang="scss">
+@use '@/assets/scss/variables' as *;
+
+.bulk-toolbar {
+  display: flex;
+  align-items: center;
+  gap: $spacing-sm;
+  padding: $spacing-sm $spacing-md;
+}
+</style>

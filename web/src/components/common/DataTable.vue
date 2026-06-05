@@ -36,7 +36,7 @@
             </tr>
           </thead>
           <TransitionGroup name="row" tag="tbody">
-            <tr v-for="item in sortedItems" :key="rowKeyFn(item)">
+            <tr v-for="item in sortedItems" :key="rowKeyFn(item)" :class="rowClassFn(item)">
               <td v-if="selectable" class="checkbox-col">
                 <input type="checkbox" :checked="isSelected(item)" @change="toggleItem(item)" />
               </td>
@@ -85,6 +85,7 @@ const props = withDefaults(defineProps<{
   skeletonRows?: number
   selectable?: boolean
   selectedKeys?: Set<string | number>
+  rowClass?: string | ((item: any) => string)
 }>(), {
   skeletonRows: 5,
   selectable: false,
@@ -165,6 +166,12 @@ watch(() => props.items, () => {
 
 function rowKeyFn(item: any): string | number {
   return typeof props.rowKey === 'function' ? props.rowKey(item) : item[props.rowKey]
+}
+
+function rowClassFn(item: any): string {
+  if (!props.rowClass) return ''
+  if (typeof props.rowClass === 'function') return props.rowClass(item)
+  return props.rowClass
 }
 
 function isSelected(item: any): boolean {

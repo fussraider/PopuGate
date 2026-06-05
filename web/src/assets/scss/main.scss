@@ -93,6 +93,7 @@ code {
 .items-center { align-items: center; }
 .justify-between { justify-content: space-between; }
 .justify-center  { justify-content: center; }
+.gap-xs     { gap: $spacing-xs; }
 .gap-sm     { gap: $spacing-sm; }
 .gap-md     { gap: $spacing-md; }
 .gap-lg     { gap: $spacing-lg; }

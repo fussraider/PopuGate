@@ -92,6 +92,51 @@ definitions:
     required:
     - secret_label
     type: object
+  handler.bulkAddRequest:
+    properties:
+      upstreams:
+        items:
+          $ref: '#/definitions/handler.bulkAddRequestItem'
+        maxItems: 100
+        minItems: 1
+        type: array
+    required:
+    - upstreams
+    type: object
+  handler.bulkAddRequestItem:
+    properties:
+      address:
+        type: string
+      iface:
+        type: string
+      password:
+        type: string
+      type:
+        enum:
+        - direct
+        - socks5
+        - socks4
+        type: string
+      username:
+        type: string
+      weight:
+        maximum: 100
+        minimum: 1
+        type: integer
+    required:
+    - type
+    type: object
+  handler.bulkCheckRequest:
+    properties:
+      proxies:
+        items:
+          type: string
+        maxItems: 100
+        minItems: 1
+        type: array
+    required:
+    - proxies
+    type: object
   handler.bulkExtendRequest:
     properties:
       days:
@@ -4428,6 +4473,62 @@ paths:
       security:
       - BearerAuth: []
       summary: Toggle an upstream
+      tags:
+      - upstreams
+  /upstreams/bulk:
+    post:
+      consumes:
+      - application/json
+      description: Create multiple upstream proxy configurations in a transaction
+      parameters:
+      - description: List of upstreams to add
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.bulkAddRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Bulk add upstreams
+      tags:
+      - upstreams
+  /upstreams/bulk-check:
+    post:
+      consumes:
+      - application/json
+      description: Check availability of multiple proxies in real-time, streaming
+        results back via SSE
+      parameters:
+      - description: List of proxies to check
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.bulkCheckRequest'
+      produces:
+      - text/event-stream
+      responses:
+        "200":
+          description: SSE stream of check progress
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Bulk check proxies
       tags:
       - upstreams
   /upstreams/interfaces:

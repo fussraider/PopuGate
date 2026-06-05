@@ -192,7 +192,7 @@ Independent proxies with their own port, masking domains, FakeTLS, and access ta
 - **Live Logs**: Real-time per-instance container log streaming via SSE
 
 ### 🔀 Upstreams
-Proxy chains (SOCKS4/SOCKS5) with weight-based balancing and network interface binding.
+Proxy chains (SOCKS4/SOCKS5) with weight-based balancing, network interface binding, and automatic health-based failover/recovery (auto-disablement).
 
 ### 🌍 Geoblock
 Country-based access restrictions (blacklist/whitelist) via `iptables`.
@@ -213,6 +213,10 @@ Automatic daily backups (database, engine configs, SSH keys) with retention-base
 Background task management: enable/disable, change schedules (cron), manual runs, execution history with error details.
 
 **Default tasks:** traffic-flush, quota-check, expiry-check, health-check, upstream-health, telegram-report, replication-sync, update-check, auto-update, telemt-check, docker-host-check, token-cleanup, daily-backup, backup-cleanup, history-cleanup, quota-reset, auto-rotate.
+
+### 📋 Audit Log
+System action logs with advanced filtering by periods, actions, and usernames.
+
 
 ### 🖥️ System
 Consolidated page for system status, resources telemetry, OS info, systemd service management, Docker integration, and update operations:

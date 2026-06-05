@@ -192,7 +192,7 @@ sudo ./scripts/init-ssl.sh your-domain.com your-email@example.com
 - **Лив-логи**: Стриминг логов контейнера в реальном времени через SSE
 
 ### 🔀 Upstreams
-Цепочки прокси (SOCKS4/SOCKS5) с балансировкой весов и привязкой к сетевым интерфейсам.
+Цепочки прокси (SOCKS4/SOCKS5) с балансировкой весов, привязкой к сетевым интерфейсам и автоматическим переключением при сбоях (auto-failover/recovery).
 
 ### 🌍 Гео-блокировка (Geoblock)
 Ограничение доступа по странам (blacklist/whitelist) через `iptables`.
@@ -213,6 +213,10 @@ Master-Slave синхронизация настроек и секретов м�
 Управление фоновыми задачами: включение/отключение, изменение расписания (cron), ручной запуск, история выполнения с деталями ошибок.
 
 **Стандартные задачи:** traffic-flush, quota-check, expiry-check, health-check, upstream-health, telegram-report, replication-sync, update-check, auto-update, telemt-check, docker-host-check, token-cleanup, daily-backup, backup-cleanup, history-cleanup, quota-reset, auto-rotate.
+
+### 📋 Аудит (Audit Log)
+Журнал действий системы с продвинутой фильтрацией по периодам времени, пользователям и типам действий.
+
 
 ### 🖥️ Система (System)
 Консолидированный раздел для мониторинга ресурсов, информации об ОС, управления системной службой systemd, интеграции с Docker и обновлений приложения:

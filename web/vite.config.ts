@@ -63,7 +63,7 @@ export default defineConfig({
         preprocessorOptions: {
             scss: {
                 api: 'modern-compiler',
-            },
+            } as any,
         },
     },
     server: {
@@ -82,8 +82,12 @@ export default defineConfig({
     build: {
         rollupOptions: {
             output: {
-                manualChunks: {
-                    vue: ['vue', 'vue-router', 'pinia'],
+                manualChunks(id) {
+                    if (id.includes('node_modules')) {
+                        if (id.includes('vue') || id.includes('vue-router') || id.includes('pinia')) {
+                            return 'vue'
+                        }
+                    }
                 },
             },
         },

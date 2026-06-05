@@ -376,3 +376,62 @@ func TestUpstreamStore_DisableAndEnableAutomatically(t *testing.T) {
 		t.Fatalf("expected auto_disabled_at=0, got %d", got.AutoDisabledAt)
 	}
 }
+
+func TestUpstreamStore_CreateMultiple(t *testing.T) {
+	db := testutil.OpenTestDB(t)
+	s := NewUpstreamStore(db)
+	ctx := context.Background()
+
+	// 1. Success case: insert two valid upstreams
+	ups := []*model.Upstream{
+		{Name: "bulk1", Type: model.UpstreamDirect, Weight: 10, Enabled: true},
+		{Name: "bulk2", Type: model.UpstreamSOCKS5, Address: "1.2.3.4:1080", Weight: 15, Enabled: true},
+	}
+	count, err := s.CreateMultiple(ctx, ups)
+	if err != nil {
+		t.Fatalf("CreateMultiple: %v", err)
+	}
+	if count != 2 {
+		t.Errorf("expected inserted count = 2, got %d", count)
+	}
+
+	// Verify they are saved
+	got1, _ := s.GetByName(ctx, "bulk1")
+	if got1 == nil || got1.Weight != 10 {
+		t.Error("failed to retrieve bulk1")
+	}
+	got2, _ := s.GetByName(ctx, "bulk2")
+	if got2 == nil || got2.Address != "1.2.3.4:1080" {
+		t.Error("failed to retrieve bulk2")
+	}
+
+	// 2. Ignore duplicate names case
+	ups2 := []*model.Upstream{
+		{Name: "bulk2", Type: model.UpstreamSOCKS5, Address: "1.2.3.4:1080", Weight: 15, Enabled: true}, // duplicate, should be ignored
+		{Name: "bulk3", Type: model.UpstreamDirect, Weight: 20, Enabled: true},                       // new
+	}
+	count2, err := s.CreateMultiple(ctx, ups2)
+	if err != nil {
+		t.Fatalf("CreateMultiple with duplicate: %v", err)
+	}
+	if count2 != 1 {
+		t.Errorf("expected inserted count = 1, got %d", count2)
+	}
+
+	// 3. Rollback case: one of the entries fails validation
+	ups3 := []*model.Upstream{
+		{Name: "bulk4", Type: model.UpstreamDirect, Weight: 10, Enabled: true},
+		{Name: "", Type: model.UpstreamDirect, Weight: 10, Enabled: true}, // invalid: empty name
+	}
+	_, err = s.CreateMultiple(ctx, ups3)
+	if err == nil {
+		t.Fatal("expected validation error")
+	}
+
+	// Verify transaction rolled back (bulk4 should not be created)
+	got4, _ := s.GetByName(ctx, "bulk4")
+	if got4 != nil {
+		t.Error("bulk4 should not exist due to transaction rollback")
+	}
+}
+

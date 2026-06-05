@@ -233,3 +233,47 @@ func (s *UpstreamStore) ClearHealth(ctx context.Context, name string) error {
 	`, name)
 	return err
 }
+
+// CreateMultiple inserts multiple upstreams inside a transaction, ignoring duplicates.
+// Returns the number of successfully inserted upstreams.
+func (s *UpstreamStore) CreateMultiple(ctx context.Context, upstreams []*model.Upstream) (int, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	stmt, err := tx.PrepareContext(ctx, `
+		INSERT OR IGNORE INTO upstreams (name, type, address, username, password, weight, iface, enabled)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	`)
+	if err != nil {
+		return 0, fmt.Errorf("prepare stmt: %w", err)
+	}
+	defer func() { _ = stmt.Close() }()
+
+	inserted := 0
+	for _, u := range upstreams {
+		if err := u.Validate(); err != nil {
+			return 0, fmt.Errorf("validate upstream %s: %w", u.Name, err)
+		}
+		enabled := 0
+		if u.Enabled {
+			enabled = 1
+		}
+		res, err := stmt.ExecContext(ctx, u.Name, u.Type, u.Address, u.Username, u.Password, u.Weight, u.Iface, enabled)
+		if err != nil {
+			return 0, fmt.Errorf("exec insert %s: %w", u.Name, err)
+		}
+		rows, _ := res.RowsAffected()
+		if rows > 0 {
+			inserted++
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("commit tx: %w", err)
+	}
+	return inserted, nil
+}
+

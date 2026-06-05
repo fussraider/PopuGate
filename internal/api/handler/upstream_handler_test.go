@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -29,6 +30,8 @@ func setupUpstreamTestRouter(t *testing.T) (*gin.Engine, *UpstreamHandler) {
 	r.DELETE("/api/v1/upstreams/:name", handler.Remove)
 	r.PUT("/api/v1/upstreams/:name", handler.Update)
 	r.PUT("/api/v1/upstreams/:name/toggle", handler.Toggle)
+	r.POST("/api/v1/upstreams/bulk-check", handler.BulkCheck)
+	r.POST("/api/v1/upstreams/bulk", handler.BulkAdd)
 
 	return r, handler
 }
@@ -421,3 +424,108 @@ func TestUpstreamHandler_AutoDisabledFields(t *testing.T) {
 		t.Errorf("expected auto_disabled_at=987654321, got %v", u["auto_disabled_at"])
 	}
 }
+
+func TestUpstreamHandler_BulkCheck(t *testing.T) {
+	r, _ := setupUpstreamTestRouter(t)
+
+	body, _ := json.Marshal(map[string]interface{}{
+		"proxies": []string{
+			"socks5://user:pass@127.0.0.1:1080",
+			"invalid-line-missing-port",
+		},
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/upstreams/bulk-check", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	contentType := w.Header().Get("Content-Type")
+	if !strings.Contains(contentType, "text/event-stream") {
+		t.Errorf("expected text/event-stream, got %q", contentType)
+	}
+
+	respStr := w.Body.String()
+	if !strings.Contains(respStr, "invalid-line-missing-port") {
+		t.Errorf("expected error notification in stream, got %q", respStr)
+	}
+}
+
+func TestUpstreamHandler_BulkAdd(t *testing.T) {
+	r, _ := setupUpstreamTestRouter(t)
+
+	body, _ := json.Marshal(map[string]interface{}{
+		"upstreams": []map[string]interface{}{
+			{
+				"type":    "socks5",
+				"address": "1.1.1.1:1080",
+				"weight":  15,
+			},
+			{
+				"type":    "socks4",
+				"address": "2.2.2.2:1080",
+				"weight":  25,
+			},
+		},
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/upstreams/bulk", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp["ok"] != true {
+		t.Errorf("expected ok=true, got %v", resp["ok"])
+	}
+	if resp["count"] != float64(2) {
+		t.Errorf("expected count=2, got %v", resp["count"])
+	}
+	names, ok := resp["names"].([]interface{})
+	if !ok || len(names) != 2 {
+		t.Errorf("expected names list in response of length 2, got %v", resp["names"])
+	}
+}
+
+func TestUpstreamHandler_WithContainerService(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db := testutil.OpenTestDB(t)
+	upstreamStore := store.NewUpstreamStore(db)
+	upstreamSvc := service.NewUpstreamService(upstreamStore)
+	handler := NewUpstreamHandler(upstreamSvc)
+
+	// Create test container service
+	instances := store.NewInstanceStore(db)
+	secrets := store.NewSecretStore(db)
+	settings := store.NewSettingsStore(db)
+	traffic := store.NewTrafficStore(db)
+	containerSvc := service.NewContainerService(t.TempDir(), nil, secrets, upstreamStore, instances, traffic, settings, nil)
+
+	handler.SetContainerSvc(containerSvc)
+
+	r := gin.New()
+	r.POST("/api/v1/upstreams", handler.Add)
+
+	body, _ := json.Marshal(addUpstreamRequest{
+		Name:    "test-upstream",
+		Type:    "socks5",
+		Address: "1.2.3.4:1080",
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/upstreams", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+

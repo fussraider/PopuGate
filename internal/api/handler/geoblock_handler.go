@@ -10,6 +10,7 @@ import (
 
 	"github.com/fussraider/PopuGate/internal/service"
 	"github.com/fussraider/PopuGate/internal/store"
+	"github.com/fussraider/PopuGate/pkg/logger"
 )
 
 // GeoblockHandler handles geo-blocking endpoints.
@@ -17,6 +18,8 @@ type GeoblockHandler struct {
 	settings *store.SettingsStore
 	geoSvc   *service.GeoblockService
 }
+
+var geoLog = logger.WithScope("geoblock")
 
 // NewGeoblockHandler creates a new GeoblockHandler.
 func NewGeoblockHandler(settings *store.SettingsStore, geoSvc *service.GeoblockService) *GeoblockHandler {
@@ -138,6 +141,7 @@ func (h *GeoblockHandler) Add(c *gin.Context) {
 		}
 	}
 
+	geoLog.Infof("adding country to blocklist: %s", req.Country)
 	auditLog(c, "geoblock.add", fmt.Sprintf("country=%s", req.Country))
 	c.JSON(http.StatusOK, gin.H{"ok": true, "country": req.Country})
 }
@@ -195,6 +199,7 @@ func (h *GeoblockHandler) Remove(c *gin.Context) {
 		}
 	}
 
+	geoLog.Infof("removing country from blocklist: %s", req.Country)
 	auditLog(c, "geoblock.remove", fmt.Sprintf("country=%s", req.Country))
 	c.JSON(http.StatusOK, gin.H{"ok": true, "country": req.Country})
 }
@@ -230,6 +235,7 @@ func (h *GeoblockHandler) Clear(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
+	geoLog.Infof("clearing all countries from blocklist")
 	auditLog(c, "geoblock.clear", "all countries removed")
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
@@ -286,6 +292,7 @@ func (h *GeoblockHandler) SetMode(c *gin.Context) {
 		}
 	}
 
+	geoLog.Infof("setting geoblock mode to: %s", req.Mode)
 	auditLog(c, "geoblock.set_mode", fmt.Sprintf("mode=%s", req.Mode))
 	c.JSON(http.StatusOK, gin.H{"ok": true, "mode": req.Mode})
 }

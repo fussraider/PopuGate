@@ -133,6 +133,7 @@ func (h *InstanceHandler) Add(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	instanceLog.Infof("created instance: label=%s port=%d metrics_port=%d", inst.Label, inst.Port, inst.MetricsPort)
 	auditLog(c, "instance.create", fmt.Sprintf("port=%d label=%s domain=%s", req.Port, req.Label, req.TLSDomain))
 	c.JSON(http.StatusCreated, inst)
 }
@@ -320,6 +321,7 @@ func (h *InstanceHandler) validateAndSaveInstance(c *gin.Context, id int64, inst
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return false
 	}
+	instanceLog.Infof("updated instance: id=%d label=%s port=%d", id, inst.Label, inst.Port)
 	auditLog(c, "instance.update", fmt.Sprintf("id=%d label=%s port=%d", id, inst.Label, inst.Port))
 	if h.containerSvc != nil {
 		h.containerSvc.RevalidateInstance(c.Request.Context(), id)
@@ -422,6 +424,7 @@ func (h *InstanceHandler) Remove(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
+	instanceLog.Infof("deleted instance: id=%d label=%s port=%d", id, instLabel, instPort)
 	auditLog(c, "instance.delete", fmt.Sprintf("id=%d label=%s port=%d", id, instLabel, instPort))
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
@@ -742,6 +745,7 @@ func (h *InstanceHandler) auditInstanceAction(c *gin.Context, action string, id 
 		label = inst.Label
 		port = inst.Port
 	}
+	instanceLog.Infof("action %q on instance %d (label=%s, port=%d)", action, id, label, port)
 	auditLog(c, action, fmt.Sprintf("id=%d label=%s port=%d", id, label, port))
 }
 

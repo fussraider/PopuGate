@@ -135,7 +135,7 @@ func (h *ProxyHandler) Reload(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "proxy service unavailable"})
 		return
 	}
-	if err := h.container.Reload(c.Request.Context()); err != nil {
+	if err := h.container.Reload(c.Request.Context(), "manual request"); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to reload proxy: %v", err)})
 		return
 	}

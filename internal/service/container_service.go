@@ -699,7 +699,11 @@ func (s *ContainerService) generateInstanceConfigForSwing(ctx context.Context, s
 }
 
 // Reload regenerates config and sends SIGHUP for hot-reload.
-func (s *ContainerService) Reload(ctx context.Context) error {
+func (s *ContainerService) Reload(ctx context.Context, reason string) error {
+	if s.docker == nil {
+		return fmt.Errorf("docker client is not initialized")
+	}
+	statusLog.Infof("triggering instance reload: reason=%q", reason)
 	settings, err := s.settings.Load(ctx)
 	if err != nil {
 		return err
@@ -709,18 +713,36 @@ func (s *ContainerService) Reload(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+
+	upstreamEntries, err := s.listUpstreamEntries(ctx)
+	if err != nil {
+		return err
+	}
+
+	dbSecrets, err := s.secrets.List(ctx)
+	if err != nil {
+		return err
+	}
+
 	for _, inst := range insts {
 		if !inst.Enabled {
 			continue
 		}
-		if err := s.generateInstanceConfig(ctx, settings, &inst); err != nil {
+		statusLog.Infof("regenerating config for instance %d (%s) due to: %s", inst.ID, inst.Label, reason)
+		if err := s.generateInstanceConfigWithCached(ctx, settings, &inst, upstreamEntries, dbSecrets); err != nil {
 			statusLog.Warnf("generate config for instance %d: %v", inst.ID, err)
 			continue
 		}
-		running, _ := s.docker.IsInstanceRunning(ctx, inst.ContainerName())
-		if !running {
+		running, err := s.docker.IsInstanceRunning(ctx, inst.ContainerName())
+		if err != nil {
+			statusLog.Warnf("check running state for instance %s: %v", inst.ContainerName(), err)
 			continue
 		}
+		if !running {
+			statusLog.Infof("instance %d (%s) is not running, skipping SIGHUP", inst.ID, inst.ContainerName())
+			continue
+		}
+		statusLog.Infof("sending SIGHUP (hot-reload) to instance %d (%s)", inst.ID, inst.ContainerName())
 		if err := s.docker.KillSignalInstance(ctx, inst.ContainerName(), "SIGHUP"); err != nil {
 			statusLog.Warnf("SIGHUP instance %s: %v", inst.ContainerName(), err)
 		}
@@ -1048,11 +1070,14 @@ func (s *ContainerService) generateInstanceConfig(ctx context.Context, settings 
 }
 
 func (s *ContainerService) generateInstanceConfigWith(ctx context.Context, settings *model.Settings, inst *model.Instance, upstreamEntries []telemt.UpstreamEntry) error {
-	// Gather secrets, filtering by tag match
 	dbSecrets, err := s.secrets.List(ctx)
 	if err != nil {
 		return err
 	}
+	return s.generateInstanceConfigWithCached(ctx, settings, inst, upstreamEntries, dbSecrets)
+}
+
+func (s *ContainerService) generateInstanceConfigWithCached(ctx context.Context, settings *model.Settings, inst *model.Instance, upstreamEntries []telemt.UpstreamEntry, dbSecrets []model.Secret) error {
 	instanceTags := inst.GetTags()
 	var secretEntries []telemt.SecretEntry
 	for _, sec := range dbSecrets {

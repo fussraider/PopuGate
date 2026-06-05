@@ -175,3 +175,13 @@ func TestContainerService_GetActiveContainerName(t *testing.T) {
 		t.Errorf("expected active container name %q, got %q", expectedName, activeName)
 	}
 }
+
+func TestContainerService_Reload_DockerNil(t *testing.T) {
+	svc, _, _ := newTestContainerService(t)
+	ctx := context.Background()
+
+	err := svc.Reload(ctx, "test")
+	if err == nil {
+		t.Fatal("expected error when Reload is called with nil docker client, got nil")
+	}
+}

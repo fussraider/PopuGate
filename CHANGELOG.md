@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-06-05
+
+### Added
+- **Automatic Upstream Failover & Recovery**: Added automatic health-based failover (disables upstreams after 3 consecutive failures) and auto-recovery (re-enables when checks pass) with Telegram notifications and status indicators in the Upstreams view and Dashboard's System Health card.
+- **Advanced Audit Log Filtering**: Added comprehensive filtering by period (today, yesterday, last week, last month, custom date range), action names, and usernames in the Web UI. Added the `/api/v1/audit/filters` endpoint to query unique users and actions from the logs.
+- **Zero-Downtime Swing Routing (Swing Routing)**: Implemented telemt container updates/reloads on alternative swing ports with atomic NAT redirection via iptables to prevent dropping live proxy connections.
+- **TCP Network Tuning (BBR & TFO)**: Added one-click activation of TCP BBR congestion control and TCP FastOpen kernel optimizations (sysctl) with automatic backup and rollback.
+- **Scheduler Auto-Updates**: Implemented background auto-update tasks to automatically check, download, and apply PopuGate (backend/app) updates with failure notifications via Telegram.
+- **Host Docker Engine Updates**: Added manual and scheduled updates for the host Docker Engine and status check notifications.
+
+### Changed
+- **Vite 8.0 & Rolldown Migration**: Upgraded frontend build system to use Vite 8.0 and Rolldown, migrating `manualChunks` in `vite.config.ts` to a functional format to comply with Rolldown.
+- **UI Consolidation (System View)**: Merged the separate Docker and Updates views into a single unified `SystemView` to streamline server administration.
+- **Dependency Upgrades**: Upgraded Go backend packages (`go 1.26.1`, `modernc.org/sqlite v1.51.0`, `golang.org/x/crypto v0.52.0`) and frontend libraries (`vue-router 5.1.0`, `pinia 3.0.4`, `typescript 6.0.3`, `@lucide/vue 1.17.0`, `axios 1.17.0`).
+- **Modal Scrolling & Layout**: Redesigned Modal window header/footer to be sticky while the body scrolls using flexbox layouts.
+- **Table Loading Behavior**: Optimized `DataTable` skeleton loader condition to avoid flickering when caching empty state lists.
+
+### Fixed
+- **WebSocket Reconnection Races**: Resolved race conditions and connection leaks caused by concurrent WebSocket stream creations in Pinia stores.
+- **Geoblock Environment Resilience**: Aligned API payloads, handled missing iptables/ipset command dependencies gracefully by disabling UI switches, and supported database transaction rollback.
+- **Go Linter Warnings**: Fixed backend linter warnings (De Morgan's law simplification and ignoring close errors).
+
 ## [0.3.2] - 2026-05-31
 
 ### Fixed
@@ -324,6 +346,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - SQLite storage with WAL mode
 - JWT authentication
 
+[0.4.0]: https://github.com/fussraider/PopuGate/compare/v0.3.2...v0.4.0
 [0.3.2]: https://github.com/fussraider/PopuGate/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/fussraider/PopuGate/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/fussraider/PopuGate/compare/v0.2.2...v0.3.0

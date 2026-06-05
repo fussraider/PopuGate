@@ -23,12 +23,17 @@ func (s *AuditService) Log(ctx context.Context, user, action, detail string) err
 	return s.audit.Insert(ctx, user, action, detail)
 }
 
-// List returns audit entries with pagination.
-func (s *AuditService) List(ctx context.Context, limit, offset int) ([]model.AuditEntry, error) {
-	return s.audit.List(ctx, limit, offset)
+// List returns audit entries with pagination and optional filters.
+func (s *AuditService) List(ctx context.Context, limit, offset int, filter *model.AuditFilter) ([]model.AuditEntry, error) {
+	return s.audit.List(ctx, limit, offset, filter)
 }
 
 // CleanOld removes audit entries older than 30 days.
 func (s *AuditService) CleanOld(ctx context.Context) (int, error) {
 	return s.audit.CleanOld(ctx, 30*24*time.Hour)
+}
+
+// GetFilters returns unique users and actions from the audit store.
+func (s *AuditService) GetFilters(ctx context.Context) ([]string, []string, error) {
+	return s.audit.GetFilters(ctx)
 }

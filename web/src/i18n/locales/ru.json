@@ -104,10 +104,10 @@
     "up_to_date": "Актуально",
     "secrets_health": "Секреты",
     "secrets_ok": "Все секреты в порядке",
-    "secrets_expired": "истекло",
-    "secrets_quota": "у лимита трафика",
-    "secrets_disabled": "отключено",
-    "no_secret_instances": "инстансов без подходящих секретов",
+    "secrets_expired_alert": "Истек срок действия у {count} секретов",
+    "secrets_quota_alert": "{count} секретов близки к лимиту трафика",
+    "secrets_disabled_alert": "Отключено {count} секретов",
+    "no_secret_instances_alert": "{count} инстанс(ов) прокси без подходящих секретов",
     "top_users": "Топ пользователей",
     "no_data": "Нет данных",
     "more_errors": "ещё ошибок",
@@ -130,7 +130,16 @@
     "exit_fullscreen": "Выйти из полноэкранного режима",
     "ws_connected": "Live",
     "ws_connecting": "Подключение...",
-    "ws_disconnected": "Офлайн"
+    "ws_disconnected": "Офлайн",
+    "upstreams_auto_disabled": "Автоматически отключено апстримов: {count}",
+    "since": "с",
+    "system_health_title": "Состояние системы",
+    "system_ok": "Все компоненты работают в штатном режиме",
+    "scheduler_errors": "задач(а) планировщика завершились со сбоем",
+    "health_docker_error": "Служба Docker не запущена или не установлена",
+    "health_container_error": "Контейнеры прокси остановлены",
+    "replication_slave_error": "Репликация: {count} нод(а) недоступно",
+    "bot_stopped_error": "Телеграм-бот настроен, но не запущен"
   },
   "secrets": {
     "add_secret": "Добавить секрет",
@@ -265,6 +274,28 @@
       "actor": "Автор",
       "target": "Цель",
       "details": "Подробности"
+    },
+    "filter": {
+      "period": "Период",
+      "date_range": "Диапазон дат",
+      "from": "С",
+      "to": "По",
+      "users": "Авторы",
+      "all_users": "Все авторы",
+      "actions": "Действия",
+      "all_actions": "Все действия",
+      "selected": "Выбрано",
+      "no_options": "Нет вариантов",
+      "reset": "Сбросить фильтры",
+      "refresh": "Обновить",
+      "periods": {
+        "all": "Всё время",
+        "today": "Сегодня",
+        "yesterday": "Вчера",
+        "week": "Последние 7 дней",
+        "month": "Последние 30 дней",
+        "custom": "Произвольный период"
+      }
     }
   },
   "templates": {
@@ -659,7 +690,8 @@
     "hint_interface": "Сетевой интерфейс для привязки",
     "hint_weight": "Вес для балансировки нагрузки",
     "section_connection": "Подключение",
-    "section_advanced": "Дополнительно"
+    "section_advanced": "Дополнительно",
+    "auto_disabled_tooltip": "Автоматически отключен: {time}\nПоследняя проверка: {last_check}"
   },
   "system": {
     "title": "Операционная система",

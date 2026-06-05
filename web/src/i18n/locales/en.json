@@ -104,10 +104,10 @@
     "up_to_date": "Up to date",
     "secrets_health": "Secrets",
     "secrets_ok": "All secrets are healthy",
-    "secrets_expired": "expired",
-    "secrets_quota": "near traffic limit",
-    "secrets_disabled": "disabled",
-    "no_secret_instances": "instances without matching secrets",
+    "secrets_expired_alert": "{count} expired secret(s)",
+    "secrets_quota_alert": "{count} secret(s) near traffic limit",
+    "secrets_disabled_alert": "{count} disabled secret(s)",
+    "no_secret_instances_alert": "{count} proxy instance(s) without matching secrets",
     "top_users": "Top Users",
     "no_data": "No data",
     "more_errors": "more errors",
@@ -130,7 +130,16 @@
     "exit_fullscreen": "Exit Fullscreen",
     "ws_connected": "Live",
     "ws_connecting": "Connecting...",
-    "ws_disconnected": "Offline"
+    "ws_disconnected": "Offline",
+    "upstreams_auto_disabled": "{count} upstream(s) auto-disabled",
+    "since": "since",
+    "system_health_title": "System Health",
+    "system_ok": "All systems are running normally",
+    "scheduler_errors": "scheduler task(s) failed",
+    "health_docker_error": "Docker Daemon is not running or not installed",
+    "health_container_error": "Proxy containers are stopped",
+    "replication_slave_error": "Replication: {count} node(s) offline",
+    "bot_stopped_error": "Telegram Bot is configured but not running"
   },
   "secrets": {
     "add_secret": "Add Secret",
@@ -265,6 +274,28 @@
       "actor": "Actor",
       "target": "Target",
       "details": "Details"
+    },
+    "filter": {
+      "period": "Period",
+      "date_range": "Date Range",
+      "from": "From",
+      "to": "To",
+      "users": "Authors",
+      "all_users": "All Authors",
+      "actions": "Actions",
+      "all_actions": "All Actions",
+      "selected": "Selected",
+      "no_options": "No options",
+      "reset": "Reset Filters",
+      "refresh": "Refresh",
+      "periods": {
+        "all": "All Time",
+        "today": "Today",
+        "yesterday": "Yesterday",
+        "week": "Last 7 Days",
+        "month": "Last 30 Days",
+        "custom": "Custom Range"
+      }
     }
   },
   "templates": {
@@ -659,7 +690,8 @@
     "hint_interface": "Network interface to bind",
     "hint_weight": "Load balancing weight",
     "section_connection": "Connection",
-    "section_advanced": "Advanced"
+    "section_advanced": "Advanced",
+    "auto_disabled_tooltip": "Auto-disabled: {time}\nLast check: {last_check}"
   },
   "system": {
     "title": "Operating System",

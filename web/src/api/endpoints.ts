@@ -406,8 +406,20 @@ export const schedulerApi = {
 // ─── Audit ─────────────────────────────────────────────────────
 
 export const auditApi = {
-  list: (limit = 100, offset = 0) =>
-    api.get<AuditEntry[]>('/audit', { params: { limit, offset } }).then((r) => r.data),
+  list: (limit = 100, offset = 0, users?: string[], actions?: string[], from?: number, to?: number) =>
+    api.get<AuditEntry[]>('/audit', {
+      params: {
+        limit,
+        offset,
+        users: users?.join(','),
+        actions: actions?.join(','),
+        from,
+        to,
+      }
+    }).then((r) => r.data),
+
+  filters: () =>
+    api.get<{ users: string[]; actions: string[] }>('/audit/filters').then((r) => r.data),
 }
 
 // ─── Templates ──────────────────────────────────────────────────

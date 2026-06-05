@@ -314,6 +314,7 @@ func SetupRouter(cfg RouterConfig) *gin.Engine {
 		if cfg.AuditSvc != nil {
 			auditHandler := handler.NewAuditHandler(cfg.AuditSvc)
 			protected.GET("/audit", auditHandler.List)
+			protected.GET("/audit/filters", auditHandler.GetFilters)
 		}
 
 		// Templates

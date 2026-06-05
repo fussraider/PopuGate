@@ -29,7 +29,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Retrieve audit log entries with pagination",
+                "description": "Retrieve audit log entries with pagination and filtering",
                 "produces": [
                     "application/json"
                 ],
@@ -49,6 +49,30 @@ const docTemplate = `{
                         "description": "Offset (default 0)",
                         "name": "offset",
                         "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Comma-separated list of usernames to filter by",
+                        "name": "users",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Comma-separated list of actions to filter by",
+                        "name": "actions",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "From Unix timestamp (inclusive)",
+                        "name": "from",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "To Unix timestamp (inclusive)",
+                        "name": "to",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -59,6 +83,41 @@ const docTemplate = `{
                             "items": {
                                 "type": "object"
                             }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/audit/filters": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieve a list of unique users and actions present in the logs",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "audit"
+                ],
+                "summary": "Get audit filters list",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
                         }
                     },
                     "500": {

@@ -25,7 +25,7 @@ func TestAuditService_LogAndList(t *testing.T) {
 		t.Fatalf("Log: %v", err)
 	}
 
-	entries, err := svc.List(ctx, 10, 0)
+	entries, err := svc.List(ctx, 10, 0, nil)
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
@@ -41,7 +41,7 @@ func TestAuditService_ListEmpty(t *testing.T) {
 	svc := newTestAuditService(t)
 	ctx := context.Background()
 
-	entries, err := svc.List(ctx, 10, 0)
+	entries, err := svc.List(ctx, 10, 0, nil)
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}

@@ -446,7 +446,7 @@ info:
 paths:
   /audit:
     get:
-      description: Retrieve audit log entries with pagination
+      description: Retrieve audit log entries with pagination and filtering
       parameters:
       - description: Max entries (1-1000, default 100)
         in: query
@@ -455,6 +455,22 @@ paths:
       - description: Offset (default 0)
         in: query
         name: offset
+        type: integer
+      - description: Comma-separated list of usernames to filter by
+        in: query
+        name: users
+        type: string
+      - description: Comma-separated list of actions to filter by
+        in: query
+        name: actions
+        type: string
+      - description: From Unix timestamp (inclusive)
+        in: query
+        name: from
+        type: integer
+      - description: To Unix timestamp (inclusive)
+        in: query
+        name: to
         type: integer
       produces:
       - application/json
@@ -474,6 +490,28 @@ paths:
       security:
       - BearerAuth: []
       summary: List audit entries
+      tags:
+      - audit
+  /audit/filters:
+    get:
+      description: Retrieve a list of unique users and actions present in the logs
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get audit filters list
       tags:
       - audit
   /auth/login:

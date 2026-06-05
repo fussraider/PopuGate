@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fussraider/PopuGate/internal/model"
 	"github.com/fussraider/PopuGate/internal/testutil"
 )
 
@@ -20,7 +21,7 @@ func TestAuditStore_InsertAndList(t *testing.T) {
 		t.Fatalf("Insert: %v", err)
 	}
 
-	entries, err := s.List(ctx, 10, 0)
+	entries, err := s.List(ctx, 10, 0, nil)
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
@@ -45,7 +46,7 @@ func TestAuditStore_ListPagination(t *testing.T) {
 		_ = s.Insert(ctx, "admin", "test.action", "detail")
 	}
 
-	entries, err := s.List(ctx, 2, 0)
+	entries, err := s.List(ctx, 2, 0, nil)
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
@@ -53,7 +54,7 @@ func TestAuditStore_ListPagination(t *testing.T) {
 		t.Fatalf("expected 2 entries, got %d", len(entries))
 	}
 
-	entries2, err := s.List(ctx, 2, 2)
+	entries2, err := s.List(ctx, 2, 2, nil)
 	if err != nil {
 		t.Fatalf("List offset: %v", err)
 	}
@@ -71,7 +72,7 @@ func TestAuditStore_ListEmpty(t *testing.T) {
 	db := testutil.OpenTestDB(t)
 	s := NewAuditStore(db)
 
-	entries, err := s.List(context.Background(), 10, 0)
+	entries, err := s.List(context.Background(), 10, 0, nil)
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
@@ -102,11 +103,42 @@ func TestAuditStore_CleanOld(t *testing.T) {
 		t.Fatalf("expected 1 cleaned, got %d", count)
 	}
 
-	entries, _ := s.List(ctx, 10, 0)
+	entries, _ := s.List(ctx, 10, 0, nil)
 	if len(entries) != 1 {
 		t.Fatalf("expected 1 entry after clean, got %d", len(entries))
 	}
 	if entries[0].Action != "fresh.action" {
 		t.Errorf("expected fresh.action, got %s", entries[0].Action)
+	}
+}
+
+func TestAuditStore_ListFiltered(t *testing.T) {
+	db := testutil.OpenTestDB(t)
+	s := NewAuditStore(db)
+	ctx := context.Background()
+
+	_ = s.Insert(ctx, "admin1", "secret.create", "d1")
+	_ = s.Insert(ctx, "admin2", "secret.rotate", "d2")
+	_ = s.Insert(ctx, "system", "proxy.start", "d3")
+
+	// Filter by user
+	entries, err := s.List(ctx, 10, 0, &model.AuditFilter{Users: []string{"admin1", "system"}})
+	if err != nil {
+		t.Fatalf("List filtered user: %v", err)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("expected 2 entries, got %d", len(entries))
+	}
+
+	// Filter by action
+	entries, err = s.List(ctx, 10, 0, &model.AuditFilter{Actions: []string{"secret.rotate"}})
+	if err != nil {
+		t.Fatalf("List filtered action: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(entries))
+	}
+	if entries[0].User != "admin2" {
+		t.Errorf("expected user admin2, got %s", entries[0].User)
 	}
 }

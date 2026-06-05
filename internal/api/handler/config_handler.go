@@ -6,13 +6,18 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/fussraider/PopuGate/internal/service"
 	"github.com/fussraider/PopuGate/internal/store"
+	"github.com/fussraider/PopuGate/pkg/logger"
 )
 
 // ConfigHandler handles configuration endpoints.
 type ConfigHandler struct {
-	settings *store.SettingsStore
+	settings     *store.SettingsStore
+	containerSvc *service.ContainerService
 }
+
+var configLog = logger.WithScope("config")
 
 // allowedConfigKeys is the whitelist of keys that may be updated via the API.
 // Internal keys (jwt_secret, auth_password_hash) are intentionally excluded.
@@ -58,6 +63,11 @@ var allowedConfigKeys = map[string]bool{
 // NewConfigHandler creates a new ConfigHandler.
 func NewConfigHandler(settings *store.SettingsStore) *ConfigHandler {
 	return &ConfigHandler{settings: settings}
+}
+
+// SetContainerSvc sets the container service.
+func (h *ConfigHandler) SetContainerSvc(svc *service.ContainerService) {
+	h.containerSvc = svc
 }
 
 // GetAll handles GET /api/v1/config
@@ -136,7 +146,13 @@ func (h *ConfigHandler) Update(c *gin.Context) {
 		applied = append(applied, k)
 	}
 
+	configLog.Infof("updating settings: %v", applied)
 	auditLog(c, "settings.update", "updated settings")
+	if h.containerSvc != nil {
+		if err := h.containerSvc.Reload(c.Request.Context(), "settings updated"); err != nil {
+			configLog.Warnf("failed to hot-reload instances: %v", err)
+		}
+	}
 	c.JSON(http.StatusOK, gin.H{"ok": true, "applied": applied, "rejected": rejected})
 }
 

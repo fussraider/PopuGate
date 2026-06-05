@@ -121,6 +121,7 @@ func SetupRouter(cfg RouterConfig) *gin.Engine {
 	{
 		// Config
 		configHandler := handler.NewConfigHandler(cfg.Settings)
+		configHandler.SetContainerSvc(cfg.ContainerSvc)
 		protected.GET("/config", configHandler.GetAll)
 		protected.PUT("/config", configHandler.Update)
 		protected.GET("/config/:key", configHandler.GetKey)
@@ -165,9 +166,12 @@ func SetupRouter(cfg RouterConfig) *gin.Engine {
 
 		// Upstreams
 		upstreamHandler := handler.NewUpstreamHandler(cfg.UpstreamSvc)
+		upstreamHandler.SetContainerSvc(cfg.ContainerSvc)
 		protected.GET("/upstreams", upstreamHandler.List)
 		protected.GET("/upstreams/interfaces", upstreamHandler.Interfaces)
 		protected.POST("/upstreams/test", upstreamHandler.TestConfig)
+		protected.POST("/upstreams/bulk-check", upstreamHandler.BulkCheck)
+		protected.POST("/upstreams/bulk", upstreamHandler.BulkAdd)
 		protected.POST("/upstreams", upstreamHandler.Add)
 		protected.PUT("/upstreams/:name", upstreamHandler.Update)
 		protected.DELETE("/upstreams/:name", upstreamHandler.Remove)

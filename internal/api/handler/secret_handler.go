@@ -11,8 +11,11 @@ import (
 	"github.com/fussraider/PopuGate/internal/model"
 	"github.com/fussraider/PopuGate/internal/service"
 	"github.com/fussraider/PopuGate/internal/store"
+	"github.com/fussraider/PopuGate/pkg/logger"
 	"github.com/fussraider/PopuGate/pkg/netutil"
 )
+
+var secretLog = logger.WithScope("secret")
 
 // SecretHandler handles secret endpoints.
 type SecretHandler struct {
@@ -78,7 +81,9 @@ func (h *SecretHandler) Add(c *gin.Context) {
 		return
 	}
 
+	secretLog.Infof("creating secret: label=%s", req.Label)
 	auditLog(c, "secret.create", fmt.Sprintf("label=%s", req.Label))
+	h.revalidateInstances(c.Request.Context(), fmt.Sprintf("secret %s created", req.Label))
 	c.JSON(http.StatusCreated, sec)
 }
 
@@ -126,8 +131,9 @@ func (h *SecretHandler) Remove(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	secretLog.Infof("removing secret: label=%s", label)
 	auditLog(c, "secret.delete", fmt.Sprintf("label=%s", label))
-	h.revalidateInstances(c.Request.Context())
+	h.revalidateInstances(c.Request.Context(), fmt.Sprintf("secret %s removed", label))
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
@@ -148,7 +154,9 @@ func (h *SecretHandler) Rotate(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	secretLog.Infof("rotating secret: label=%s", label)
 	auditLog(c, "secret.rotate", fmt.Sprintf("label=%s", label))
+	h.revalidateInstances(c.Request.Context(), fmt.Sprintf("secret %s rotated", label))
 	c.JSON(http.StatusOK, sec)
 }
 
@@ -180,8 +188,13 @@ func (h *SecretHandler) Toggle(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	action := "enabling"
+	if !*req.Enabled {
+		action = "disabling"
+	}
+	secretLog.Infof("%s secret: label=%s", action, label)
 	auditLog(c, "secret.toggle", fmt.Sprintf("label=%s enabled=%v", label, *req.Enabled))
-	h.revalidateInstances(c.Request.Context())
+	h.revalidateInstances(c.Request.Context(), fmt.Sprintf("secret %s toggled (%s)", label, action))
 	c.JSON(http.StatusOK, gin.H{"ok": true, "enabled": *req.Enabled})
 }
 
@@ -235,7 +248,9 @@ func (h *SecretHandler) SetLimits(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	secretLog.Infof("updating limits for secret: label=%s conns=%d ips=%d quota=%d exp=%s", label, maxConns, maxIPs, quotaBytes, req.ExpiresAt)
 	auditLog(c, "secret.set_limits", fmt.Sprintf("label=%s", label))
+	h.revalidateInstances(c.Request.Context(), fmt.Sprintf("secret %s limits updated", label))
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
@@ -449,7 +464,9 @@ func (h *SecretHandler) Rename(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	secretLog.Infof("renaming secret: label=%s -> %s", label, req.NewLabel)
 	auditLog(c, "secret.rename", fmt.Sprintf("%s -> %s", label, req.NewLabel))
+	h.revalidateInstances(c.Request.Context(), fmt.Sprintf("secret %s renamed to %s", label, req.NewLabel))
 	c.JSON(http.StatusOK, gin.H{"ok": true, "old_label": label, "new_label": req.NewLabel})
 }
 
@@ -481,7 +498,9 @@ func (h *SecretHandler) Extend(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	secretLog.Infof("extending secret: label=%s days=%d", label, req.Days)
 	auditLog(c, "secret.extend", fmt.Sprintf("label=%s days=%d", label, req.Days))
+	h.revalidateInstances(c.Request.Context(), fmt.Sprintf("secret %s extended", label))
 	c.JSON(http.StatusOK, gin.H{"ok": true, "label": label, "extended_days": req.Days})
 }
 
@@ -501,6 +520,10 @@ func (h *SecretHandler) DisableExpired(c *gin.Context) {
 		return
 	}
 	auditLog(c, "secret.disable_expired", fmt.Sprintf("disabled=%d", count))
+	if count > 0 {
+		secretLog.Infof("disabling expired secrets (count=%d)", count)
+		h.revalidateInstances(c.Request.Context(), "expired secrets disabled")
+	}
 	c.JSON(http.StatusOK, gin.H{"ok": true, "disabled": count})
 }
 
@@ -538,8 +561,9 @@ func (h *SecretHandler) SetTags(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	secretLog.Infof("updating tags for secret: label=%s tags=%s", label, req.Tags)
 	auditLog(c, "secret.set_tags", fmt.Sprintf("label=%s tags=%s", label, req.Tags))
-	h.revalidateInstances(c.Request.Context())
+	h.revalidateInstances(c.Request.Context(), fmt.Sprintf("secret %s tags updated", label))
 	c.JSON(http.StatusOK, gin.H{"ok": true, "tags": req.Tags})
 }
 
@@ -559,8 +583,9 @@ func (h *SecretHandler) Archive(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	secretLog.Infof("archiving secret: label=%s", label)
 	auditLog(c, "secret.archive", fmt.Sprintf("label=%s", label))
-	h.revalidateInstances(c.Request.Context())
+	h.revalidateInstances(c.Request.Context(), fmt.Sprintf("secret %s archived", label))
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
@@ -580,7 +605,9 @@ func (h *SecretHandler) Unarchive(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	secretLog.Infof("unarchiving secret: label=%s", label)
 	auditLog(c, "secret.unarchive", fmt.Sprintf("label=%s", label))
+	h.revalidateInstances(c.Request.Context(), fmt.Sprintf("secret %s unarchived", label))
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
@@ -636,7 +663,9 @@ func (h *SecretHandler) Clone(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	secretLog.Infof("cloning secret: source=%s -> new=%s", label, req.NewLabel)
 	auditLog(c, "secret.clone", fmt.Sprintf("source=%s new=%s", label, req.NewLabel))
+	h.revalidateInstances(c.Request.Context(), fmt.Sprintf("secret %s cloned to %s", label, req.NewLabel))
 	c.JSON(http.StatusCreated, sec)
 }
 
@@ -674,7 +703,11 @@ func (h *SecretHandler) BulkExtend(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	secretLog.Infof("bulk extending %d secrets", len(labels))
 	auditLog(c, "secret.bulk_extend", fmt.Sprintf("count=%d days=%d tag=%s", len(labels), req.Days, req.Tag))
+	if updated > 0 {
+		h.revalidateInstances(c.Request.Context(), fmt.Sprintf("bulk extend %d secrets", len(labels)))
+	}
 	c.JSON(http.StatusOK, gin.H{"ok": true, "updated": updated})
 }
 
@@ -711,7 +744,11 @@ func (h *SecretHandler) BulkRotate(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	secretLog.Infof("bulk rotating %d secrets", len(labels))
 	auditLog(c, "secret.bulk_rotate", fmt.Sprintf("count=%d tag=%s", len(labels), req.Tag))
+	if updated > 0 {
+		h.revalidateInstances(c.Request.Context(), fmt.Sprintf("bulk rotate %d secrets", len(labels)))
+	}
 	c.JSON(http.StatusOK, gin.H{"ok": true, "updated": updated, "labels": rotated})
 }
 
@@ -825,6 +862,10 @@ func (h *SecretHandler) Import(c *gin.Context) {
 		return
 	}
 	auditLog(c, "secret.import", fmt.Sprintf("count=%d", len(req.Secrets)))
+	if len(result.Imported) > 0 {
+		secretLog.Infof("imported %d secrets", len(result.Imported))
+		h.revalidateInstances(c.Request.Context(), fmt.Sprintf("imported %d secrets", len(result.Imported)))
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"ok":       true,
 		"imported": result.Imported,
@@ -937,8 +978,13 @@ func (h *SecretHandler) BulkToggle(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	action := "bulk enabling"
+	if !req.Enable {
+		action = "bulk disabling"
+	}
+	secretLog.Infof("%s %d secrets", action, len(labels))
 	auditLog(c, "secret.bulk_toggle", fmt.Sprintf("count=%d enable=%v", updated, req.Enable))
-	h.revalidateInstances(c.Request.Context())
+	h.revalidateInstances(c.Request.Context(), fmt.Sprintf("bulk toggle %d secrets (%s)", len(labels), action))
 	c.JSON(http.StatusOK, gin.H{"ok": true, "updated": updated})
 }
 
@@ -992,13 +1038,20 @@ func (h *SecretHandler) BulkSetLimits(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	secretLog.Infof("bulk updating limits for %d secrets", len(labels))
 	auditLog(c, "secret.bulk_set_limits", fmt.Sprintf("count=%d", updated))
+	if updated > 0 {
+		h.revalidateInstances(c.Request.Context(), fmt.Sprintf("bulk limits updated for %d secrets", len(labels)))
+	}
 	c.JSON(http.StatusOK, gin.H{"ok": true, "updated": updated})
 }
 
 // revalidateInstances rechecks running instances after a secret change.
-func (h *SecretHandler) revalidateInstances(ctx context.Context) {
+func (h *SecretHandler) revalidateInstances(ctx context.Context, reason string) {
 	if h.containerSvc != nil {
 		h.containerSvc.RevalidateAllInstances(ctx)
+		if err := h.containerSvc.Reload(ctx, reason); err != nil {
+			secretLog.Warnf("revalidateInstances: failed to hot-reload instances: %v", err)
+		}
 	}
 }

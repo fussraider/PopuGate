@@ -635,3 +635,36 @@ func TestSecretHandler_DisableExpired(t *testing.T) {
 		t.Error("expected ok=true")
 	}
 }
+
+func TestSecretHandler_WithContainerService(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db := testutil.OpenTestDB(t)
+	secretStore := store.NewSecretStore(db)
+	instanceStore := store.NewInstanceStore(db)
+	settingsStore := store.NewSettingsStore(db)
+	secretSvc := service.NewSecretService(secretStore, instanceStore, settingsStore, store.NewTrafficStore(db))
+	handler := NewSecretHandler(secretSvc, settingsStore)
+
+	// Create test container service
+	upstreams := store.NewUpstreamStore(db)
+	traffic := store.NewTrafficStore(db)
+	containerSvc := service.NewContainerService(t.TempDir(), nil, secretStore, upstreams, instanceStore, traffic, settingsStore, nil)
+
+	handler.SetContainerSvc(containerSvc)
+
+	r := gin.New()
+	r.POST("/api/v1/secrets", handler.Add)
+
+	body, _ := json.Marshal(map[string]string{
+		"label":  "test-secret",
+		"secret": "00000000000000000000000000000001",
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/secrets", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
+	}
+}

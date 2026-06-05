@@ -202,13 +202,13 @@ const toast = useToastStore()
 const upstreamActions = useActionMenu()
 
 const columns = [
-  { key: 'name', header: t('upstreams.table.name') },
-  { key: 'type', header: t('upstreams.table.type') },
-  { key: 'address', header: t('upstreams.table.address') },
-  { key: 'weight', header: t('upstreams.table.weight') },
-  { key: 'interface', header: t('upstreams.table.interface') },
-  { key: 'health', header: t('upstreams.table.health') },
-  { key: 'status', header: t('upstreams.table.status') },
+  { key: 'name', header: t('upstreams.table.name'), sortable: true },
+  { key: 'type', header: t('upstreams.table.type'), sortable: true },
+  { key: 'address', header: t('upstreams.table.address'), sortable: true },
+  { key: 'weight', header: t('upstreams.table.weight'), sortable: true },
+  { key: 'interface', header: t('upstreams.table.interface'), sortable: true, sortKey: 'iface' },
+  { key: 'health', header: t('upstreams.table.health'), sortable: true, sortKey: 'last_check_ok' },
+  { key: 'status', header: t('upstreams.table.status'), sortable: true, sortKey: 'enabled' },
 ]
 
 // Confirm dialog

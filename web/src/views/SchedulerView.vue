@@ -207,10 +207,10 @@ const schedulerActions = useActionMenu()
 const { confirmState, confirm, handleConfirm, handleCancel } = useConfirmDialog()
 
 const columns = [
-  { key: 'name', header: t('scheduler.table.name') },
-  { key: 'schedule', header: t('scheduler.table.schedule') },
-  { key: 'enabled', header: t('scheduler.table.enabled'), width: '100px' },
-  { key: 'last_run', header: t('scheduler.table.last_run') },
+  { key: 'name', header: t('scheduler.table.name'), sortable: true },
+  { key: 'schedule', header: t('scheduler.table.schedule'), sortable: true, sortKey: 'effective_schedule' },
+  { key: 'enabled', header: t('scheduler.table.enabled'), width: '100px', sortable: true },
+  { key: 'last_run', header: t('scheduler.table.last_run'), sortable: true, sortKey: 'last_run.started_at' },
 ]
 
 const submitting = ref(false)

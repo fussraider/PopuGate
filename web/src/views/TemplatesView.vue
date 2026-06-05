@@ -137,12 +137,12 @@ const toast = useToastStore()
 const templateActions = useActionMenu()
 
 const columns = computed(() => [
-  { key: 'name', header: t('templates.table.name') },
-  { key: 'max_conns', header: t('templates.table.max_conns') },
-  { key: 'max_ips', header: t('templates.table.max_ips') },
-  { key: 'quota_bytes', header: t('templates.table.quota') },
-  { key: 'expires_days', header: t('templates.table.expires') },
-  { key: 'tags', header: t('templates.table.tags') },
+  { key: 'name', header: t('templates.table.name'), sortable: true },
+  { key: 'max_conns', header: t('templates.table.max_conns'), sortable: true },
+  { key: 'max_ips', header: t('templates.table.max_ips'), sortable: true },
+  { key: 'quota_bytes', header: t('templates.table.quota'), sortable: true },
+  { key: 'expires_days', header: t('templates.table.expires'), sortable: true },
+  { key: 'tags', header: t('templates.table.tags'), sortable: true },
 ])
 
 // Add

@@ -415,12 +415,12 @@ function statusLabel(item: Instance): string {
 }
 
 const columns = [
-  { key: 'port', header: t('instances.table.port') },
-  { key: 'label', header: t('instances.table.label') },
-  { key: 'tls_domain', header: t('instances.tls_domain') },
-  { key: 'fake_tls', header: t('instances.tls_mode') },
-  { key: 'tags', header: t('instances.tags') },
-  { key: 'status', header: t('instances.table.status') },
+  { key: 'port', header: t('instances.table.port'), sortable: true },
+  { key: 'label', header: t('instances.table.label'), sortable: true },
+  { key: 'tls_domain', header: t('instances.tls_domain'), sortable: true },
+  { key: 'fake_tls', header: t('instances.tls_mode'), sortable: true },
+  { key: 'tags', header: t('instances.tags'), sortable: true },
+  { key: 'status', header: t('instances.table.status'), sortable: true, sortKey: 'enabled' },
 ]
 
 const runningInstanceIds = computed(() => {

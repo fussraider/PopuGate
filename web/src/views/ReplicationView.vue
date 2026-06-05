@@ -164,11 +164,11 @@ const toast = useToastStore()
 const slaveActions = useActionMenu()
 
 const slaveColumns = [
-  { key: 'host', header: t('replication.table.host') },
-  { key: 'port', header: t('replication.table.port') },
-  { key: 'label', header: t('replication.table.label') },
-  { key: 'last_sync', header: t('replication.table.last_sync') },
-  { key: 'status', header: t('replication.table.status') },
+  { key: 'host', header: t('replication.table.host'), sortable: true },
+  { key: 'port', header: t('replication.table.port'), sortable: true },
+  { key: 'label', header: t('replication.table.label'), sortable: true },
+  { key: 'last_sync', header: t('replication.table.last_sync'), sortable: true },
+  { key: 'status', header: t('replication.table.status'), sortable: true },
 ]
 
 const roleForm = ref({ role: 'standalone', interval: 60 })

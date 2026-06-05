@@ -140,10 +140,10 @@ const { t } = useI18n()
 const auditStore = useAuditStore()
 
 const columns = computed(() => [
-  { key: 'timestamp', header: t('audit.table.time') },
-  { key: 'action', header: t('audit.table.action') },
-  { key: 'user', header: t('audit.table.actor') },
-  { key: 'detail', header: t('audit.table.details') },
+  { key: 'timestamp', header: t('audit.table.time'), sortable: true },
+  { key: 'action', header: t('audit.table.action'), sortable: true },
+  { key: 'user', header: t('audit.table.actor'), sortable: true },
+  { key: 'detail', header: t('audit.table.details'), sortable: true },
 ])
 
 const usersDropdownOpen = ref(false)

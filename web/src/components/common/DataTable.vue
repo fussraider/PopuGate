@@ -14,23 +14,37 @@
                        @change="toggleAll" />
               </th>
               <th v-if="$slots['mobile-actions']" class="mobile-actions-col" />
-              <th v-for="col in columns" :key="col.key">
-                <slot :name="`header-${col.key}`" :column="col">
-                  {{ col.header }}
-                </slot>
+              <th v-for="col in columns" :key="col.key"
+                  :style="{ width: col.width }"
+                  :class="[
+                    col.align ? `text-${col.align}` : '',
+                    { 'sortable-header': col.sortable, 'sort-active': sortBy === col.key }
+                  ]"
+                  @click="toggleSort(col)">
+                <div class="header-content" :class="[col.align ? `justify-${col.align}` : '']">
+                  <slot :name="`header-${col.key}`" :column="col">
+                    {{ col.header }}
+                  </slot>
+                  <span v-if="col.sortable" class="sort-indicator">
+                    <ArrowUp v-if="sortBy === col.key && !sortDesc" class="sort-icon active-icon" />
+                    <ArrowDown v-else-if="sortBy === col.key && sortDesc" class="sort-icon active-icon" />
+                    <ArrowUpDown v-else class="sort-icon inactive-icon" />
+                  </span>
+                </div>
               </th>
               <th v-if="$slots.actions" class="actions-col-header" />
             </tr>
           </thead>
           <TransitionGroup name="row" tag="tbody">
-            <tr v-for="item in items" :key="rowKeyFn(item)">
+            <tr v-for="item in sortedItems" :key="rowKeyFn(item)">
               <td v-if="selectable" class="checkbox-col">
                 <input type="checkbox" :checked="isSelected(item)" @change="toggleItem(item)" />
               </td>
               <td v-if="$slots['mobile-actions']" class="mobile-actions-cell">
                 <slot name="mobile-actions" :item="item" />
               </td>
-              <td v-for="col in columns" :key="col.key">
+              <td v-for="col in columns" :key="col.key"
+                  :class="[col.align ? `text-${col.align}` : '']">
                 <slot :name="`cell-${col.key}`" :item="item" :value="item[col.key]">
                   {{ item[col.key] }}
                 </slot>
@@ -48,6 +62,7 @@
 
 <script setup lang="ts">
 import {type Component, computed, type FunctionalComponent, ref, watch} from 'vue'
+import { ArrowUp, ArrowDown, ArrowUpDown } from '@lucide/vue'
 import SkeletonLoader from './SkeletonLoader.vue'
 import EmptyState from './EmptyState.vue'
 
@@ -55,6 +70,7 @@ export interface Column {
   key: string
   header: string
   sortable?: boolean
+  sortKey?: string
   width?: string
   align?: 'left' | 'center' | 'right'
 }
@@ -79,6 +95,65 @@ const emit = defineEmits<{
 }>()
 
 const initialized = ref(!!props.items?.length)
+
+const sortBy = ref<string | null>(null)
+const sortDesc = ref(false)
+
+function toggleSort(col: Column) {
+  if (!col.sortable) return
+  
+  if (sortBy.value === col.key) {
+    if (sortDesc.value) {
+      sortBy.value = null
+      sortDesc.value = false
+    } else {
+      sortDesc.value = true
+    }
+  } else {
+    sortBy.value = col.key
+    sortDesc.value = false
+  }
+}
+
+function getNestedValue(obj: any, path: string): any {
+  if (!path) return undefined
+  return path.split('.').reduce((acc, part) => acc && acc[part], obj)
+}
+
+const sortedItems = computed(() => {
+  if (!sortBy.value) return props.items
+  
+  const col = props.columns.find(c => c.key === sortBy.value)
+  const key = col?.sortKey || sortBy.value
+  const isDesc = sortDesc.value
+  
+  return [...props.items].sort((a, b) => {
+    const valA = getNestedValue(a, key)
+    const valB = getNestedValue(b, key)
+    
+    if (valA === valB) return 0
+    if (valA === undefined || valA === null) return 1
+    if (valB === undefined || valB === null) return -1
+    
+    // Number comparison
+    if (typeof valA === 'number' && typeof valB === 'number') {
+      return isDesc ? valB - valA : valA - valB
+    }
+    
+    // Boolean comparison
+    if (typeof valA === 'boolean' && typeof valB === 'boolean') {
+      return isDesc ? (valA === valB ? 0 : valA ? -1 : 1) : (valA === valB ? 0 : valA ? 1 : -1)
+    }
+    
+    // String comparison
+    const strA = String(valA).toLowerCase()
+    const strB = String(valB).toLowerCase()
+    
+    if (strA < strB) return isDesc ? 1 : -1
+    if (strA > strB) return isDesc ? -1 : 1
+    return 0
+  })
+})
 
 watch(() => props.loading, (val) => {
   if (val) initialized.value = true
@@ -183,4 +258,54 @@ function toggleItem(item: any) {
     display: none;
   }
 }
+
+.sortable-header {
+  cursor: pointer;
+  user-select: none;
+  transition: color 0.15s ease;
+
+  &:hover {
+    color: var(--color-primary, #3b82f6) !important;
+    
+    .sort-icon.inactive-icon {
+      opacity: 0.5;
+    }
+  }
+}
+
+.header-content {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  vertical-align: middle;
+}
+
+.sort-indicator {
+  display: inline-flex;
+  align-items: center;
+}
+
+.sort-icon {
+  width: 14px;
+  height: 14px;
+  stroke-width: 2.5px;
+  transition: opacity 0.15s ease, color 0.15s ease;
+  
+  &.active-icon {
+    color: var(--color-primary, #3b82f6);
+    opacity: 1;
+  }
+  
+  &.inactive-icon {
+    opacity: 0.25;
+  }
+}
+
+.text-left { text-align: left; }
+.text-center { text-align: center; }
+.text-right { text-align: right; }
+
+.justify-left { justify-content: flex-start; }
+.justify-center { justify-content: center; }
+.justify-right { justify-content: flex-end; }
 </style>

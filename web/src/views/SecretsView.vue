@@ -455,13 +455,13 @@ const toast = useToastStore()
 const secretActions = useActionMenu()
 
 const columns = computed(() => [
-  { key: 'label', header: t('secrets.table.label') },
-  { key: 'tags', header: t('secrets.table.tags') },
-  { key: 'status', header: t('secrets.table.status') },
-  { key: 'traffic', header: t('secrets.table.traffic') },
-  { key: 'quota', header: t('secrets.table.quota') },
-  { key: 'expires', header: t('secrets.table.expires') },
-  { key: 'limits', header: t('secrets.table.limits') },
+  { key: 'label', header: t('secrets.table.label'), sortable: true },
+  { key: 'tags', header: t('secrets.table.tags'), sortable: true },
+  { key: 'status', header: t('secrets.table.status'), sortable: true, sortKey: 'enabled' },
+  { key: 'traffic', header: t('secrets.table.traffic'), sortable: true, sortKey: 'traffic_in' },
+  { key: 'quota', header: t('secrets.table.quota'), sortable: true, sortKey: 'quota_bytes' },
+  { key: 'expires', header: t('secrets.table.expires'), sortable: true, sortKey: 'expires_at' },
+  { key: 'limits', header: t('secrets.table.limits'), sortable: true, sortKey: 'max_conns' },
 ])
 
 // Selection

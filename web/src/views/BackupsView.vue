@@ -93,9 +93,9 @@ const toast = useToastStore()
 const backupActions = useActionMenu()
 
 const columns = computed(() => [
-  { key: 'filename', header: t('backups.table.filename') },
-  { key: 'size', header: t('backups.table.size') },
-  { key: 'created', header: t('backups.table.created') },
+  { key: 'filename', header: t('backups.table.filename'), sortable: true },
+  { key: 'size', header: t('backups.table.size'), sortable: true },
+  { key: 'created', header: t('backups.table.created'), sortable: true, sortKey: 'created_at' },
 ])
 
 const { confirmState, confirm, handleConfirm, handleCancel } = useConfirmDialog()

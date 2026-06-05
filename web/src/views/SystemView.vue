@@ -300,6 +300,10 @@
             
             <h4 class="mb-md text-muted uppercase text-xs tracking-wider font-semibold">{{ t('docker.host_updates_title') }}</h4>
 
+            <div v-if="dockerStore.hostUpdateStatus && !dockerStore.hostUpdateStatus.supported" class="alert alert-warning mb-md text-sm">
+              {{ t('docker.host_updates_not_supported', 'Обновление Docker Engine недоступно при запуске PopuGate в контейнере. Пожалуйста, обновите Docker на хосте вручную.') }}
+            </div>
+
             <div v-if="dockerStore.hostUpdateStatus && !dockerStore.hostUpdateStatus.updating" class="mb-md">
               <div v-if="dockerStore.hostUpdateStatus.live_restore_enabled" class="alert alert-success py-sm text-sm">
                 {{ t('docker.live_restore_enabled') }}
@@ -316,16 +320,16 @@
 
             <div v-if="dockerStore.hostUpdateStatus && !dockerStore.hostUpdateStatus.updating" class="status-row mb-md">
               <span>{{ t('docker.current') }}: <code>{{ dockerStore.hostUpdateStatus.current_version || '—' }}</code></span>
-              <span v-if="dockerStore.hostUpdateStatus.latest_version">
+              <span v-if="dockerStore.hostUpdateStatus.supported && dockerStore.hostUpdateStatus.latest_version">
                 {{ t('docker.latest') }}: <code>{{ dockerStore.hostUpdateStatus.latest_version }}</code>
               </span>
-              <StatusBadge v-if="dockerStore.hostUpdateStatus.latest_version"
+              <StatusBadge v-if="dockerStore.hostUpdateStatus.supported && dockerStore.hostUpdateStatus.latest_version"
                            :variant="dockerStore.hostUpdateStatus.update_available ? 'warning' : 'success'">
                 {{ dockerStore.hostUpdateStatus.update_available ? t('docker.update_available') : t('docker.up_to_date') }}
               </StatusBadge>
             </div>
 
-            <div v-if="dockerStore.hostUpdateStatus?.update_available && dockerStore.hostUpdateStatus?.changelog_url" class="update-links mb-md">
+            <div v-if="dockerStore.hostUpdateStatus?.supported && dockerStore.hostUpdateStatus?.update_available && dockerStore.hostUpdateStatus?.changelog_url" class="update-links mb-md">
               <a :href="dockerStore.hostUpdateStatus.changelog_url" target="_blank" rel="noopener" class="update-link">
                 <ExternalLink :size="14" /> {{ t('updates.release_notes') }}
               </a>
@@ -335,7 +339,7 @@
           </template>
         </div>
 
-        <div v-if="dockerStore.dockerStatus?.installed" class="mt-lg pt-md">
+        <div v-if="dockerStore.dockerStatus?.installed && dockerStore.hostUpdateStatus?.supported !== false" class="mt-lg pt-md">
           <div class="flex gap-sm">
             <button class="btn btn-secondary btn-sm" :disabled="dockerStore.checkingHostRemote || dockerStore.hostUpdateStatus?.updating" @click="dockerStore.checkHostRemote()">
               <Loader2 v-if="dockerStore.checkingHostRemote" :size="16" class="animate-spin" />

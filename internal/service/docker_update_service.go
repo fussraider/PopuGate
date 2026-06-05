@@ -28,6 +28,7 @@ type DockerUpdateStatus struct {
 	ChangelogURL       string `json:"changelog_url,omitempty"`
 	LastChecked        string `json:"last_checked,omitempty"`
 	Updating           bool   `json:"updating"`
+	Supported          bool   `json:"supported"`
 }
 
 // DockerUpdateService handles host Docker daemon updates and active state restoration.
@@ -96,12 +97,13 @@ func (s *DockerUpdateService) GetStatus(ctx context.Context) (*DockerUpdateStatu
 		LiveRestoreEnabled: liveRestore,
 		LastChecked:        lastChecked,
 		Updating:           updatingFlag == "true",
+		Supported:          !IsDockerEnvironment(),
 	}
 
 	if latestVersion != "" {
 		status.LatestVersion = latestVersion
 		status.ChangelogURL = changelogURL
-		status.UpdateAvailable = isVersionNewer(currentVersion, latestVersion)
+		status.UpdateAvailable = isVersionNewer(currentVersion, latestVersion) && status.Supported
 	}
 
 	return status, nil
@@ -313,6 +315,9 @@ func (s *DockerUpdateService) Apply(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("get update status: %w", err)
 	}
+	if !status.Supported {
+		return fmt.Errorf("docker engine updates are not supported when running inside a container")
+	}
 	if status.Updating {
 		return fmt.Errorf("docker update is already in progress")
 	}
@@ -465,7 +470,7 @@ func (s *DockerUpdateService) completeUpdateWithError(ctx context.Context, errSt
 	_ = s.RestoreFromSnapshot(ctx)
 
 	if notify != nil {
-		notify(context.Background(), "❌ *%s* Host Docker Engine update failed: %s", targetVer, errStr)
+		notify(context.Background(), "❌ *%s* Host Docker Engine update to version %s failed: %s", targetVer, errStr)
 	}
 }
 
@@ -530,7 +535,7 @@ func (s *DockerUpdateService) HandleStartupRecovery(ctx context.Context) {
 		} else {
 			log.Infof("startup restoration completed successfully; all proxy containers are active")
 			if notify != nil {
-				notify(context.Background(), "🟢 *%s* Server successfully restarted after Docker update and restored all active proxies!", "Host Recovery")
+				notify(context.Background(), "🟢 *%s* [%s] Server successfully restarted after Docker update and restored all active proxies!", "Host Recovery")
 			}
 		}
 	}()

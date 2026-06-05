@@ -395,5 +395,6 @@ export interface DockerUpdateStatus {
   changelog_url?: string
   last_checked?: string
   updating: boolean
+  supported: boolean
 }
 

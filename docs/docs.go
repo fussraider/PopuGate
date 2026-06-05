@@ -6956,6 +6956,9 @@ const docTemplate = `{
                 "live_restore_enabled": {
                     "type": "boolean"
                 },
+                "supported": {
+                    "type": "boolean"
+                },
                 "update_available": {
                     "type": "boolean"
                 },

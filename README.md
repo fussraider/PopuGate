@@ -193,6 +193,7 @@ Independent proxies with their own port, masking domains, FakeTLS, and access ta
 
 ### 🔀 Upstreams
 Proxy chains (SOCKS4/SOCKS5) with weight-based balancing, network interface binding, and automatic health-based failover/recovery (auto-disablement).
+- **Bulk Add**: Verify and import multiple proxies concurrently in a multi-step wizard, featuring auto-protocol detection, live exit IP detection, latency threshold filtering, and transactional batch insertion.
 
 ### 🌍 Geoblock
 Country-based access restrictions (blacklist/whitelist) via `iptables`.

@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Upstream Bulk Actions**: Added bulk operations (Enable, Disable, Health Check, Delete) to the upstreams list table in the Web UI, with real-time reactive spinner states.
+- **Immediate Container Hot-Reloads on Configuration Changes**:
+  - Upstream modifications (adding, updating, removing, and toggling) now trigger immediate hot-reload (`SIGHUP`) of active proxy containers.
+  - Secret modifications (creation, rotation, limits updates, renaming, expiration extensions, archiving/unarchiving, bulk settings, and imports) now trigger immediate hot-reload of active proxy containers.
+  - Global configuration updates (like changing masking hosts, ports, domains, concurrency, etc.) now trigger immediate hot-reload of active proxy containers.
+  - Background health check failover and auto-recovery events for upstreams now trigger immediate hot-reload of active proxy containers.
+- **Comprehensive Info-Level Logging**:
+  - Added detailed, contextual Info-level logging for all key system actions (managing secrets, upstreams, geoblocking rules, and global configurations).
+  - Proxy container reload operations now log the explicit trigger reason (e.g., `"secret <name> created"`, `"upstream <name> auto-disabled"`, etc.) alongside status messages when config is regenerated and SIGHUP signals are sent.
+
+### Optimized
+- **Database Read Caching during Reload**: Refactored the `Reload` routine in `ContainerService` to query the SQLite database for upstreams and secrets exactly once and reuse them across all active proxy instances, eliminating redundant SQLite reads.
+
+### Fixed
+- **Silent Docker Connection Errors**: Resolved silent error dropping when checking proxy container status inside `ContainerService.Reload`. Checked container states are now logged as warnings on failure.
+
 ## [0.4.0] - 2026-06-05
 
 ### Added
@@ -346,6 +365,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - SQLite storage with WAL mode
 - JWT authentication
 
+[Unreleased]: https://github.com/fussraider/PopuGate/compare/v0.4.0...HEAD
 [0.4.0]: https://github.com/fussraider/PopuGate/compare/v0.3.2...v0.4.0
 [0.3.2]: https://github.com/fussraider/PopuGate/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/fussraider/PopuGate/compare/v0.3.0...v0.3.1

@@ -122,9 +122,9 @@ func write(l Level, scope string, format string, args ...any) {
 		emoji := levelEmoji(l)
 		clr := colorize(l)
 		if scope != "" {
-			_, _ = fmt.Fprintf(out, "%s %s%s [%s] %s\n", emoji, clr, ts, scope, msg)
+			_, _ = fmt.Fprintf(out, "%s %s %s [%s] %s\n", emoji, clr, ts, scope, msg)
 		} else {
-			_, _ = fmt.Fprintf(out, "%s %s%s %s\n", emoji, clr, ts, msg)
+			_, _ = fmt.Fprintf(out, "%s %s %s %s\n", emoji, clr, ts, msg)
 		}
 	}
 	mu.Unlock()

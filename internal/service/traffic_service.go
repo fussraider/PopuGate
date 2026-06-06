@@ -213,11 +213,19 @@ func (s *TrafficService) Flush(ctx context.Context) error {
 		histUsers: make(map[string][2]int64),
 	}
 
+	var runningContainers map[string]bool
+	if s.docker != nil {
+		runningContainers, _ = s.docker.ListRunningContainerNames(ctx)
+	}
+	if runningContainers == nil {
+		runningContainers = make(map[string]bool)
+	}
+
 	for _, inst := range instances {
 		if !inst.Enabled {
 			continue
 		}
-		s.flushInstance(ctx, inst, &acc)
+		s.flushInstance(ctx, inst, &acc, runningContainers)
 	}
 
 	acc.flushGlobal(ctx, *globalSnap, s.traffic)
@@ -268,8 +276,9 @@ func nonNegativeDelta(current, previous int64) int64 {
 	return d
 }
 
-func (s *TrafficService) flushInstance(ctx context.Context, inst model.Instance, acc *flushAccumulator) {
-	url := fmt.Sprintf("http://%s:%d/metrics", s.dockerAddr, inst.MetricsPort)
+func (s *TrafficService) flushInstance(ctx context.Context, inst model.Instance, acc *flushAccumulator, runningContainers map[string]bool) {
+	metricsPort := s.resolveSwingMetricsPort(inst.Port, inst.MetricsPort, runningContainers)
+	url := fmt.Sprintf("http://%s:%d/metrics", s.dockerAddr, metricsPort)
 	resp, err := s.client.Get(url)
 	if err != nil {
 		return

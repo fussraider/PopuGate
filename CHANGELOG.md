@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **Silent Docker Connection Errors**: Resolved silent error dropping when checking proxy container status inside `ContainerService.Reload`. Checked container states are now logged as warnings on failure.
+- **Traffic Not Collected During Zero-Downtime Restart**: Fixed a bug where `flushInstance` always used the static `MetricsPort` from the database instead of resolving the currently active swing container's metrics port. During a zero-downtime swing restart the active container runs on an alternative port (`primaryPort + 10000 + N`) with its metrics endpoint on `swingPort + 100`; the flush routine was hitting a dead endpoint, collecting nothing, and writing zero traffic to the database — causing an empty graph for the entire duration of the swing. The fix mirrors the existing `fetchLiveMetrics` logic: `Flush` now queries Docker for running containers and passes them to `flushInstance`, which calls `resolveSwingMetricsPort` before building the metrics URL.
 
 ## [0.4.0] - 2026-06-05
 

@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { trafficApi } from '@/api/endpoints'
-import { useWebSocket } from '@/composables/useWebSocket'
+import { useSharedWebSocket } from '@/composables/useWebSocket'
 import type { GlobalTraffic, UserTraffic, LiveMetrics, TrafficHistoryRecord } from '@/types/models'
 
 export const useTrafficStore = defineStore('traffic', () => {
@@ -14,10 +14,8 @@ export const useTrafficStore = defineStore('traffic', () => {
   const autoRefresh = ref(true)
   const history = ref<TrafficHistoryRecord[]>([])
   const historyLoading = ref(false)
-  const wsConnected = ref(false)
 
   let liveInterval: ReturnType<typeof setInterval> | null = null
-  let wsControls: ReturnType<typeof useWebSocket> | null = null
 
   async function load(quiet = false) {
     if (!quiet) loading.value = true
@@ -54,44 +52,30 @@ export const useTrafficStore = defineStore('traffic', () => {
     }
   }
 
-  function startWS() {
-    stopWS()
-    const wsUrl = '/api/v1/traffic/live/ws'
-
-    const currentControls = useWebSocket({
-      url: wsUrl,
-      onMessage: (data) => {
-        if (wsControls !== currentControls) return
-        live.value = data
-        liveError.value = false
-      },
-      onError: () => {
-        if (wsControls !== currentControls) return
-        liveError.value = true
-      },
-    })
-    wsControls = currentControls
-    wsControls.connect()
-    wsConnected.value = true
-  }
-
-  function stopWS() {
-    wsControls?.disconnect()
-    wsControls = null
-    wsConnected.value = false
-  }
+  const ws = useSharedWebSocket({
+    url: '/api/v1/traffic/live/ws',
+    onMessage: (data) => {
+      live.value = data
+      liveError.value = false
+    },
+    onError: () => {
+      liveError.value = true
+    }
+  })
 
   function startAutoRefresh() {
-    stopAutoRefresh()
+    if (ws.subscribers.value > 0 || liveInterval) return
     try {
-      startWS()
+      ws.start()
     } catch {
-      liveInterval = setInterval(() => loadLive(), 5000)
+      if (!liveInterval) {
+        liveInterval = setInterval(() => loadLive(), 5000)
+      }
     }
   }
 
   function stopAutoRefresh() {
-    stopWS()
+    ws.stop()
     if (liveInterval) {
       clearInterval(liveInterval)
       liveInterval = null
@@ -113,5 +97,5 @@ export const useTrafficStore = defineStore('traffic', () => {
     liveError.value = false
   }
 
-  return { global, users, live, loading, liveLoading, liveError, autoRefresh, history, historyLoading, wsConnected, load, loadLive, loadHistory, startAutoRefresh, stopAutoRefresh, toggleAutoRefresh, reset }
+  return { global, users, live, loading, liveLoading, liveError, autoRefresh, history, historyLoading, wsConnected: ws.connected, load, loadLive, loadHistory, startAutoRefresh, stopAutoRefresh, toggleAutoRefresh, reset }
 })

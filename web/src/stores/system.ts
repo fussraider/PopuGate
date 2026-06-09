@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { systemApi } from '@/api/endpoints'
-import { useWebSocket } from '@/composables/useWebSocket'
+import { useSharedWebSocket } from '@/composables/useWebSocket'
 import type { OSType, ServiceStatus, SystemResources } from '@/types/models'
 
 export const useSystemStore = defineStore('system', () => {
@@ -9,8 +9,6 @@ export const useSystemStore = defineStore('system', () => {
   const service = ref<ServiceStatus | null>(null)
   const resources = ref<SystemResources | null>(null)
   const loading = ref(false)
-  
-  let wsControls: ReturnType<typeof useWebSocket> | null = null
 
   async function loadOS() {
     try {
@@ -70,31 +68,17 @@ export const useSystemStore = defineStore('system', () => {
     } catch { /* ignore */ }
   }
 
-  function startResourceStream() {
-    if (wsControls) return
-
-    const wsUrl = '/api/v1/system/resources/ws'
-    
-    const currentControls = useWebSocket({
-      url: wsUrl,
-      onMessage: (data) => {
-        if (wsControls !== currentControls) return
-        resources.value = data
-      }
-    })
-    wsControls = currentControls
-    wsControls.connect()
-  }
-
-  function stopResourceStream() {
-    wsControls?.disconnect()
-    wsControls = null
-  }
+  const ws = useSharedWebSocket({
+    url: '/api/v1/system/resources/ws',
+    onMessage: (data) => {
+      resources.value = data
+    }
+  })
 
   return { 
     os, service, resources, loading, 
     loadOS, loadServiceStatus, installService, uninstallService, 
     restartService, reloadService, loadResources,
-    startResourceStream, stopResourceStream
+    startResourceStream: ws.start, stopResourceStream: ws.stop
   }
 })

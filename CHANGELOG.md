@@ -24,6 +24,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - **Silent Docker Connection Errors**: Resolved silent error dropping when checking proxy container status inside `ContainerService.Reload`. Checked container states are now logged as warnings on failure.
 - **Traffic Not Collected During Zero-Downtime Restart**: Fixed a bug where `flushInstance` always used the static `MetricsPort` from the database instead of resolving the currently active swing container's metrics port. During a zero-downtime swing restart the active container runs on an alternative port (`primaryPort + 10000 + N`) with its metrics endpoint on `swingPort + 100`; the flush routine was hitting a dead endpoint, collecting nothing, and writing zero traffic to the database — causing an empty graph for the entire duration of the swing. The fix mirrors the existing `fetchLiveMetrics` logic: `Flush` now queries Docker for running containers and passes them to `flushInstance`, which calls `resolveSwingMetricsPort` before building the metrics URL.
+- **WebSocket Graceful Disconnect on Page Unload**: Added a `beforeunload` window event listener to `useWebSocket` to gracefully close active connections before page destruction, resolving console warnings about interrupted connections (`ws://... was interrupted during page load`) in Firefox/Chrome.
+- **WebSocket Double-Connection Race Conditions**: Implemented `useSharedWebSocket` with subscriber ref-counting and integrated it across all Pinia stores (`proxy`, `system`, `traffic`, `docker`), resolving duplicate connection attempts, page navigation conflicts, and console error spam.
+- **Missing Scheduler Task Localization**: Added English (`en.json`) and Russian (`ru.json`) translations for the `fronting-update` (domain fronting content update) task, resolving `[intlify] Not found` console warnings.
 
 ## [0.4.0] - 2026-06-05
 

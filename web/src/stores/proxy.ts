@@ -1,8 +1,8 @@
 import { defineStore } from 'pinia'
-import { ref, computed, watch } from 'vue'
+import { ref } from 'vue'
 import { proxyApi, healthApi } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
-import { useWebSocket } from '@/composables/useWebSocket'
+import { useSharedWebSocket } from '@/composables/useWebSocket'
 import type { ProxyStatus, HealthStatus } from '@/types/models'
 
 export type ProxyAction = 'start' | 'stop' | 'restart' | 'reload' | 'reloadZeroDowntime'
@@ -15,10 +15,7 @@ export const useProxyStore = defineStore('proxy', () => {
   const logs = ref('')
   const isFollowing = ref(false)
   const maxLogs = ref(200)
-  const wsStatus = ref<'connected' | 'connecting' | 'disconnected'>('disconnected')
-  const wsConnected = computed(() => wsStatus.value === 'connected')
   let eventSource: EventSource | null = null
-  let wsControls: ReturnType<typeof useWebSocket> | null = null
 
   async function loadStatus() {
     try {
@@ -137,44 +134,21 @@ export const useProxyStore = defineStore('proxy', () => {
     }
   }
 
-  let wsWatcher: ReturnType<typeof watch> | null = null
-
-  function startStatusStream() {
-    if (wsControls) return
-    const wsUrl = '/api/v1/proxy/status/ws'
-    const currentControls = useWebSocket({
-      url: wsUrl,
-      onMessage: (data) => {
-        if (wsControls !== currentControls) return
-        status.value = data
-      },
-      onError: () => {
-        if (wsControls !== currentControls) return
-        wsStatus.value = 'connecting'
-      }
-    })
-    wsControls = currentControls
-    wsControls.connect()
-
-    wsWatcher = watch(currentControls.connected, (val) => {
-      if (wsControls !== currentControls) return
-      wsStatus.value = val ? 'connected' : 'connecting'
-    }, { immediate: true })
-  }
-
-  function stopStatusStream() {
-    if (wsWatcher) {
-      wsWatcher()
-      wsWatcher = null
+  const ws = useSharedWebSocket({
+    url: '/api/v1/proxy/status/ws',
+    onMessage: (data) => {
+      status.value = data
     }
-    wsControls?.disconnect()
-    wsControls = null
-    wsStatus.value = 'disconnected'
-  }
+  })
 
   async function refreshState() {
     await Promise.all([loadStatus(), loadHealth()])
   }
 
-  return { status, health, loading, activeAction, logs, isFollowing, maxLogs, wsConnected, wsStatus, loadStatus, loadHealth, loadLogs, start, stop, restart, reload, reloadZeroDowntime, refreshState, startLogsFollow, stopLogsFollow, startStatusStream, stopStatusStream }
+  return { 
+    status, health, loading, activeAction, logs, isFollowing, maxLogs, 
+    wsConnected: ws.connected, wsStatus: ws.status, 
+    loadStatus, loadHealth, loadLogs, start, stop, restart, reload, reloadZeroDowntime, refreshState, 
+    startLogsFollow, stopLogsFollow, startStatusStream: ws.start, stopStatusStream: ws.stop 
+  }
 })

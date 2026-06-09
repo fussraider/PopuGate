@@ -1007,6 +1007,10 @@
       "upstream-health": {
         "name": "Upstream Health Check",
         "description": "Checks connectivity and latency of configured upstream proxy servers."
+      },
+      "fronting-update": {
+        "name": "Fronting Content Update",
+        "description": "Refreshes all domain fronting configuration and content dynamically."
       }
     }
   }

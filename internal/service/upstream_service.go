@@ -213,7 +213,7 @@ func (s *UpstreamService) runInitialHealthCheck(name string, u *model.Upstream) 
 	if res != nil {
 		latency = res.LatencyMs
 	}
-	
+
 	log.Infof("initial health check completed for %s: ok=%v, latency=%dms, err=%s", name, ok, latency, errMsg)
 
 	if err := s.upstreams.UpdateHealth(bgCtx, name, ok, latency, errMsg); err != nil {
@@ -458,6 +458,8 @@ func ParseProxyLine(line string) (*model.Upstream, error) {
 	}
 
 	// 2. Check for @ format: credentials@host:port
+	// IPv6 hosts must be bracketed (e.g. user:pass@[::1]:1080); net.SplitHostPort
+	// handles the bracketed address below.
 	if idx := strings.LastIndex(line, "@"); idx != -1 {
 		creds := line[:idx]
 		addr := line[idx+1:]
@@ -471,8 +473,30 @@ func ParseProxyLine(line string) (*model.Upstream, error) {
 		} else {
 			u.Username = creds
 		}
+	} else if strings.HasPrefix(line, "[") {
+		// 3a. Bracketed IPv6 with optional suffix credentials:
+		//     [::1]:1080  or  [::1]:1080:user:pass
+		end := strings.Index(line, "]")
+		if end == -1 {
+			return nil, fmt.Errorf("invalid IPv6 proxy format (missing ']'): %s", line)
+		}
+		host := line[:end+1] // includes brackets
+		rest := strings.TrimPrefix(line[end+1:], ":")
+		parts := strings.SplitN(rest, ":", 3) // port, user, pass (pass may contain colons)
+		if parts[0] == "" {
+			return nil, fmt.Errorf("invalid IPv6 proxy format (missing port): %s", line)
+		}
+		u.Address = fmt.Sprintf("%s:%s", host, parts[0])
+		if len(parts) >= 2 {
+			u.Username = parts[1]
+		}
+		if len(parts) >= 3 {
+			u.Password = parts[2]
+		}
 	} else {
-		// 3. Check for suffix credentials or host:port: host:port:user:pass or host:port
+		// 3b. Suffix credentials or host:port: host:port:user:pass or host:port.
+		// This colon-splitting form only supports IPv4/hostnames; IPv6 must use
+		// the bracketed form above.
 		parts := strings.Split(line, ":")
 		if len(parts) >= 4 {
 			// host:port:user:pass
@@ -503,11 +527,19 @@ func ParseProxyLine(line string) (*model.Upstream, error) {
 }
 
 // GenerateBulkUpstreamName generates a unique, valid upstream name for a bulk proxy.
+//
+// The name embeds an 8-hex identity hash derived from the full upstream identity
+// (type, address, credentials, interface). This ensures two proxies sharing the
+// same host:port but differing in credentials produce distinct names instead of
+// silently colliding under the store's INSERT OR IGNORE de-duplication, while
+// genuinely identical upstreams still map to the same name (intentional dedup).
+// The resulting name is always at most 32 characters.
 func GenerateBulkUpstreamName(u *model.Upstream) string {
 	prefix := "s5"
-	if u.Type == model.UpstreamSOCKS4 {
+	switch u.Type {
+	case model.UpstreamSOCKS4:
 		prefix = "s4"
-	} else if u.Type == model.UpstreamDirect {
+	case model.UpstreamDirect:
 		prefix = "dir"
 	}
 
@@ -517,71 +549,66 @@ func GenerateBulkUpstreamName(u *model.Upstream) string {
 		port = "0"
 	}
 
-	// Clean host: replace non-alphanumeric chars with dashes
-	cleanedHost := ""
+	// Identity hash over the full upstream identity (NUL-separated to avoid
+	// ambiguity between adjacent fields).
+	identity := strings.Join([]string{string(u.Type), u.Address, u.Username, u.Password, u.Iface}, "\x00")
+	h := uint32(0)
+	for i := 0; i < len(identity); i++ {
+		h = h*31 + uint32(identity[i])
+	}
+	hashStr := fmt.Sprintf("%08x", h) // uint32 -> always exactly 8 hex chars
+
+	// Clean host: replace non-alphanumeric chars with dashes.
+	var b strings.Builder
 	for _, r := range host {
 		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
-			cleanedHost += string(r)
+			b.WriteRune(r)
 		} else {
-			cleanedHost += "-"
+			b.WriteByte('-')
 		}
 	}
-	// Clean duplicate dashes
+	cleanedHost := b.String()
 	for strings.Contains(cleanedHost, "--") {
 		cleanedHost = strings.ReplaceAll(cleanedHost, "--", "-")
 	}
 	cleanedHost = strings.Trim(cleanedHost, "-")
 
-	var name string
-	maxHostLenWithoutHash := 32 - len(prefix) - 2 - len(port)
-	if len(cleanedHost) <= maxHostLenWithoutHash {
-		name = fmt.Sprintf("%s-%s-%s", prefix, cleanedHost, port)
-	} else {
-		// Format with hash: prefix + "-" + cleanedHostPrefix + "-" + hashStr + "-" + port
-		// Total dashes: 3
-		h := uint32(0)
-		for i := 0; i < len(host); i++ {
-			h = h*31 + uint32(host[i])
-		}
-		hashStr := fmt.Sprintf("%x", h)
-
-		maxHostPrefixLen := 32 - len(prefix) - 3 - len(hashStr) - len(port)
-		if maxHostPrefixLen < 0 {
-			maxHostPrefixLen = 0
-		}
-
-		if len(cleanedHost) > maxHostPrefixLen {
-			cleanedHost = cleanedHost[:maxHostPrefixLen]
-		}
-		cleanedHost = strings.Trim(cleanedHost, "-")
-
-		name = fmt.Sprintf("%s-%s-%s-%s", prefix, cleanedHost, hashStr, port)
+	// Budget the host segment so the final name never exceeds 32 chars.
+	// Layout: <prefix>-<host>-<port>-<hash>  (3 separators).
+	maxHostLen := 32 - len(prefix) - 3 - len(port) - len(hashStr)
+	if maxHostLen < 0 {
+		maxHostLen = 0
 	}
+	if len(cleanedHost) > maxHostLen {
+		cleanedHost = cleanedHost[:maxHostLen]
+	}
+	cleanedHost = strings.Trim(cleanedHost, "-")
 
-	// Clean duplicate dashes and trailing/leading dashes on final name
+	name := fmt.Sprintf("%s-%s-%s-%s", prefix, cleanedHost, port, hashStr)
 	for strings.Contains(name, "--") {
 		name = strings.ReplaceAll(name, "--", "-")
 	}
-	name = strings.Trim(name, "-")
-	return name
+	return strings.Trim(name, "-")
 }
 
 // AddMultiple inserts multiple upstreams inside a transaction.
-// Returns the number of successfully inserted upstreams.
-func (s *UpstreamService) AddMultiple(ctx context.Context, upstreams []*model.Upstream) (int, error) {
+// Returns the upstreams that were actually inserted (duplicates skipped by the
+// store are excluded).
+func (s *UpstreamService) AddMultiple(ctx context.Context, upstreams []*model.Upstream) ([]*model.Upstream, error) {
 	for _, u := range upstreams {
 		if err := u.Validate(); err != nil {
-			return 0, err
+			return nil, err
 		}
 		u.Enabled = true
 	}
-	count, err := s.upstreams.CreateMultiple(ctx, upstreams)
+	inserted, err := s.upstreams.CreateMultiple(ctx, upstreams)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 
-	// Run initial health checks asynchronously for all newly added upstreams.
-	for _, u := range upstreams {
+	// Run initial health checks asynchronously only for the newly inserted
+	// upstreams (skipping duplicates that were ignored by the store).
+	for _, u := range inserted {
 		go func(name string, upstreamCopy model.Upstream) {
 			defer func() {
 				if r := recover(); r != nil {
@@ -592,7 +619,5 @@ func (s *UpstreamService) AddMultiple(ctx context.Context, upstreams []*model.Up
 		}(u.Name, *u)
 	}
 
-	return count, nil
+	return inserted, nil
 }
-
-

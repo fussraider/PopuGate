@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -535,6 +536,62 @@ func TestParseProxyLine(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name:  "ipv6 bracketed host only",
+			input: "[2001:db8::1]:1080",
+			want: &model.Upstream{
+				Type:    model.UpstreamSOCKS5,
+				Address: "[2001:db8::1]:1080",
+				Weight:  10,
+			},
+			wantErr: false,
+		},
+		{
+			name:  "ipv6 with scheme and credentials",
+			input: "socks5://user:pass@[::1]:1080",
+			want: &model.Upstream{
+				Type:     model.UpstreamSOCKS5,
+				Address:  "[::1]:1080",
+				Username: "user",
+				Password: "pass",
+				Weight:   10,
+			},
+			wantErr: false,
+		},
+		{
+			name:  "ipv6 with suffix credentials",
+			input: "[::1]:1080:bob:secret",
+			want: &model.Upstream{
+				Type:     model.UpstreamSOCKS5,
+				Address:  "[::1]:1080",
+				Username: "bob",
+				Password: "secret",
+				Weight:   10,
+			},
+			wantErr: false,
+		},
+		{
+			name:  "ipv6 suffix password with colons",
+			input: "[fe80::1]:1080:bob:se:cr:et",
+			want: &model.Upstream{
+				Type:     model.UpstreamSOCKS5,
+				Address:  "[fe80::1]:1080",
+				Username: "bob",
+				Password: "se:cr:et",
+				Weight:   10,
+			},
+			wantErr: false,
+		},
+		{
+			name:    "ipv6 missing closing bracket",
+			input:   "[::1:1080",
+			wantErr: true,
+		},
+		{
+			name:    "ipv6 missing port",
+			input:   "[::1]",
+			wantErr: true,
+		},
+		{
 			name:    "invalid address format",
 			input:   "not-an-ip",
 			wantErr: true,
@@ -572,46 +629,49 @@ func TestParseProxyLine(t *testing.T) {
 }
 
 func TestGenerateBulkUpstreamName(t *testing.T) {
-	tests := []struct {
-		name  string
-		proto model.UpstreamType
-		addr  string
-		want  string
-	}{
-		{
-			name:  "simple socks5 name",
-			proto: model.UpstreamSOCKS5,
-			addr:  "192.168.1.1:1080",
-			want:  "s5-192-168-1-1-1080",
-		},
-		{
-			name:  "socks4 name",
-			proto: model.UpstreamSOCKS4,
-			addr:  "8.8.8.8:80",
-			want:  "s4-8-8-8-8-80",
-		},
-		{
-			name:  "long domain truncation",
-			proto: model.UpstreamSOCKS5,
-			addr:  "very-long-subdomain-that-exceeds-thirty-two-chars.example.com:1080",
-			want:  "s5-very-long-subdo-2c94ec11-1080", // 15 chars of host + hash
-		},
-	}
+	// Every generated name ends with an 8-hex identity hash: "<...>-<hash8>".
+	hashSuffix := regexp.MustCompile(`-[0-9a-f]{8}$`)
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			u := &model.Upstream{
-				Type:    tt.proto,
-				Address: tt.addr,
-			}
+	t.Run("structure and length", func(t *testing.T) {
+		cases := []struct {
+			proto  model.UpstreamType
+			addr   string
+			prefix string
+		}{
+			{model.UpstreamSOCKS5, "192.168.1.1:1080", "s5-192-168-1-1-1080-"},
+			{model.UpstreamSOCKS4, "8.8.8.8:80", "s4-8-8-8-8-80-"},
+			{model.UpstreamDirect, "1.2.3.4:1080", "dir-1-2-3-4-1080-"},
+			{model.UpstreamSOCKS5, "very-long-subdomain-that-exceeds-thirty-two-chars.example.com:1080", "s5-"},
+		}
+		for _, c := range cases {
+			u := &model.Upstream{Type: c.proto, Address: c.addr}
 			got := GenerateBulkUpstreamName(u)
-			if got != tt.want {
-				t.Errorf("GenerateBulkUpstreamName() = %q, want %q", got, tt.want)
-			}
 			if len(got) > 32 {
-				t.Errorf("len(got) = %d exceeds 32", len(got))
+				t.Errorf("addr %q: len(got)=%d exceeds 32 (%q)", c.addr, len(got), got)
 			}
-		})
-	}
-}
+			if !strings.HasPrefix(got, c.prefix) {
+				t.Errorf("addr %q: got %q, want prefix %q", c.addr, got, c.prefix)
+			}
+			if !hashSuffix.MatchString(got) {
+				t.Errorf("addr %q: got %q, expected trailing 8-hex identity hash", c.addr, got)
+			}
+		}
+	})
 
+	t.Run("distinct credentials produce distinct names", func(t *testing.T) {
+		noCreds := GenerateBulkUpstreamName(&model.Upstream{Type: model.UpstreamSOCKS5, Address: "1.2.3.4:1080"})
+		creds1 := GenerateBulkUpstreamName(&model.Upstream{Type: model.UpstreamSOCKS5, Address: "1.2.3.4:1080", Username: "u1", Password: "p1"})
+		creds2 := GenerateBulkUpstreamName(&model.Upstream{Type: model.UpstreamSOCKS5, Address: "1.2.3.4:1080", Username: "u2", Password: "p2"})
+		if noCreds == creds1 || creds1 == creds2 || noCreds == creds2 {
+			t.Errorf("expected distinct names for differing credentials, got %q / %q / %q", noCreds, creds1, creds2)
+		}
+	})
+
+	t.Run("identical identity produces identical name", func(t *testing.T) {
+		u1 := &model.Upstream{Type: model.UpstreamSOCKS5, Address: "1.2.3.4:1080", Username: "u", Password: "p", Iface: "eth0"}
+		u2 := &model.Upstream{Type: model.UpstreamSOCKS5, Address: "1.2.3.4:1080", Username: "u", Password: "p", Iface: "eth0"}
+		if GenerateBulkUpstreamName(u1) != GenerateBulkUpstreamName(u2) {
+			t.Error("expected identical names for identical upstream identity")
+		}
+	})
+}

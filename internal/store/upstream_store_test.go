@@ -387,12 +387,15 @@ func TestUpstreamStore_CreateMultiple(t *testing.T) {
 		{Name: "bulk1", Type: model.UpstreamDirect, Weight: 10, Enabled: true},
 		{Name: "bulk2", Type: model.UpstreamSOCKS5, Address: "1.2.3.4:1080", Weight: 15, Enabled: true},
 	}
-	count, err := s.CreateMultiple(ctx, ups)
+	inserted, err := s.CreateMultiple(ctx, ups)
 	if err != nil {
 		t.Fatalf("CreateMultiple: %v", err)
 	}
-	if count != 2 {
-		t.Errorf("expected inserted count = 2, got %d", count)
+	if len(inserted) != 2 {
+		t.Errorf("expected inserted count = 2, got %d", len(inserted))
+	}
+	if len(inserted) == 2 && (inserted[0].Name != "bulk1" || inserted[1].Name != "bulk2") {
+		t.Errorf("expected inserted to preserve input order [bulk1 bulk2], got [%s %s]", inserted[0].Name, inserted[1].Name)
 	}
 
 	// Verify they are saved
@@ -408,14 +411,17 @@ func TestUpstreamStore_CreateMultiple(t *testing.T) {
 	// 2. Ignore duplicate names case
 	ups2 := []*model.Upstream{
 		{Name: "bulk2", Type: model.UpstreamSOCKS5, Address: "1.2.3.4:1080", Weight: 15, Enabled: true}, // duplicate, should be ignored
-		{Name: "bulk3", Type: model.UpstreamDirect, Weight: 20, Enabled: true},                       // new
+		{Name: "bulk3", Type: model.UpstreamDirect, Weight: 20, Enabled: true},                          // new
 	}
-	count2, err := s.CreateMultiple(ctx, ups2)
+	inserted2, err := s.CreateMultiple(ctx, ups2)
 	if err != nil {
 		t.Fatalf("CreateMultiple with duplicate: %v", err)
 	}
-	if count2 != 1 {
-		t.Errorf("expected inserted count = 1, got %d", count2)
+	if len(inserted2) != 1 {
+		t.Errorf("expected inserted count = 1, got %d", len(inserted2))
+	}
+	if len(inserted2) == 1 && inserted2[0].Name != "bulk3" {
+		t.Errorf("expected only bulk3 inserted, got %s", inserted2[0].Name)
 	}
 
 	// 3. Rollback case: one of the entries fails validation
@@ -434,4 +440,3 @@ func TestUpstreamStore_CreateMultiple(t *testing.T) {
 		t.Error("bulk4 should not exist due to transaction rollback")
 	}
 }
-

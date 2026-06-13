@@ -506,24 +506,29 @@ func (h *UpstreamHandler) BulkAdd(c *gin.Context) {
 		upstreams = append(upstreams, u)
 	}
 
-	insertedCount, err := h.upstreams.AddMultiple(c.Request.Context(), upstreams)
+	inserted, err := h.upstreams.AddMultiple(c.Request.Context(), upstreams)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	upstreamLog.Infof("bulk adding %d upstreams", len(upstreams))
+	insertedCount := len(inserted)
+	skipped := len(upstreams) - insertedCount
+	upstreamLog.Infof("bulk add: %d inserted, %d skipped (duplicates)", insertedCount, skipped)
 
-	names := make([]string, 0, len(upstreams))
-	for _, u := range upstreams {
+	names := make([]string, 0, insertedCount)
+	for _, u := range inserted {
 		names = append(names, u.Name)
 	}
 
-	auditLog(c, "upstream.bulk_create", fmt.Sprintf("count=%d", insertedCount))
-	h.reloadInstances(c.Request.Context(), fmt.Sprintf("bulk added %d upstreams", len(upstreams)))
+	auditLog(c, "upstream.bulk_create", fmt.Sprintf("count=%d skipped=%d", insertedCount, skipped))
+	if insertedCount > 0 {
+		h.reloadInstances(c.Request.Context(), fmt.Sprintf("bulk added %d upstreams", insertedCount))
+	}
 	c.JSON(http.StatusCreated, gin.H{
-		"ok":    true,
-		"count": insertedCount,
-		"names": names,
+		"ok":      true,
+		"count":   insertedCount,
+		"skipped": skipped,
+		"names":   names,
 	})
 }

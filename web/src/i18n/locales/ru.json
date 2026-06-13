@@ -728,7 +728,8 @@
       "ready_to_add": "прокси готовы к добавлению.",
       "back": "Назад",
       "next": "Далее",
-      "success_added": "Успешно добавлено апстримов: {count}."
+      "success_added": "Успешно добавлено апстримов: {count}.",
+      "success_added_skipped": "Добавлено апстримов: {count} (пропущено дубликатов: {skipped})."
     }
   },
   "system": {

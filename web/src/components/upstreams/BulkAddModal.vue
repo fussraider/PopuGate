@@ -344,7 +344,11 @@ async function submitBulk() {
   submitting.value = true
   try {
     const res = await store.bulkAdd(finalAdd)
-    toast.success(t('upstreams.wizard.success_added', { count: res.count }))
+    if (res.skipped > 0) {
+      toast.success(t('upstreams.wizard.success_added_skipped', { count: res.count, skipped: res.skipped }))
+    } else {
+      toast.success(t('upstreams.wizard.success_added', { count: res.count }))
+    }
     emit('added')
     emit('update:modelValue', false)
   } catch (err: any) {

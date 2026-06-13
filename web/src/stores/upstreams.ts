@@ -127,32 +127,57 @@ export const useUpstreamsStore = defineStore('upstreams', () => {
 
     const decoder = new TextDecoder('utf-8')
     let buffer = ''
+    let finished = false
 
-    while (true) {
+    // Parse a single SSE event block (lines separated by '\n', terminated by a
+    // blank line). Keeping event/data assembly per-block — rather than tracking
+    // state across raw chunks — makes parsing robust to arbitrary chunk
+    // boundaries that may split an event mid-way.
+    const handleBlock = (block: string) => {
+      let eventType = ''
+      let dataStr = ''
+      for (const line of block.split('\n')) {
+        const trimmed = line.trim()
+        if (trimmed.startsWith('event:')) {
+          eventType = trimmed.slice(6).trim()
+        } else if (trimmed.startsWith('data:')) {
+          // Multiple data: lines are concatenated per the SSE spec.
+          dataStr += trimmed.slice(5).trim()
+        }
+      }
+      if (eventType === 'complete') {
+        finished = true
+        return
+      }
+      if (eventType === 'progress' && dataStr) {
+        try {
+          onUpdate(JSON.parse(dataStr))
+        } catch (e) {
+          console.error('Failed to parse SSE progress data:', e)
+        }
+      }
+    }
+
+    while (!finished) {
       const { value, done } = await reader.read()
       if (done) break
 
       buffer += decoder.decode(value, { stream: true })
-      const lines = buffer.split('\n')
-      buffer = lines.pop() || ''
-
-      let currentEvent = ''
-      for (const line of lines) {
-        const trimmed = line.trim()
-        if (trimmed.startsWith('event:')) {
-          currentEvent = trimmed.slice(6).trim()
-        } else if (trimmed.startsWith('data:')) {
-          const dataStr = trimmed.slice(5).trim()
-          if (currentEvent === 'progress') {
-            try {
-              const parsed = JSON.parse(dataStr)
-              onUpdate(parsed)
-            } catch (e) {
-              console.error('Failed to parse SSE progress data:', e)
-            }
-          }
-        }
+      // Split on blank lines (event boundaries); the trailing element is a
+      // possibly-incomplete block kept in the buffer for the next read.
+      const blocks = buffer.split('\n\n')
+      buffer = blocks.pop() || ''
+      for (const block of blocks) {
+        if (block.trim()) handleBlock(block)
+        if (finished) break
       }
+    }
+
+    // Flush any trailing complete block left in the buffer.
+    if (!finished && buffer.trim()) handleBlock(buffer)
+
+    if (finished) {
+      try { await reader.cancel() } catch { /* ignore */ }
     }
   }
 

@@ -728,7 +728,8 @@
       "ready_to_add": "proxies are ready to be added.",
       "back": "Back",
       "next": "Next",
-      "success_added": "Successfully added {count} upstreams."
+      "success_added": "Successfully added {count} upstreams.",
+      "success_added_skipped": "Added {count} upstreams ({skipped} skipped as duplicates)."
     }
   },
   "system": {

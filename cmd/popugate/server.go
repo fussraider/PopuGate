@@ -919,9 +919,9 @@ func sendPeriodicReport(ctx context.Context, b *bot.Bot, settings *store.Setting
 
 // terminalSupportsColor returns true when the current stdout terminal
 // can display ANSI TrueColor sequences. It respects three signals:
-//   1. NO_COLOR env var (https://no-color.org) — user explicitly opt-out
-//   2. TERM=dumb — terminal is known to be incapable of escape codes
-//   3. stdout is not a character device — output is piped / redirected
+//  1. NO_COLOR env var (https://no-color.org) — user explicitly opt-out
+//  2. TERM=dumb — terminal is known to be incapable of escape codes
+//  3. stdout is not a character device — output is piped / redirected
 func terminalSupportsColor() bool {
 	if _, noColor := os.LookupEnv("NO_COLOR"); noColor {
 		return false
@@ -948,7 +948,7 @@ func printPlainBanner() {
 	fmt.Printf(`
   ____                    ____       _       
  |  _ \ ___  _ __  _   _ / ___| __ _| |_ ___ 
- | |_) / _ \| '_ \| | | | |  _ / _` + "`" + ` | __/ _ \
+ | |_) / _ \| '_ \| | | | |  _ / _`+"`"+` | __/ _ \
  |  __/ (_) | |_) | |_| | |_| | (_| | ||  __/
  |_|   \___/| .__/ \__,_|\____|\__,_|\__\___|
             |_|

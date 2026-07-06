@@ -40,49 +40,7 @@ func (s *AuditStore) List(ctx context.Context, limit, offset int, filter *model.
 		offset = 0
 	}
 
-	query := `SELECT id, timestamp, user, action, detail FROM audit_log WHERE 1=1`
-	var args []interface{}
-
-	if filter != nil {
-		if len(filter.Users) > 0 {
-			var placeholders []string
-			for _, u := range filter.Users {
-				if u != "" {
-					placeholders = append(placeholders, "?")
-					args = append(args, u)
-				}
-			}
-			if len(placeholders) > 0 {
-				query += fmt.Sprintf(" AND user IN (%s)", strings.Join(placeholders, ","))
-			}
-		}
-
-		if len(filter.Actions) > 0 {
-			var placeholders []string
-			for _, a := range filter.Actions {
-				if a != "" {
-					placeholders = append(placeholders, "?")
-					args = append(args, a)
-				}
-			}
-			if len(placeholders) > 0 {
-				query += fmt.Sprintf(" AND action IN (%s)", strings.Join(placeholders, ","))
-			}
-		}
-
-		if filter.From > 0 {
-			query += " AND timestamp >= ?"
-			args = append(args, filter.From)
-		}
-
-		if filter.To > 0 {
-			query += " AND timestamp <= ?"
-			args = append(args, filter.To)
-		}
-	}
-
-	query += " ORDER BY timestamp DESC LIMIT ? OFFSET ?"
-	args = append(args, limit, offset)
+	query, args := buildAuditListQuery(limit, offset, filter)
 
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -99,6 +57,44 @@ func (s *AuditStore) List(ctx context.Context, limit, offset int, filter *model.
 		entries = append(entries, e)
 	}
 	return entries, rows.Err()
+}
+
+func buildAuditListQuery(limit, offset int, filter *model.AuditFilter) (string, []interface{}) {
+	query := `SELECT id, timestamp, user, action, detail FROM audit_log WHERE 1=1`
+	var args []interface{}
+
+	if filter != nil {
+		query, args = appendInClause(query, args, "user", filter.Users)
+		query, args = appendInClause(query, args, "action", filter.Actions)
+
+		if filter.From > 0 {
+			query += " AND timestamp >= ?"
+			args = append(args, filter.From)
+		}
+		if filter.To > 0 {
+			query += " AND timestamp <= ?"
+			args = append(args, filter.To)
+		}
+	}
+
+	query += " ORDER BY timestamp DESC LIMIT ? OFFSET ?"
+	args = append(args, limit, offset)
+	return query, args
+}
+
+// appendInClause adds "AND <column> IN (?,...)" for the non-empty values.
+func appendInClause(query string, args []interface{}, column string, values []string) (string, []interface{}) {
+	var placeholders []string
+	for _, v := range values {
+		if v != "" {
+			placeholders = append(placeholders, "?")
+			args = append(args, v)
+		}
+	}
+	if len(placeholders) > 0 {
+		query += fmt.Sprintf(" AND %s IN (%s)", column, strings.Join(placeholders, ","))
+	}
+	return query, args
 }
 
 // CleanOld removes audit entries older than the given duration.

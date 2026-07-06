@@ -538,12 +538,12 @@ func TestGeoblockHandler_Unavailable(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	db := testutil.OpenTestDB(t)
 	settingsStore := store.NewSettingsStore(db)
-	
+
 	// Create a real GeoblockService. On macOS, this will be unavailable because there is no iptables/ipset.
 	instancesStore := store.NewInstanceStore(db)
 	cacheStore := store.NewGeoblockCacheStore(db)
 	geoSvc := service.NewGeoblockService(settingsStore, instancesStore, cacheStore)
-	
+
 	// If by any chance they are installed (e.g. running on Linux CI with iptables), we skip or check the status.
 	available, _ := geoSvc.IsAvailable()
 	if available {
@@ -580,7 +580,7 @@ func TestGeoblockHandler_Unavailable(t *testing.T) {
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("expected 400 Bad Request, got %d: %s", w.Code, w.Body.String())
 	}
-	
+
 	var errResp map[string]interface{}
 	_ = json.Unmarshal(w.Body.Bytes(), &errResp)
 	if !strings.Contains(errResp["error"].(string), "geoblocking is not available") {

@@ -37,8 +37,22 @@ func NewAuditHandler(audit *service.AuditService) *AuditHandler {
 // @Security     BearerAuth
 // @Router       /audit [get]
 func (h *AuditHandler) List(c *gin.Context) {
-	limit := 100
-	offset := 0
+	limit, offset := parseAuditPagination(c)
+	filter := parseAuditFilter(c)
+
+	entries, err := h.audit.List(c.Request.Context(), limit, offset, &filter)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		return
+	}
+	if entries == nil {
+		entries = []model.AuditEntry{}
+	}
+	c.JSON(http.StatusOK, entries)
+}
+
+func parseAuditPagination(c *gin.Context) (limit, offset int) {
+	limit, offset = 100, 0
 	if v := c.Query("limit"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			if n > 1000 {
@@ -52,7 +66,10 @@ func (h *AuditHandler) List(c *gin.Context) {
 			offset = n
 		}
 	}
+	return limit, offset
+}
 
+func parseAuditFilter(c *gin.Context) model.AuditFilter {
 	var filter model.AuditFilter
 
 	if v := c.Query("users"); v != "" {
@@ -79,15 +96,7 @@ func (h *AuditHandler) List(c *gin.Context) {
 		}
 	}
 
-	entries, err := h.audit.List(c.Request.Context(), limit, offset, &filter)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
-		return
-	}
-	if entries == nil {
-		entries = []model.AuditEntry{}
-	}
-	c.JSON(http.StatusOK, entries)
+	return filter
 }
 
 // GetFilters handles GET /api/v1/audit/filters

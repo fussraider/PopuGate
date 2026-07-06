@@ -514,9 +514,11 @@ func TestUpstreamHandler_WithContainerService(t *testing.T) {
 	r.POST("/api/v1/upstreams", handler.Add)
 
 	body, _ := json.Marshal(addUpstreamRequest{
-		Name:    "test-upstream",
-		Type:    "socks5",
-		Address: "1.2.3.4:1080",
+		Name: "test-upstream",
+		upstreamConfigFields: upstreamConfigFields{
+			Type:    "socks5",
+			Address: "1.2.3.4:1080",
+		},
 	})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/upstreams", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -527,5 +529,3 @@ func TestUpstreamHandler_WithContainerService(t *testing.T) {
 		t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
 	}
 }
-
-

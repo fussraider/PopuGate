@@ -52,6 +52,38 @@ func (s *UpstreamService) SetContainerSvc(svc *ContainerService) {
 	s.containerSvc = svc
 }
 
+// middleProxyEnabled reports the effective use_middle_proxy setting. It defaults to
+// true (matching the engine default) when the setting is unset or unreadable.
+func (s *UpstreamService) middleProxyEnabled(ctx context.Context) bool {
+	if s.settings == nil {
+		log.Debugf("middleProxyEnabled: settings store not wired, assuming Middle-Proxy enabled")
+		return true
+	}
+	// Get returns "" (no error) for a missing key, so a non-nil error here is a real
+	// DB failure. Fail closed (assume enabled) but surface it — otherwise shadowsocks
+	// upstreams would be blocked with no trace of why.
+	v, err := s.settings.Get(ctx, "use_middle_proxy")
+	if err != nil {
+		log.Warnf("failed to read use_middle_proxy setting, assuming Middle-Proxy enabled: %v", err)
+		return true
+	}
+	return v != "false"
+}
+
+// ensureShadowsocksAllowed enforces ADR-001: a shadowsocks upstream cannot be used
+// while Middle-Proxy mode is enabled, because telemt rejects shadowsocks upstreams in
+// ME mode. Returns a clear, actionable error rather than letting the engine reject the
+// whole config. No-op for non-shadowsocks upstreams.
+func (s *UpstreamService) ensureShadowsocksAllowed(ctx context.Context, u *model.Upstream) error {
+	if u == nil || u.Type != model.UpstreamShadowsocks {
+		return nil
+	}
+	if s.middleProxyEnabled(ctx) {
+		return fmt.Errorf("shadowsocks upstream requires Middle-Proxy mode disabled: set use_middle_proxy=false (note: this turns off ad_tag / promoted-channel support)")
+	}
+	return nil
+}
+
 func resolveTestResult(res *model.UpstreamTestResult, testErr error) (bool, int64, string) {
 	ok := testErr == nil && res.OK
 	errMsg := ""
@@ -98,7 +130,14 @@ func (s *UpstreamService) handleFailover(ctx context.Context, name string, errMs
 	}
 }
 
-func (s *UpstreamService) handleAutoRecovery(ctx context.Context, name string, latency int64) {
+func (s *UpstreamService) handleAutoRecovery(ctx context.Context, u *model.Upstream, latency int64) {
+	name := u.Name
+	// ADR-001: never auto-re-enable a shadowsocks upstream while Middle-Proxy
+	// mode is on — telemt would reject the whole engine config on reload.
+	if err := s.ensureShadowsocksAllowed(ctx, u); err != nil {
+		log.Warnf("upstream %s recovered but stays disabled: %v", name, err)
+		return
+	}
 	if err := s.upstreams.EnableAutomatically(ctx, name); err == nil {
 		log.Infof("upstream %s auto-recovered and re-enabled", name)
 		if s.containerSvc != nil {
@@ -134,7 +173,7 @@ func (s *UpstreamService) checkUpstream(ctx context.Context, u model.Upstream) {
 	if !ok {
 		s.handleFailover(ctx, u.Name, errMsg)
 	} else if u.AutoDisabled {
-		s.handleAutoRecovery(ctx, u.Name, latency)
+		s.handleAutoRecovery(ctx, &u, latency)
 	}
 }
 
@@ -167,6 +206,9 @@ func (s *UpstreamService) Get(ctx context.Context, name string) (*model.Upstream
 // Add creates a new upstream.
 func (s *UpstreamService) Add(ctx context.Context, u *model.Upstream) error {
 	if err := u.Validate(); err != nil {
+		return err
+	}
+	if err := s.ensureShadowsocksAllowed(ctx, u); err != nil {
 		return err
 	}
 
@@ -202,17 +244,7 @@ func (s *UpstreamService) runInitialHealthCheck(name string, u *model.Upstream) 
 	defer cancel()
 
 	res, testErr := s.testUpstream(bgCtx, u)
-	ok := testErr == nil && res.OK
-	errMsg := ""
-	if testErr != nil {
-		errMsg = testErr.Error()
-	} else if res != nil && !res.OK {
-		errMsg = res.Error
-	}
-	latency := int64(0)
-	if res != nil {
-		latency = res.LatencyMs
-	}
+	ok, latency, errMsg := resolveTestResult(res, testErr)
 
 	log.Infof("initial health check completed for %s: ok=%v, latency=%dms, err=%s", name, ok, latency, errMsg)
 
@@ -224,6 +256,9 @@ func (s *UpstreamService) runInitialHealthCheck(name string, u *model.Upstream) 
 // Update modifies an existing upstream.
 func (s *UpstreamService) Update(ctx context.Context, name string, u *model.Upstream) error {
 	if err := u.Validate(); err != nil {
+		return err
+	}
+	if err := s.ensureShadowsocksAllowed(ctx, u); err != nil {
 		return err
 	}
 
@@ -263,6 +298,11 @@ func (s *UpstreamService) Toggle(ctx context.Context, name string, enable bool) 
 	if existing == nil {
 		return fmt.Errorf("upstream '%s' not found", name)
 	}
+	if enable {
+		if err := s.ensureShadowsocksAllowed(ctx, existing); err != nil {
+			return err
+		}
+	}
 	if err := s.upstreams.UpdateEnabled(ctx, name, enable); err != nil {
 		return err
 	}
@@ -287,17 +327,7 @@ func (s *UpstreamService) Test(ctx context.Context, name string) (*model.Upstrea
 	}
 
 	res, testErr := s.testUpstream(ctx, u)
-	ok := testErr == nil && res.OK
-	errMsg := ""
-	if testErr != nil {
-		errMsg = testErr.Error()
-	} else if res != nil && !res.OK {
-		errMsg = res.Error
-	}
-	latency := int64(0)
-	if res != nil {
-		latency = res.LatencyMs
-	}
+	ok, latency, errMsg := resolveTestResult(res, testErr)
 
 	if err := s.upstreams.UpdateHealth(ctx, name, ok, latency, errMsg); err != nil {
 		log.Errorf("failed to update health for %s after manual test: %v", name, err)
@@ -319,9 +349,65 @@ func (s *UpstreamService) testUpstream(ctx context.Context, u *model.Upstream) (
 		return s.testSOCKS5(ctx, u)
 	case model.UpstreamSOCKS4:
 		return s.testSOCKS4(ctx, u)
+	case model.UpstreamShadowsocks:
+		return s.testShadowsocks(ctx, u)
 	default:
 		return nil, fmt.Errorf("unsupported upstream type: %s", u.Type)
 	}
+}
+
+// tcpProbe checks TCP reachability of addr (10s timeout) and reports the connect
+// latency. Used by the SOCKS4 and Shadowsocks testers, which verify reachability
+// only (no protocol handshake).
+func tcpProbe(ctx context.Context, addr string) *model.UpstreamTestResult {
+	start := time.Now()
+	dialer := net.Dialer{Timeout: 10 * time.Second}
+	conn, err := dialer.DialContext(ctx, "tcp", addr)
+	if err != nil {
+		log.Debugf("TCP connect to %s failed: %v", addr, err)
+		return &model.UpstreamTestResult{OK: false, Error: fmt.Sprintf("TCP connect to %s failed: %v", addr, err)}
+	}
+	_ = conn.Close()
+	latency := time.Since(start).Milliseconds()
+	log.Debugf("TCP probe of %s ok: latency=%dms", addr, latency)
+	return &model.UpstreamTestResult{OK: true, LatencyMs: latency}
+}
+
+// testShadowsocks performs a TCP-reachability probe to the shadowsocks server's
+// host:port parsed from the ss:// URL. A full Shadowsocks handshake test is
+// intentionally out of scope for v1 (the telemt engine performs the real connection).
+func (s *UpstreamService) testShadowsocks(ctx context.Context, u *model.Upstream) (*model.UpstreamTestResult, error) {
+	addr, err := shadowsocksHostPort(u.URL)
+	if err != nil {
+		// Legacy fully-base64 ss:// URLs keep the host inside the base64 blob,
+		// so no probe can run — report OK instead of failing, otherwise the
+		// scheduler would auto-disable a perfectly healthy upstream forever.
+		log.Debugf("shadowsocks test: skipping reachability probe: %v", err)
+		return &model.UpstreamTestResult{OK: true}, nil
+	}
+	return tcpProbe(ctx, addr), nil
+}
+
+// shadowsocksHostPort extracts the server host:port from an ss:// URL.
+// It supports the SIP002 userinfo form (ss://<base64>@host:port#tag) by taking the
+// authority after the last '@', stripping any '#fragment' or '/path' suffix.
+// The legacy fully-base64 form (ss://base64(method:pw@host:port)) is not decoded
+// here; such URLs return an error and skip the reachability probe.
+func shadowsocksHostPort(raw string) (string, error) {
+	s := strings.TrimSpace(raw)
+	s = strings.TrimPrefix(s, "ss://")
+	if i := strings.LastIndex(s, "@"); i != -1 {
+		s = s[i+1:]
+	} else {
+		return "", fmt.Errorf("cannot determine shadowsocks host:port from URL (legacy/base64 form)")
+	}
+	if i := strings.IndexAny(s, "#/?"); i != -1 {
+		s = s[:i]
+	}
+	if _, _, err := net.SplitHostPort(s); err != nil {
+		return "", fmt.Errorf("invalid shadowsocks host:port %q: %w", s, err)
+	}
+	return s, nil
 }
 
 func (s *UpstreamService) testDirect(ctx context.Context) (*model.UpstreamTestResult, error) {
@@ -420,20 +506,7 @@ func (s *UpstreamService) detectIP(client *http.Client) (string, error) {
 
 func (s *UpstreamService) testSOCKS4(ctx context.Context, u *model.Upstream) (*model.UpstreamTestResult, error) {
 	log.Debugf("testing SOCKS4 upstream: addr=%s", u.Address)
-	start := time.Now()
-	conn, err := net.DialTimeout("tcp", u.Address, 10*time.Second)
-	if err != nil {
-		log.Debugf("SOCKS4 TCP connect to %s failed: %v", u.Address, err)
-		return &model.UpstreamTestResult{OK: false, Error: err.Error()}, nil
-	}
-	defer func() { _ = conn.Close() }()
-
-	latency := time.Since(start).Milliseconds()
-	log.Debugf("SOCKS4 test ok: latency=%dms", latency)
-	return &model.UpstreamTestResult{
-		OK:        true,
-		LatencyMs: latency,
-	}, nil
+	return tcpProbe(ctx, u.Address), nil
 }
 
 // ParseProxyLine parses a proxy string in various formats and returns a model.Upstream.
@@ -446,6 +519,13 @@ func ParseProxyLine(line string) (*model.Upstream, error) {
 	u := &model.Upstream{
 		Type:   model.UpstreamSOCKS5, // Default type
 		Weight: 10,                   // Default weight
+	}
+
+	// Shadowsocks: the whole line is an ss:// URL — no host:port parsing applies.
+	if strings.HasPrefix(line, "ss://") {
+		u.Type = model.UpstreamShadowsocks
+		u.URL = line
+		return u, nil
 	}
 
 	// 1. Extract scheme
@@ -474,45 +554,11 @@ func ParseProxyLine(line string) (*model.Upstream, error) {
 			u.Username = creds
 		}
 	} else if strings.HasPrefix(line, "[") {
-		// 3a. Bracketed IPv6 with optional suffix credentials:
-		//     [::1]:1080  or  [::1]:1080:user:pass
-		end := strings.Index(line, "]")
-		if end == -1 {
-			return nil, fmt.Errorf("invalid IPv6 proxy format (missing ']'): %s", line)
+		if err := parseBracketedIPv6Line(line, u); err != nil {
+			return nil, err
 		}
-		host := line[:end+1] // includes brackets
-		rest := strings.TrimPrefix(line[end+1:], ":")
-		parts := strings.SplitN(rest, ":", 3) // port, user, pass (pass may contain colons)
-		if parts[0] == "" {
-			return nil, fmt.Errorf("invalid IPv6 proxy format (missing port): %s", line)
-		}
-		u.Address = fmt.Sprintf("%s:%s", host, parts[0])
-		if len(parts) >= 2 {
-			u.Username = parts[1]
-		}
-		if len(parts) >= 3 {
-			u.Password = parts[2]
-		}
-	} else {
-		// 3b. Suffix credentials or host:port: host:port:user:pass or host:port.
-		// This colon-splitting form only supports IPv4/hostnames; IPv6 must use
-		// the bracketed form above.
-		parts := strings.Split(line, ":")
-		if len(parts) >= 4 {
-			// host:port:user:pass
-			u.Address = fmt.Sprintf("%s:%s", parts[0], parts[1])
-			u.Username = parts[2]
-			u.Password = strings.Join(parts[3:], ":") // In case password has colons
-		} else if len(parts) == 3 {
-			// host:port:user
-			u.Address = fmt.Sprintf("%s:%s", parts[0], parts[1])
-			u.Username = parts[2]
-		} else if len(parts) == 2 {
-			// host:port
-			u.Address = line
-		} else {
-			return nil, fmt.Errorf("invalid proxy format: %s", line)
-		}
+	} else if err := parseColonFormLine(line, u); err != nil {
+		return nil, err
 	}
 
 	// Basic validation of address
@@ -526,6 +572,53 @@ func ParseProxyLine(line string) (*model.Upstream, error) {
 	return u, nil
 }
 
+// parseBracketedIPv6Line parses a bracketed IPv6 line with optional suffix
+// credentials: [::1]:1080 or [::1]:1080:user:pass.
+func parseBracketedIPv6Line(line string, u *model.Upstream) error {
+	end := strings.Index(line, "]")
+	if end == -1 {
+		return fmt.Errorf("invalid IPv6 proxy format (missing ']'): %s", line)
+	}
+	host := line[:end+1] // includes brackets
+	rest := strings.TrimPrefix(line[end+1:], ":")
+	parts := strings.SplitN(rest, ":", 3) // port, user, pass (pass may contain colons)
+	if parts[0] == "" {
+		return fmt.Errorf("invalid IPv6 proxy format (missing port): %s", line)
+	}
+	u.Address = fmt.Sprintf("%s:%s", host, parts[0])
+	if len(parts) >= 2 {
+		u.Username = parts[1]
+	}
+	if len(parts) >= 3 {
+		u.Password = parts[2]
+	}
+	return nil
+}
+
+// parseColonFormLine parses host:port with optional suffix credentials:
+// host:port:user:pass or host:port:user or host:port. This colon-splitting
+// form only supports IPv4/hostnames; IPv6 must use the bracketed form.
+func parseColonFormLine(line string, u *model.Upstream) error {
+	parts := strings.Split(line, ":")
+	switch {
+	case len(parts) >= 4:
+		// host:port:user:pass
+		u.Address = fmt.Sprintf("%s:%s", parts[0], parts[1])
+		u.Username = parts[2]
+		u.Password = strings.Join(parts[3:], ":") // In case password has colons
+	case len(parts) == 3:
+		// host:port:user
+		u.Address = fmt.Sprintf("%s:%s", parts[0], parts[1])
+		u.Username = parts[2]
+	case len(parts) == 2:
+		// host:port
+		u.Address = line
+	default:
+		return fmt.Errorf("invalid proxy format: %s", line)
+	}
+	return nil
+}
+
 // GenerateBulkUpstreamName generates a unique, valid upstream name for a bulk proxy.
 //
 // The name embeds an 8-hex identity hash derived from the full upstream identity
@@ -535,43 +628,10 @@ func ParseProxyLine(line string) (*model.Upstream, error) {
 // genuinely identical upstreams still map to the same name (intentional dedup).
 // The resulting name is always at most 32 characters.
 func GenerateBulkUpstreamName(u *model.Upstream) string {
-	prefix := "s5"
-	switch u.Type {
-	case model.UpstreamSOCKS4:
-		prefix = "s4"
-	case model.UpstreamDirect:
-		prefix = "dir"
-	}
-
-	host, port, err := net.SplitHostPort(u.Address)
-	if err != nil {
-		host = u.Address
-		port = "0"
-	}
-
-	// Identity hash over the full upstream identity (NUL-separated to avoid
-	// ambiguity between adjacent fields).
-	identity := strings.Join([]string{string(u.Type), u.Address, u.Username, u.Password, u.Iface}, "\x00")
-	h := uint32(0)
-	for i := 0; i < len(identity); i++ {
-		h = h*31 + uint32(identity[i])
-	}
-	hashStr := fmt.Sprintf("%08x", h) // uint32 -> always exactly 8 hex chars
-
-	// Clean host: replace non-alphanumeric chars with dashes.
-	var b strings.Builder
-	for _, r := range host {
-		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
-			b.WriteRune(r)
-		} else {
-			b.WriteByte('-')
-		}
-	}
-	cleanedHost := b.String()
-	for strings.Contains(cleanedHost, "--") {
-		cleanedHost = strings.ReplaceAll(cleanedHost, "--", "-")
-	}
-	cleanedHost = strings.Trim(cleanedHost, "-")
+	prefix := bulkNamePrefix(u.Type)
+	host, port := bulkNameHostPort(u)
+	hashStr := upstreamIdentityHash(u)
+	cleanedHost := sanitizeHostSegment(host)
 
 	// Budget the host segment so the final name never exceeds 32 chars.
 	// Layout: <prefix>-<host>-<port>-<hash>  (3 separators).
@@ -585,25 +645,110 @@ func GenerateBulkUpstreamName(u *model.Upstream) string {
 	cleanedHost = strings.Trim(cleanedHost, "-")
 
 	name := fmt.Sprintf("%s-%s-%s-%s", prefix, cleanedHost, port, hashStr)
-	for strings.Contains(name, "--") {
-		name = strings.ReplaceAll(name, "--", "-")
+	return strings.Trim(collapseDashes(name), "-")
+}
+
+func bulkNamePrefix(t model.UpstreamType) string {
+	switch t {
+	case model.UpstreamSOCKS4:
+		return "s4"
+	case model.UpstreamDirect:
+		return "dir"
+	case model.UpstreamShadowsocks:
+		return "ss"
+	default:
+		return "s5"
 	}
-	return strings.Trim(name, "-")
+}
+
+// bulkNameHostPort derives a display host:port for the generated name.
+func bulkNameHostPort(u *model.Upstream) (host, port string) {
+	if u.Type == model.UpstreamShadowsocks {
+		// Shadowsocks has no Address; derive a display host:port from the ss:// URL.
+		if addr, err := shadowsocksHostPort(u.URL); err == nil {
+			host, port, _ = net.SplitHostPort(addr)
+			return host, port
+		}
+		return "ss", "0"
+	}
+	host, port, err := net.SplitHostPort(u.Address)
+	if err != nil {
+		return u.Address, "0"
+	}
+	return host, port
+}
+
+// upstreamIdentityHash hashes the full upstream identity (NUL-separated to
+// avoid ambiguity between adjacent fields). URL is appended only when set so
+// distinct shadowsocks servers produce distinct names, while hashes of
+// pre-existing non-shadowsocks upstreams stay identical to earlier releases
+// (name-based dedup on re-import must keep matching old rows).
+// Always returns exactly 8 hex chars.
+func upstreamIdentityHash(u *model.Upstream) string {
+	parts := []string{string(u.Type), u.Address, u.Username, u.Password, u.Iface}
+	if u.URL != "" {
+		parts = append(parts, u.URL)
+	}
+	identity := strings.Join(parts, "\x00")
+	h := uint32(0)
+	for i := 0; i < len(identity); i++ {
+		h = h*31 + uint32(identity[i])
+	}
+	return fmt.Sprintf("%08x", h)
+}
+
+// sanitizeHostSegment replaces non-alphanumeric chars with dashes, collapses
+// runs of dashes and trims them from both ends.
+func sanitizeHostSegment(host string) string {
+	var b strings.Builder
+	for _, r := range host {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+		} else {
+			b.WriteByte('-')
+		}
+	}
+	return strings.Trim(collapseDashes(b.String()), "-")
+}
+
+func collapseDashes(s string) string {
+	for strings.Contains(s, "--") {
+		s = strings.ReplaceAll(s, "--", "-")
+	}
+	return s
 }
 
 // AddMultiple inserts multiple upstreams inside a transaction.
 // Returns the upstreams that were actually inserted (duplicates skipped by the
-// store are excluded).
-func (s *UpstreamService) AddMultiple(ctx context.Context, upstreams []*model.Upstream) ([]*model.Upstream, error) {
+// store are excluded) plus the names of shadowsocks entries skipped because
+// Middle-Proxy mode is enabled (ADR-001) — skipping them keeps the rest of the
+// batch usable instead of rejecting it wholesale.
+func (s *UpstreamService) AddMultiple(ctx context.Context, upstreams []*model.Upstream) ([]*model.Upstream, []string, error) {
+	middleProxyOn := s.middleProxyEnabled(ctx)
+
+	toAdd := make([]*model.Upstream, 0, len(upstreams))
+	var skippedSS []string
 	for _, u := range upstreams {
 		if err := u.Validate(); err != nil {
-			return nil, err
+			return nil, nil, err
+		}
+		if u.Type == model.UpstreamShadowsocks && middleProxyOn {
+			skippedSS = append(skippedSS, u.Name)
+			continue
 		}
 		u.Enabled = true
+		toAdd = append(toAdd, u)
 	}
-	inserted, err := s.upstreams.CreateMultiple(ctx, upstreams)
+	if len(skippedSS) > 0 {
+		log.Warnf("bulk add: skipped %d shadowsocks upstream(s), Middle-Proxy mode is enabled: %v", len(skippedSS), skippedSS)
+	}
+	if len(toAdd) == 0 {
+		return nil, skippedSS, nil
+	}
+
+	inserted, err := s.upstreams.CreateMultiple(ctx, toAdd)
 	if err != nil {
-		return nil, err
+		return nil, skippedSS, err
 	}
 
 	// Run initial health checks asynchronously only for the newly inserted
@@ -619,5 +764,5 @@ func (s *UpstreamService) AddMultiple(ctx context.Context, upstreams []*model.Up
 		}(u.Name, *u)
 	}
 
-	return inserted, nil
+	return inserted, skippedSS, nil
 }

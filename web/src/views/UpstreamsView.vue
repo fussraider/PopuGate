@@ -140,13 +140,19 @@
             <option value="direct">{{ t('upstreams.direct') }}</option>
             <option value="socks5">SOCKS5</option>
             <option value="socks4">SOCKS4</option>
+            <option value="shadowsocks">Shadowsocks</option>
           </select>
           <small class="text-muted">{{ t('upstreams.hint_type') }}</small>
         </div>
-        <div v-if="form.type !== 'direct'" class="form-group mb-md">
+        <div v-if="form.type === 'socks5' || form.type === 'socks4'" class="form-group mb-md">
           <label class="form-label">{{ t('upstreams.address_label') }}</label>
           <input v-model="form.address" class="input" required placeholder="127.0.0.1:1080" />
           <small class="text-muted">{{ t('upstreams.hint_address') }}</small>
+        </div>
+        <div v-if="form.type === 'shadowsocks'" class="form-group mb-md">
+          <label class="form-label">{{ t('upstreams.url_label') }}</label>
+          <input v-model="form.url" class="input" required placeholder="ss://2022-blake3-aes-256-gcm:BASE64PASSWORD@host:8388" />
+          <small class="text-muted">{{ t('upstreams.hint_url') }}</small>
         </div>
         <template v-if="form.type === 'socks5'">
           <div class="form-row mb-sm">
@@ -310,13 +316,13 @@ const modalOpen = ref(false)
 const bulkModalOpen = ref(false)
 const isEdit = ref(false)
 const editTarget = ref('')
-const form = ref({ name: '', type: 'direct' as string, address: '', username: '', password: '', weight: 1, iface: '' })
+const form = ref({ name: '', type: 'direct' as string, address: '', username: '', password: '', url: '', weight: 1, iface: '' })
 
 function openBulkModal() {
   bulkModalOpen.value = true
 }
 
-const defaultForm = { name: '', type: 'direct' as string, address: '', username: '', password: '', weight: 1, iface: '' }
+const defaultForm = { name: '', type: 'direct' as string, address: '', username: '', password: '', url: '', weight: 1, iface: '' }
 
 // Auto-parse pasted proxy string (host:port:user:pass) into separate fields
 watch(() => form.value.address, (val) => {
@@ -360,7 +366,7 @@ async function openAddModal() {
 async function openEditModal(up: any) {
   isEdit.value = true
   editTarget.value = up.name
-  form.value = { name: up.name, type: up.type, address: up.address ?? '', username: up.username ?? '', password: up.password ?? '', weight: up.weight || 1, iface: up.iface ?? '' }
+  form.value = { name: up.name, type: up.type, address: up.address ?? '', username: up.username ?? '', password: up.password ?? '', url: up.url ?? '', weight: up.weight || 1, iface: up.iface ?? '' }
   store.testResult = null
   modalOpen.value = true
   try { await store.loadInterfaces() } catch { /* non-critical */ }
@@ -372,6 +378,7 @@ function handleTestConfig() {
     address: form.value.address,
     username: form.value.username,
     password: form.value.password,
+    url: form.value.url,
     iface: form.value.iface,
   })
 }

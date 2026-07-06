@@ -56,6 +56,8 @@ func (s *SettingsStore) Load(ctx context.Context) (*model.Settings, error) {
 	settings.ProxyProtocolTrustedCIDRs = getString(kv, "proxy_protocol_trusted_cidrs", "")
 	// Ad tag
 	settings.AdTag = getString(kv, "ad_tag", "")
+	// Middle-Proxy mode (default true when unset)
+	settings.UseMiddleProxy = getBoolDefault(kv, "use_middle_proxy", true)
 	// Geo-blocking
 	settings.GeoblockMode = getString(kv, "geoblock_mode", "blacklist")
 	settings.BlocklistCountries = getString(kv, "blocklist_countries", "")
@@ -207,8 +209,16 @@ func getString(m map[string]string, key, def string) string {
 }
 
 func getBool(m map[string]string, key string) bool {
+	return getBoolDefault(m, key, false)
+}
+
+// getBoolDefault returns the bool value for key, or def when the key is unset.
+func getBoolDefault(m map[string]string, key string, def bool) bool {
 	v, ok := m[key]
-	return ok && v == "true"
+	if !ok {
+		return def
+	}
+	return v == "true"
 }
 
 func generateRandomHex(n int) (string, error) {

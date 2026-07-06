@@ -30,7 +30,7 @@
             :placeholder="placeholderText"
             required
           />
-          <small class="text-muted">{{ t('upstreams.wizard.formats_hint_prefix') }}: socks5://host:port, socks4://host:port, host:port, host:port:user:pass, user:pass@host:port</small>
+          <small class="text-muted">{{ t('upstreams.wizard.formats_hint_prefix') }}: socks5://host:port, socks4://host:port, ss://&lt;base64&gt;@host:port, host:port, host:port:user:pass, user:pass@host:port</small>
         </div>
 
         <div class="form-group mb-md">
@@ -227,6 +227,7 @@ const columns = computed(() => [
 const placeholderText = `socks5://1.2.3.4:1080
 5.6.7.8:1080:username:password
 socks4://user@8.8.8.8:8080
+ss://2022-blake3-aes-256-gcm:BASE64PASSWORD@9.9.9.9:8388
 192.168.1.10:80`
 
 // Watch modal state reset
@@ -336,6 +337,7 @@ async function submitBulk() {
       address: x.address || creds.address,
       username: creds.username,
       password: creds.password,
+      url: creds.url,
       weight: weight.value,
       iface: iface.value
     }
@@ -349,6 +351,9 @@ async function submitBulk() {
     } else {
       toast.success(t('upstreams.wizard.success_added', { count: res.count }))
     }
+    if (res.skipped_middle_proxy && res.skipped_middle_proxy.length > 0) {
+      toast.warning(t('upstreams.wizard.ss_skipped_middle_proxy', { count: res.skipped_middle_proxy.length }), 8000)
+    }
     emit('added')
     emit('update:modelValue', false)
   } catch (err: any) {
@@ -360,6 +365,12 @@ async function submitBulk() {
 
 function parseProxyCredentials(line: string) {
   line = line.trim()
+
+  // Shadowsocks: the whole line is an ss:// URL.
+  if (line.startsWith('ss://')) {
+    return { type: 'shadowsocks', address: '', username: '', password: '', url: line }
+  }
+
   let type = 'socks5'
   if (line.startsWith('socks5://')) {
     line = line.slice(9)
@@ -377,7 +388,8 @@ function parseProxyCredentials(line: string) {
       type,
       address: addr,
       username: cParts[0] || '',
-      password: cParts[1] || ''
+      password: cParts[1] || '',
+      url: ''
     }
   }
 
@@ -387,14 +399,16 @@ function parseProxyCredentials(line: string) {
       type,
       address: `${parts[0]}:${parts[1]}`,
       username: parts[2] || '',
-      password: parts.slice(3).join(':') || ''
+      password: parts.slice(3).join(':') || '',
+      url: ''
     }
   } else if (parts.length === 3) {
     return {
       type,
       address: `${parts[0]}:${parts[1]}`,
       username: parts[2] || '',
-      password: ''
+      password: '',
+      url: ''
     }
   }
 
@@ -402,7 +416,8 @@ function parseProxyCredentials(line: string) {
     type,
     address: line,
     username: '',
-    password: ''
+    password: '',
+    url: ''
   }
 }
 </script>

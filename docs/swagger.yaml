@@ -69,11 +69,13 @@ definitions:
       password:
         type: string
       type:
-        description: direct, socks5, socks4
         enum:
         - direct
         - socks5
         - socks4
+        - shadowsocks
+        type: string
+      url:
         type: string
       username:
         type: string
@@ -116,6 +118,9 @@ definitions:
         - direct
         - socks5
         - socks4
+        - shadowsocks
+        type: string
+      url:
         type: string
       username:
         type: string
@@ -354,6 +359,9 @@ definitions:
         - direct
         - socks5
         - socks4
+        - shadowsocks
+        type: string
+      url:
         type: string
       username:
         type: string
@@ -416,6 +424,9 @@ definitions:
         - direct
         - socks5
         - socks4
+        - shadowsocks
+        type: string
+      url:
         type: string
       username:
         type: string
@@ -1364,6 +1375,32 @@ paths:
       summary: Build engine image
       tags:
       - engine
+  /engine/build/cancel:
+    post:
+      consumes:
+      - application/json
+      description: Cancels the currently running engine image build (manual build
+        or update build)
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Cancel engine build
+      tags:
+      - engine
   /engine/check:
     post:
       consumes:
@@ -1503,6 +1540,46 @@ paths:
       security:
       - BearerAuth: []
       summary: Apply engine update
+      tags:
+      - engine
+  /engine/update/cancel:
+    post:
+      consumes:
+      - application/json
+      description: Cancels a running telemt engine update build process
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Cancel engine update
+      tags:
+      - engine
+  /engine/update/logs:
+    get:
+      description: Returns the build log contents of the telemt engine build process
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Get engine build logs
       tags:
       - engine
   /engine/update/ws:

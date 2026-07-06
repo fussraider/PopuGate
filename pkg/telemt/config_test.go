@@ -406,6 +406,56 @@ func TestRenderTOML_WithUpstreams(t *testing.T) {
 	}
 }
 
+func TestBuildConfig_ShadowsocksUpstream(t *testing.T) {
+	const ssURL = "ss://2022-blake3-aes-256-gcm:cGFzcw==@127.0.0.1:8388"
+	params := &ConfigParams{
+		Settings: &model.Settings{ProxyPort: 443, ProxyMetricsPort: 9091},
+		Upstreams: []UpstreamEntry{
+			{Type: model.UpstreamShadowsocks, URL: ssURL, Weight: 10, Enabled: true},
+		},
+	}
+
+	cfg := BuildConfig(params)
+	if len(cfg.Upstreams) != 1 {
+		t.Fatalf("expected 1 upstream, got %d", len(cfg.Upstreams))
+	}
+	uc := cfg.Upstreams[0]
+	if uc.Type != "shadowsocks" {
+		t.Errorf("type = %q, want shadowsocks", uc.Type)
+	}
+	if uc.URL != ssURL {
+		t.Errorf("url = %q, want %q", uc.URL, ssURL)
+	}
+	if uc.Address != "" || uc.Username != "" || uc.Password != "" || uc.UserID != "" {
+		t.Errorf("shadowsocks upstream must not set address/username/password/user_id, got %+v", uc)
+	}
+}
+
+func TestRenderTOML_ShadowsocksUpstream(t *testing.T) {
+	const ssURL = "ss://2022-blake3-aes-256-gcm:cGFzcw==@127.0.0.1:8388"
+	cfg := &TelemtConfig{
+		General:  GeneralConfig{Modes: ModesConfig{}, Links: LinksConfig{}},
+		Server:   ServerConfig{MetricsWhitelist: []string{}},
+		Timeouts: TimeoutsConfig{},
+		Access:   AccessConfig{Users: map[string]string{}},
+		Upstreams: []UpstreamConfig{
+			{Type: "shadowsocks", Weight: 10, URL: ssURL},
+		},
+	}
+
+	toml := renderTOML(cfg)
+	if !strings.Contains(toml, `type = "shadowsocks"`) {
+		t.Error("shadowsocks type line missing")
+	}
+	if !strings.Contains(toml, `url = "`+ssURL+`"`) {
+		t.Errorf("url line missing or wrong; got:\n%s", toml)
+	}
+	// The shadowsocks block must not emit socks-only keys.
+	if strings.Contains(toml, "address = ") || strings.Contains(toml, "username = ") || strings.Contains(toml, "password = ") || strings.Contains(toml, "user_id = ") {
+		t.Errorf("shadowsocks block must not contain address/username/password/user_id; got:\n%s", toml)
+	}
+}
+
 func TestRenderTOML_UserLimits(t *testing.T) {
 	cfg := &TelemtConfig{
 		General:  GeneralConfig{Modes: ModesConfig{}, Links: LinksConfig{}},

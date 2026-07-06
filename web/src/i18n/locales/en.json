@@ -670,6 +670,7 @@
     "type_label": "Type",
     "direct": "Direct",
     "address_label": "Address (host:port)",
+    "url_label": "Shadowsocks URL",
     "username": "Username",
     "password": "Password",
     "weight_label": "Weight",
@@ -686,6 +687,7 @@
     "hint_name": "Unique connection name",
     "hint_type": "Network connection type",
     "hint_address": "Server address (IP or domain)",
+    "hint_url": "ss:// URL. Requires Middle-Proxy mode disabled in Settings.",
     "hint_credentials": "Authentication credentials",
     "hint_interface": "Network interface to bind",
     "hint_weight": "Load balancing weight",
@@ -729,7 +731,8 @@
       "back": "Back",
       "next": "Next",
       "success_added": "Successfully added {count} upstreams.",
-      "success_added_skipped": "Added {count} upstreams ({skipped} skipped as duplicates)."
+      "success_added_skipped": "Added {count} upstreams ({skipped} skipped as duplicates).",
+      "ss_skipped_middle_proxy": "{count} shadowsocks upstream(s) skipped: Middle-Proxy mode is enabled in Settings."
     }
   },
   "system": {
@@ -837,6 +840,8 @@
     "telemt_repo": "Repository URL",
     "telemt_repo_placeholder": "e.g. https://github.com/telemt/telemt.git",
     "ad_tag_title": "Ad Tag",
+    "use_middle_proxy": "Enable Middle-Proxy mode",
+    "use_middle_proxy_hint": "Required for ad_tag / promoted channels. Must be OFF to use shadowsocks upstreams (telemt rejects them in Middle-Proxy mode).",
     "ad_tag_label": "Ad Tag (from {'@'}MTProxyBot)",
     "maintenance": "Maintenance",
     "auto_update": "Enable automatic update checks",

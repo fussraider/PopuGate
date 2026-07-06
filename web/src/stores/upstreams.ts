@@ -93,7 +93,7 @@ export const useUpstreamsStore = defineStore('upstreams', () => {
     }
   }
 
-  async function testConfig(data: { type: string; address?: string; username?: string; password?: string; iface?: string }) {
+  async function testConfig(data: { type: string; address?: string; username?: string; password?: string; url?: string; iface?: string }) {
     testingConfig.value = true
     testResult.value = null
     try {

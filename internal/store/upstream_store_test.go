@@ -382,7 +382,6 @@ func TestUpstreamStore_CreateMultiple(t *testing.T) {
 	s := NewUpstreamStore(db)
 	ctx := context.Background()
 
-	// 1. Success case: insert two valid upstreams
 	ups := []*model.Upstream{
 		{Name: "bulk1", Type: model.UpstreamDirect, Weight: 10, Enabled: true},
 		{Name: "bulk2", Type: model.UpstreamSOCKS5, Address: "1.2.3.4:1080", Weight: 15, Enabled: true},
@@ -407,30 +406,44 @@ func TestUpstreamStore_CreateMultiple(t *testing.T) {
 	if got2 == nil || got2.Address != "1.2.3.4:1080" {
 		t.Error("failed to retrieve bulk2")
 	}
+}
 
-	// 2. Ignore duplicate names case
-	ups2 := []*model.Upstream{
+func TestUpstreamStore_CreateMultiple_IgnoresDuplicateNames(t *testing.T) {
+	db := testutil.OpenTestDB(t)
+	s := NewUpstreamStore(db)
+	ctx := context.Background()
+
+	existing := &model.Upstream{Name: "bulk2", Type: model.UpstreamSOCKS5, Address: "1.2.3.4:1080", Weight: 15, Enabled: true}
+	if err := s.Create(ctx, existing); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	ups := []*model.Upstream{
 		{Name: "bulk2", Type: model.UpstreamSOCKS5, Address: "1.2.3.4:1080", Weight: 15, Enabled: true}, // duplicate, should be ignored
 		{Name: "bulk3", Type: model.UpstreamDirect, Weight: 20, Enabled: true},                          // new
 	}
-	inserted2, err := s.CreateMultiple(ctx, ups2)
+	inserted, err := s.CreateMultiple(ctx, ups)
 	if err != nil {
 		t.Fatalf("CreateMultiple with duplicate: %v", err)
 	}
-	if len(inserted2) != 1 {
-		t.Errorf("expected inserted count = 1, got %d", len(inserted2))
+	if len(inserted) != 1 {
+		t.Errorf("expected inserted count = 1, got %d", len(inserted))
 	}
-	if len(inserted2) == 1 && inserted2[0].Name != "bulk3" {
-		t.Errorf("expected only bulk3 inserted, got %s", inserted2[0].Name)
+	if len(inserted) == 1 && inserted[0].Name != "bulk3" {
+		t.Errorf("expected only bulk3 inserted, got %s", inserted[0].Name)
 	}
+}
 
-	// 3. Rollback case: one of the entries fails validation
-	ups3 := []*model.Upstream{
+func TestUpstreamStore_CreateMultiple_RollsBackOnInvalid(t *testing.T) {
+	db := testutil.OpenTestDB(t)
+	s := NewUpstreamStore(db)
+	ctx := context.Background()
+
+	ups := []*model.Upstream{
 		{Name: "bulk4", Type: model.UpstreamDirect, Weight: 10, Enabled: true},
 		{Name: "", Type: model.UpstreamDirect, Weight: 10, Enabled: true}, // invalid: empty name
 	}
-	_, err = s.CreateMultiple(ctx, ups3)
-	if err == nil {
+	if _, err := s.CreateMultiple(ctx, ups); err == nil {
 		t.Fatal("expected validation error")
 	}
 
@@ -438,5 +451,62 @@ func TestUpstreamStore_CreateMultiple(t *testing.T) {
 	got4, _ := s.GetByName(ctx, "bulk4")
 	if got4 != nil {
 		t.Error("bulk4 should not exist due to transaction rollback")
+	}
+}
+
+func TestUpstreamStore_ShadowsocksRoundTrip(t *testing.T) {
+	db := testutil.OpenTestDB(t)
+	s := NewUpstreamStore(db)
+	ctx := context.Background()
+
+	const ssURL = "ss://2022-blake3-aes-256-gcm:cGFzcw==@127.0.0.1:8388"
+	u := &model.Upstream{
+		Name:    "my-ss",
+		Type:    model.UpstreamShadowsocks,
+		URL:     ssURL,
+		Weight:  20,
+		Enabled: true,
+	}
+	if err := s.Create(ctx, u); err != nil {
+		t.Fatalf("Create shadowsocks: %v", err)
+	}
+
+	got, err := s.GetByName(ctx, "my-ss")
+	if err != nil {
+		t.Fatalf("GetByName: %v", err)
+	}
+	if got == nil {
+		t.Fatal("expected shadowsocks upstream, got nil")
+	}
+	if got.Type != model.UpstreamShadowsocks {
+		t.Errorf("type = %q, want shadowsocks", got.Type)
+	}
+	if got.URL != ssURL {
+		t.Errorf("url = %q, want %q", got.URL, ssURL)
+	}
+
+	// Health columns must still work after the 017 table rebuild.
+	if err := s.UpdateHealth(ctx, "my-ss", true, 42, ""); err != nil {
+		t.Fatalf("UpdateHealth on shadowsocks row: %v", err)
+	}
+	got, _ = s.GetByName(ctx, "my-ss")
+	if got.LatencyMs != 42 {
+		t.Errorf("latency_ms = %d, want 42 (health columns lost in rebuild?)", got.LatencyMs)
+	}
+}
+
+// TestUpstreamStore_MigrationRelaxedTypeCheck verifies migration 017 relaxed the
+// type CHECK constraint to include shadowsocks while still rejecting unknown types.
+func TestUpstreamStore_MigrationRelaxedTypeCheck(t *testing.T) {
+	db := testutil.OpenTestDB(t)
+	ctx := context.Background()
+
+	if _, err := db.ExecContext(ctx,
+		`INSERT INTO upstreams (name, type, url, weight) VALUES ('ss-raw', 'shadowsocks', 'ss://x@127.0.0.1:8388', 10)`); err != nil {
+		t.Fatalf("insert shadowsocks should be allowed after migration 017: %v", err)
+	}
+	if _, err := db.ExecContext(ctx,
+		`INSERT INTO upstreams (name, type, weight) VALUES ('bad', 'http', 10)`); err == nil {
+		t.Fatal("insert with type 'http' must be rejected by CHECK constraint")
 	}
 }

@@ -459,7 +459,8 @@ func TestUpstreamService_AutoRecovery(t *testing.T) {
 		recoveredNotified = true
 	})
 
-	svc.handleAutoRecovery(ctx, "test-rec", 45)
+	recovered, _ := svc.Get(ctx, "test-rec")
+	svc.handleAutoRecovery(ctx, recovered, 45)
 
 	got, _ = svc.Get(ctx, "test-rec")
 	if !got.Enabled {

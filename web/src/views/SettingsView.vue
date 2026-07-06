@@ -77,6 +77,11 @@
       <!-- Ad Tag -->
       <div class="card mb-lg">
         <h3 class="mb-md">{{ t('settings_view.ad_tag_title') }}</h3>
+        <label class="checkbox-label mb-md">
+          <input v-model="form.use_middle_proxy" type="checkbox" />
+          {{ t('settings_view.use_middle_proxy') }}
+        </label>
+        <small class="text-muted">{{ t('settings_view.use_middle_proxy_hint') }}</small>
         <div class="form-group">
           <label class="form-label">{{ t('settings_view.ad_tag_label') }}</label>
           <input v-model="form.ad_tag" class="input" placeholder="32 hex characters" maxlength="32" />

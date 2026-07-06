@@ -1,14 +1,26 @@
 package model
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
+
+// isShadowsocksURL reports whether s is a syntactically plausible ss:// URL.
+// Full method/cipher validation is delegated to the telemt engine; here we only
+// guard against empty or non-ss values reaching the config.
+func isShadowsocksURL(s string) bool {
+	s = strings.TrimSpace(s)
+	return strings.HasPrefix(s, "ss://") && len(s) > len("ss://")
+}
 
 // UpstreamType defines the proxy upstream type.
 type UpstreamType string
 
 const (
-	UpstreamDirect UpstreamType = "direct"
-	UpstreamSOCKS5 UpstreamType = "socks5"
-	UpstreamSOCKS4 UpstreamType = "socks4"
+	UpstreamDirect      UpstreamType = "direct"
+	UpstreamSOCKS5      UpstreamType = "socks5"
+	UpstreamSOCKS4      UpstreamType = "socks4"
+	UpstreamShadowsocks UpstreamType = "shadowsocks"
 )
 
 // Upstream represents a proxy upstream configuration.
@@ -19,18 +31,19 @@ type Upstream struct {
 	Address  string       `json:"address" db:"address"`
 	Username string       `json:"username" db:"username"`
 	Password string       `json:"password" db:"password"`
+	URL      string       `json:"url" db:"url"` // shadowsocks ss:// URL (shadowsocks type only)
 	Weight   int          `json:"weight" db:"weight"`
 	Iface    string       `json:"iface" db:"iface"`
 	Enabled  bool         `json:"enabled" db:"enabled"`
 
 	// Health fields
-	LastCheckAt int64  `json:"last_check_at" db:"last_check_at"` // unix timestamp
-	LastCheckOK *bool  `json:"last_check_ok" db:"last_check_ok"` // nil=never tested
-	LatencyMs   int64  `json:"latency_ms" db:"latency_ms"`       // last test latency
-	LastError   string `json:"last_error" db:"last_error"`       // last error message
-	FailCount      int          `json:"fail_count" db:"fail_count"`       // consecutive failures
-	AutoDisabled   bool         `json:"auto_disabled" db:"auto_disabled"`
-	AutoDisabledAt int64        `json:"auto_disabled_at" db:"auto_disabled_at"`
+	LastCheckAt    int64  `json:"last_check_at" db:"last_check_at"` // unix timestamp
+	LastCheckOK    *bool  `json:"last_check_ok" db:"last_check_ok"` // nil=never tested
+	LatencyMs      int64  `json:"latency_ms" db:"latency_ms"`       // last test latency
+	LastError      string `json:"last_error" db:"last_error"`       // last error message
+	FailCount      int    `json:"fail_count" db:"fail_count"`       // consecutive failures
+	AutoDisabled   bool   `json:"auto_disabled" db:"auto_disabled"`
+	AutoDisabledAt int64  `json:"auto_disabled_at" db:"auto_disabled_at"`
 }
 
 // Validate checks upstream fields.
@@ -44,6 +57,11 @@ func (u *Upstream) Validate() error {
 	case UpstreamSOCKS5, UpstreamSOCKS4:
 		if u.Address == "" {
 			return fmt.Errorf("address is required for %s upstream", u.Type)
+		}
+	case UpstreamShadowsocks:
+		// Shadowsocks uses an ss:// URL instead of address/credentials.
+		if !isShadowsocksURL(u.URL) {
+			return fmt.Errorf("a valid ss:// URL is required for shadowsocks upstream")
 		}
 	default:
 		return fmt.Errorf("invalid upstream type: %s", u.Type)

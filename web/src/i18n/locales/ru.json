@@ -670,6 +670,7 @@
     "type_label": "Тип",
     "direct": "Прямой",
     "address_label": "Адрес (хост:порт)",
+    "url_label": "Shadowsocks URL",
     "username": "Логин",
     "password": "Пароль",
     "weight_label": "Вес",
@@ -686,6 +687,7 @@
     "hint_name": "Уникальное имя подключения",
     "hint_type": "Тип подключения к сети",
     "hint_address": "Адрес сервера (IP или домен)",
+    "hint_url": "ss:// URL. Требует отключения режима Middle-Proxy в настройках.",
     "hint_credentials": "Учётные данные для аутентификации",
     "hint_interface": "Сетевой интерфейс для привязки",
     "hint_weight": "Вес для балансировки нагрузки",
@@ -729,7 +731,8 @@
       "back": "Назад",
       "next": "Далее",
       "success_added": "Успешно добавлено апстримов: {count}.",
-      "success_added_skipped": "Добавлено апстримов: {count} (пропущено дубликатов: {skipped})."
+      "success_added_skipped": "Добавлено апстримов: {count} (пропущено дубликатов: {skipped}).",
+      "ss_skipped_middle_proxy": "Пропущено shadowsocks-апстримов: {count} — в настройках включен режим Middle-Proxy."
     }
   },
   "system": {
@@ -837,6 +840,8 @@
     "telemt_repo": "URL репозитория",
     "telemt_repo_placeholder": "напр. https://github.com/telemt/telemt.git",
     "ad_tag_title": "Ad Tag",
+    "use_middle_proxy": "Включить режим Middle-Proxy",
+    "use_middle_proxy_hint": "Нужен для ad_tag / промо-каналов. Должен быть ВЫКЛ для shadowsocks-апстримов (telemt отклоняет их в режиме Middle-Proxy).",
     "ad_tag_label": "Ad Tag (от {'@'}MTProxyBot)",
     "maintenance": "Обслуживание",
     "auto_update": "Включить автопроверку обновлений",

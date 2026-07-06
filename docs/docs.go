@@ -1374,6 +1374,46 @@ const docTemplate = `{
                 }
             }
         },
+        "/engine/build/cancel": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Cancels the currently running engine image build (manual build or update build)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "engine"
+                ],
+                "summary": "Cancel engine build",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/engine/check": {
             "post": {
                 "security": [
@@ -1586,6 +1626,71 @@ const docTemplate = `{
                             "additionalProperties": {
                                 "type": "string"
                             }
+                        }
+                    }
+                }
+            }
+        },
+        "/engine/update/cancel": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Cancels a running telemt engine update build process",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "engine"
+                ],
+                "summary": "Cancel engine update",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/engine/update/logs": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns the build log contents of the telemt engine build process",
+                "produces": [
+                    "text/plain"
+                ],
+                "tags": [
+                    "engine"
+                ],
+                "summary": "Get engine build logs",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "string"
                         }
                     }
                 }
@@ -6521,13 +6626,16 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "type": {
-                    "description": "direct, socks5, socks4",
                     "type": "string",
                     "enum": [
                         "direct",
                         "socks5",
-                        "socks4"
+                        "socks4",
+                        "shadowsocks"
                     ]
+                },
+                "url": {
+                    "type": "string"
                 },
                 "username": {
                     "type": "string"
@@ -6586,8 +6694,12 @@ const docTemplate = `{
                     "enum": [
                         "direct",
                         "socks5",
-                        "socks4"
+                        "socks4",
+                        "shadowsocks"
                     ]
+                },
+                "url": {
+                    "type": "string"
                 },
                 "username": {
                     "type": "string"
@@ -6940,8 +7052,12 @@ const docTemplate = `{
                     "enum": [
                         "direct",
                         "socks5",
-                        "socks4"
+                        "socks4",
+                        "shadowsocks"
                     ]
+                },
+                "url": {
+                    "type": "string"
                 },
                 "username": {
                     "type": "string"
@@ -7029,8 +7145,12 @@ const docTemplate = `{
                     "enum": [
                         "direct",
                         "socks5",
-                        "socks4"
+                        "socks4",
+                        "shadowsocks"
                     ]
+                },
+                "url": {
+                    "type": "string"
                 },
                 "username": {
                     "type": "string"

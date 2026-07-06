@@ -107,6 +107,35 @@ func TestUpstreamValidate(t *testing.T) {
 			wantErr: true,
 		},
 		{
+			name: "valid shadowsocks with ss url",
+			upstream: Upstream{
+				Name:   "my-ss",
+				Type:   UpstreamShadowsocks,
+				URL:    "ss://2022-blake3-aes-256-gcm:cGFzcw==@127.0.0.1:8388",
+				Weight: 50,
+			},
+			wantErr: false,
+		},
+		{
+			name: "shadowsocks without url",
+			upstream: Upstream{
+				Name:   "ss-no-url",
+				Type:   UpstreamShadowsocks,
+				Weight: 50,
+			},
+			wantErr: true,
+		},
+		{
+			name: "shadowsocks with non-ss url",
+			upstream: Upstream{
+				Name:   "ss-bad-url",
+				Type:   UpstreamShadowsocks,
+				URL:    "socks5://127.0.0.1:1080",
+				Weight: 50,
+			},
+			wantErr: true,
+		},
+		{
 			name: "weight zero",
 			upstream: Upstream{
 				Name:   "zero-weight",

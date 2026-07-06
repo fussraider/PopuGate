@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/fussraider/PopuGate/internal/model"
 	"github.com/fussraider/PopuGate/internal/service"
 	"github.com/fussraider/PopuGate/internal/store"
 	"github.com/fussraider/PopuGate/pkg/logger"
@@ -15,6 +16,7 @@ import (
 type ConfigHandler struct {
 	settings     *store.SettingsStore
 	containerSvc *service.ContainerService
+	upstreams    *store.UpstreamStore
 }
 
 var configLog = logger.WithScope("config")
@@ -29,6 +31,8 @@ var allowedConfigKeys = map[string]bool{
 	"proxy_protocol_trusted_cidrs": true,
 	// Ad tag
 	"ad_tag": true,
+	// Middle-Proxy mode
+	"use_middle_proxy": true,
 	// Geo-blocking
 	"geoblock_mode": true, "blocklist_countries": true,
 	// Traffic masking
@@ -70,6 +74,11 @@ func (h *ConfigHandler) SetContainerSvc(svc *service.ContainerService) {
 	h.containerSvc = svc
 }
 
+// SetUpstreams sets the upstream store (used to guard the use_middle_proxy ↔ shadowsocks conflict).
+func (h *ConfigHandler) SetUpstreams(upstreams *store.UpstreamStore) {
+	h.upstreams = upstreams
+}
+
 // GetAll handles GET /api/v1/config
 // @Summary      Get all settings
 // @Description  Returns all application settings
@@ -108,30 +117,14 @@ func (h *ConfigHandler) Update(c *gin.Context) {
 		return
 	}
 
-	// Convert to string map, filtering to allowed keys only
-	strUpdates := make(map[string]string)
-	var rejected []string
-	for k, v := range updates {
-		if !allowedConfigKeys[k] {
-			rejected = append(rejected, k)
-			continue
-		}
-		switch val := v.(type) {
-		case nil:
-			continue // skip null values
-		case bool:
-			strUpdates[k] = strconv.FormatBool(val)
-		case float64:
-			strUpdates[k] = strconv.FormatFloat(val, 'f', -1, 64)
-		case string:
-			strUpdates[k] = val
-		default:
-			continue // skip unsupported types
-		}
-	}
+	strUpdates, rejected := filterAllowedConfigUpdates(updates)
 
 	if len(strUpdates) == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "no valid settings provided", "rejected": rejected})
+		return
+	}
+
+	if !h.middleProxyGuardPasses(c, strUpdates) {
 		return
 	}
 
@@ -154,6 +147,54 @@ func (h *ConfigHandler) Update(c *gin.Context) {
 		}
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true, "applied": applied, "rejected": rejected})
+}
+
+// filterAllowedConfigUpdates converts the raw JSON map to a string map,
+// keeping only whitelisted keys and supported value types.
+func filterAllowedConfigUpdates(updates map[string]any) (strUpdates map[string]string, rejected []string) {
+	strUpdates = make(map[string]string)
+	for k, v := range updates {
+		if !allowedConfigKeys[k] {
+			rejected = append(rejected, k)
+			continue
+		}
+		switch val := v.(type) {
+		case nil:
+			continue // skip null values
+		case bool:
+			strUpdates[k] = strconv.FormatBool(val)
+		case float64:
+			strUpdates[k] = strconv.FormatFloat(val, 'f', -1, 64)
+		case string:
+			strUpdates[k] = val
+		default:
+			continue // skip unsupported types
+		}
+	}
+	return strUpdates, rejected
+}
+
+// middleProxyGuardPasses enforces the ADR-001 symmetric guard: refuse enabling
+// Middle-Proxy mode while an enabled shadowsocks upstream exists, because
+// telemt rejects shadowsocks upstreams in ME mode (which would break the whole
+// engine config, not just that upstream). Writes the HTTP error response and
+// returns false when the update must be rejected.
+func (h *ConfigHandler) middleProxyGuardPasses(c *gin.Context, strUpdates map[string]string) bool {
+	if strUpdates["use_middle_proxy"] != "true" || h.upstreams == nil {
+		return true
+	}
+	ups, err := h.upstreams.ListEnabled(c.Request.Context())
+	if err != nil {
+		HandleError(c, http.StatusInternalServerError, "failed to check upstreams", err)
+		return false
+	}
+	for _, u := range ups {
+		if u.Type == model.UpstreamShadowsocks {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "cannot enable Middle-Proxy mode while shadowsocks upstream '" + u.Name + "' is enabled; disable it first"})
+			return false
+		}
+	}
+	return true
 }
 
 // sensitiveKeys are settings that must never be exposed via the API.

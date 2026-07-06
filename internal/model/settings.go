@@ -26,6 +26,10 @@ type Settings struct {
 	// Ad tag
 	AdTag string `json:"ad_tag"`
 
+	// Middle-Proxy mode (Telegram promoted channels / ad_tag). Default true.
+	// Must be false to use shadowsocks upstreams (telemt rejects them in ME mode).
+	UseMiddleProxy bool `json:"use_middle_proxy"`
+
 	// Geo-blocking
 	GeoblockMode       string `json:"geoblock_mode"`
 	BlocklistCountries string `json:"blocklist_countries"`
@@ -121,6 +125,7 @@ func DefaultSettings() Settings {
 		ProxyConcurrency:           8192,
 		FakeCertLen:                2048,
 		GeoblockMode:               "blacklist",
+		UseMiddleProxy:             true,
 		MaskingEnabled:             true,
 		MaskingPort:                443,
 		UnknownSNIAction:           "mask",

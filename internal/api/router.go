@@ -122,6 +122,7 @@ func SetupRouter(cfg RouterConfig) *gin.Engine {
 		// Config
 		configHandler := handler.NewConfigHandler(cfg.Settings)
 		configHandler.SetContainerSvc(cfg.ContainerSvc)
+		configHandler.SetUpstreams(cfg.Upstreams)
 		protected.GET("/config", configHandler.GetAll)
 		protected.PUT("/config", configHandler.Update)
 		protected.GET("/config/:key", configHandler.GetKey)

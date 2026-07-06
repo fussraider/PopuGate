@@ -7,6 +7,7 @@ export interface Settings {
   proxy_protocol: boolean
   proxy_protocol_trusted_cidrs: string
   ad_tag: string
+  use_middle_proxy: boolean
   geoblock_mode: 'blacklist' | 'whitelist'
   blocklist_countries: string
   proxy_secret_url: string
@@ -74,10 +75,11 @@ export interface ProxyLink {
 export interface Upstream {
   id: number
   name: string
-  type: 'direct' | 'socks5' | 'socks4'
+  type: 'direct' | 'socks5' | 'socks4' | 'shadowsocks'
   address: string
   username: string
   password: string
+  url: string
   weight: number
   iface: string
   enabled: boolean

@@ -59,23 +59,48 @@ func (h *UpstreamHandler) List(c *gin.Context) {
 	c.JSON(http.StatusOK, upstreams)
 }
 
-type addUpstreamRequest struct {
-	Name     string `json:"name" binding:"required,alphanumdash,max=32"`
-	Type     string `json:"type" binding:"required,oneof=direct socks5 socks4"` // direct, socks5, socks4
+// upstreamConfigFields holds the connection fields shared by every upstream
+// request. Embedded into the request structs so the type whitelist and the
+// request→model mapping live in exactly one place.
+type upstreamConfigFields struct {
+	Type     string `json:"type" binding:"required,oneof=direct socks5 socks4 shadowsocks"`
 	Address  string `json:"address"`
 	Username string `json:"username"`
 	Password string `json:"password"`
-	Weight   int    `json:"weight" binding:"omitempty,min=1,max=100"`
+	URL      string `json:"url"`
 	Iface    string `json:"iface"`
 }
 
+// toUpstream maps (and trims) the shared fields into a model.Upstream.
+// Caller sets Name/Weight/Enabled as appropriate.
+func (f upstreamConfigFields) toUpstream() *model.Upstream {
+	return &model.Upstream{
+		Type:     model.UpstreamType(strings.TrimSpace(f.Type)),
+		Address:  strings.TrimSpace(f.Address),
+		Username: strings.TrimSpace(f.Username),
+		Password: strings.TrimSpace(f.Password),
+		URL:      strings.TrimSpace(f.URL),
+		Iface:    strings.TrimSpace(f.Iface),
+	}
+}
+
+// defaultWeight returns w, or 10 when unset (0).
+func defaultWeight(w int) int {
+	if w == 0 {
+		return 10
+	}
+	return w
+}
+
+type addUpstreamRequest struct {
+	Name   string `json:"name" binding:"required,alphanumdash,max=32"`
+	Weight int    `json:"weight" binding:"omitempty,min=1,max=100"`
+	upstreamConfigFields
+}
+
 type updateUpstreamRequest struct {
-	Type     string `json:"type" binding:"required,oneof=direct socks5 socks4"`
-	Address  string `json:"address"`
-	Username string `json:"username"`
-	Password string `json:"password"`
-	Weight   int    `json:"weight" binding:"omitempty,min=1,max=100"`
-	Iface    string `json:"iface"`
+	Weight int `json:"weight" binding:"omitempty,min=1,max=100"`
+	upstreamConfigFields
 }
 
 // Update handles PUT /api/v1/upstreams/:name
@@ -98,18 +123,9 @@ func (h *UpstreamHandler) Update(c *gin.Context) {
 		return
 	}
 
-	u := &model.Upstream{
-		Name:     name,
-		Type:     model.UpstreamType(strings.TrimSpace(req.Type)),
-		Address:  strings.TrimSpace(req.Address),
-		Username: strings.TrimSpace(req.Username),
-		Password: strings.TrimSpace(req.Password),
-		Weight:   req.Weight,
-		Iface:    strings.TrimSpace(req.Iface),
-	}
-	if u.Weight == 0 {
-		u.Weight = 10
-	}
+	u := req.toUpstream()
+	u.Name = name
+	u.Weight = defaultWeight(req.Weight)
 
 	if err := h.upstreams.Update(c.Request.Context(), name, u); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -122,11 +138,7 @@ func (h *UpstreamHandler) Update(c *gin.Context) {
 }
 
 type testUpstreamRequest struct {
-	Type     string `json:"type" binding:"required,oneof=direct socks5 socks4"`
-	Address  string `json:"address"`
-	Username string `json:"username"`
-	Password string `json:"password"`
-	Iface    string `json:"iface"`
+	upstreamConfigFields
 }
 
 // Add handles POST /api/v1/upstreams
@@ -147,18 +159,9 @@ func (h *UpstreamHandler) Add(c *gin.Context) {
 		return
 	}
 
-	u := &model.Upstream{
-		Name:     strings.TrimSpace(req.Name),
-		Type:     model.UpstreamType(strings.TrimSpace(req.Type)),
-		Address:  strings.TrimSpace(req.Address),
-		Username: strings.TrimSpace(req.Username),
-		Password: strings.TrimSpace(req.Password),
-		Weight:   req.Weight,
-		Iface:    strings.TrimSpace(req.Iface),
-	}
-	if u.Weight == 0 {
-		u.Weight = 10
-	}
+	u := req.toUpstream()
+	u.Name = strings.TrimSpace(req.Name)
+	u.Weight = defaultWeight(req.Weight)
 
 	if err := h.upstreams.Add(c.Request.Context(), u); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -268,13 +271,7 @@ func (h *UpstreamHandler) TestConfig(c *gin.Context) {
 		return
 	}
 
-	u := &model.Upstream{
-		Type:     model.UpstreamType(strings.TrimSpace(req.Type)),
-		Address:  strings.TrimSpace(req.Address),
-		Username: strings.TrimSpace(req.Username),
-		Password: strings.TrimSpace(req.Password),
-		Iface:    strings.TrimSpace(req.Iface),
-	}
+	u := req.toUpstream()
 
 	result, err := h.upstreams.TestConfig(c.Request.Context(), u)
 	if err != nil {
@@ -385,50 +382,8 @@ func (h *UpstreamHandler) BulkCheck(c *gin.Context) {
 				return
 			}
 
-			u, err := service.ParseProxyLine(rawLine)
-			if err != nil {
-				select {
-				case resultsChan <- bulkCheckResult{Input: rawLine, Error: err.Error(), OK: false}:
-				case <-ctx.Done():
-				}
-				return
-			}
-
-			res, err := h.upstreams.TestConfig(ctx, u)
-			hasScheme := strings.HasPrefix(rawLine, "socks5://") || strings.HasPrefix(rawLine, "socks4://")
-			if !hasScheme && (err != nil || (res != nil && !res.OK)) && u.Type == model.UpstreamSOCKS5 {
-				u.Type = model.UpstreamSOCKS4
-				res2, err2 := h.upstreams.TestConfig(ctx, u)
-				if err2 == nil && res2 != nil && res2.OK {
-					res = res2
-					err = nil
-				}
-			}
-
-			ok := err == nil && res.OK
-			errMsg := ""
-			if err != nil {
-				errMsg = err.Error()
-			} else if res != nil && !res.OK {
-				errMsg = res.Error
-			}
-			latency := int64(0)
-			exitIP := ""
-			if res != nil {
-				latency = res.LatencyMs
-				exitIP = res.ExitIP
-			}
-
 			select {
-			case resultsChan <- bulkCheckResult{
-				Input:     rawLine,
-				Address:   u.Address,
-				Type:      string(u.Type),
-				OK:        ok,
-				ExitIP:    exitIP,
-				LatencyMs: latency,
-				Error:     errMsg,
-			}:
+			case resultsChan <- h.checkProxyLine(ctx, rawLine):
 			case <-ctx.Done():
 			}
 		}(line)
@@ -455,13 +410,62 @@ func (h *UpstreamHandler) BulkCheck(c *gin.Context) {
 	}
 }
 
+// checkProxyLine parses one bulk-check input line and probes the resulting
+// upstream, falling back from SOCKS5 to SOCKS4 for scheme-less lines.
+func (h *UpstreamHandler) checkProxyLine(ctx context.Context, rawLine string) bulkCheckResult {
+	u, err := service.ParseProxyLine(rawLine)
+	if err != nil {
+		return bulkCheckResult{Input: rawLine, Error: err.Error(), OK: false}
+	}
+
+	res, err := h.upstreams.TestConfig(ctx, u)
+	if shouldRetryAsSOCKS4(rawLine, u, res, err) {
+		u.Type = model.UpstreamSOCKS4
+		if res2, err2 := h.upstreams.TestConfig(ctx, u); err2 == nil && res2 != nil && res2.OK {
+			res = res2
+			err = nil
+		}
+	}
+
+	return buildBulkCheckResult(rawLine, u, res, err)
+}
+
+// shouldRetryAsSOCKS4 reports whether a failed SOCKS5 probe of a scheme-less
+// line should be retried as SOCKS4 (the line's protocol is ambiguous).
+func shouldRetryAsSOCKS4(rawLine string, u *model.Upstream, res *model.UpstreamTestResult, err error) bool {
+	hasScheme := strings.HasPrefix(rawLine, "socks5://") || strings.HasPrefix(rawLine, "socks4://") || strings.HasPrefix(rawLine, "ss://")
+	failed := err != nil || (res != nil && !res.OK)
+	return !hasScheme && failed && u.Type == model.UpstreamSOCKS5
+}
+
+func buildBulkCheckResult(rawLine string, u *model.Upstream, res *model.UpstreamTestResult, err error) bulkCheckResult {
+	ok := err == nil && res.OK
+	errMsg := ""
+	if err != nil {
+		errMsg = err.Error()
+	} else if res != nil && !res.OK {
+		errMsg = res.Error
+	}
+	latency := int64(0)
+	exitIP := ""
+	if res != nil {
+		latency = res.LatencyMs
+		exitIP = res.ExitIP
+	}
+	return bulkCheckResult{
+		Input:     rawLine,
+		Address:   u.Address,
+		Type:      string(u.Type),
+		OK:        ok,
+		ExitIP:    exitIP,
+		LatencyMs: latency,
+		Error:     errMsg,
+	}
+}
+
 type bulkAddRequestItem struct {
-	Type     string `json:"type" binding:"required,oneof=direct socks5 socks4"`
-	Address  string `json:"address"`
-	Username string `json:"username"`
-	Password string `json:"password"`
-	Weight   int    `json:"weight" binding:"omitempty,min=1,max=100"`
-	Iface    string `json:"iface"`
+	Weight int `json:"weight" binding:"omitempty,min=1,max=100"`
+	upstreamConfigFields
 }
 
 type bulkAddRequest struct {
@@ -488,47 +492,36 @@ func (h *UpstreamHandler) BulkAdd(c *gin.Context) {
 
 	upstreams := make([]*model.Upstream, 0, len(req.Upstreams))
 	for _, item := range req.Upstreams {
-		weight := item.Weight
-		if weight == 0 {
-			weight = 10
-		}
-		u := &model.Upstream{
-			Type:     model.UpstreamType(strings.TrimSpace(item.Type)),
-			Address:  strings.TrimSpace(item.Address),
-			Username: strings.TrimSpace(item.Username),
-			Password: strings.TrimSpace(item.Password),
-			Weight:   weight,
-			Iface:    strings.TrimSpace(item.Iface),
-		}
-		// Generate unique name
+		u := item.toUpstream()
+		u.Weight = defaultWeight(item.Weight)
 		u.Name = service.GenerateBulkUpstreamName(u)
-
 		upstreams = append(upstreams, u)
 	}
 
-	inserted, err := h.upstreams.AddMultiple(c.Request.Context(), upstreams)
+	inserted, skippedSS, err := h.upstreams.AddMultiple(c.Request.Context(), upstreams)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
 	insertedCount := len(inserted)
-	skipped := len(upstreams) - insertedCount
-	upstreamLog.Infof("bulk add: %d inserted, %d skipped (duplicates)", insertedCount, skipped)
+	skipped := len(upstreams) - insertedCount - len(skippedSS)
+	upstreamLog.Infof("bulk add: %d inserted, %d skipped (duplicates), %d skipped (shadowsocks/middle-proxy)", insertedCount, skipped, len(skippedSS))
 
 	names := make([]string, 0, insertedCount)
 	for _, u := range inserted {
 		names = append(names, u.Name)
 	}
 
-	auditLog(c, "upstream.bulk_create", fmt.Sprintf("count=%d skipped=%d", insertedCount, skipped))
+	auditLog(c, "upstream.bulk_create", fmt.Sprintf("count=%d skipped=%d skipped_ss=%d", insertedCount, skipped, len(skippedSS)))
 	if insertedCount > 0 {
 		h.reloadInstances(c.Request.Context(), fmt.Sprintf("bulk added %d upstreams", insertedCount))
 	}
 	c.JSON(http.StatusCreated, gin.H{
-		"ok":      true,
-		"count":   insertedCount,
-		"skipped": skipped,
-		"names":   names,
+		"ok":                   true,
+		"count":                insertedCount,
+		"skipped":              skipped,
+		"skipped_middle_proxy": skippedSS,
+		"names":                names,
 	})
 }

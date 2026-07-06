@@ -19,36 +19,61 @@ func NewUpstreamStore(db *sql.DB) *UpstreamStore {
 	return &UpstreamStore{db: db}
 }
 
-// List returns all upstreams.
-func (s *UpstreamStore) List(ctx context.Context) ([]model.Upstream, error) {
-	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, name, type, address, username, password, weight, iface, enabled,
-		       last_check_at, last_check_ok, latency_ms, last_error, fail_count,
-		       auto_disabled, auto_disabled_at
-		FROM upstreams ORDER BY id
-	`)
+// upstreamSelectColumns is the canonical column order shared by every full-row
+// SELECT; scanUpstream below scans in this exact order.
+const upstreamSelectColumns = `id, name, type, address, username, password, url, weight, iface, enabled,
+	last_check_at, last_check_ok, latency_ms, last_error, fail_count,
+	auto_disabled, auto_disabled_at`
+
+// Write column set shared by Create and CreateMultiple (and upstreamWriteArgs).
+const (
+	upstreamInsertColumns = "name, type, address, username, password, url, weight, iface, enabled"
+	upstreamInsertValues  = "?, ?, ?, ?, ?, ?, ?, ?, ?"
+)
+
+// rowScanner is satisfied by both *sql.Row and *sql.Rows.
+type rowScanner interface {
+	Scan(dest ...any) error
+}
+
+// scanUpstream reads one full upstream row. The scan order MUST match upstreamSelectColumns.
+func scanUpstream(sc rowScanner) (model.Upstream, error) {
+	var u model.Upstream
+	var enabled, autoDisabled int
+	var lastCheckOK sql.NullInt64
+	if err := sc.Scan(&u.ID, &u.Name, &u.Type, &u.Address, &u.Username,
+		&u.Password, &u.URL, &u.Weight, &u.Iface, &enabled,
+		&u.LastCheckAt, &lastCheckOK, &u.LatencyMs, &u.LastError, &u.FailCount,
+		&autoDisabled, &u.AutoDisabledAt); err != nil {
+		return u, err
+	}
+	u.Enabled = intToBool(enabled)
+	u.AutoDisabled = intToBool(autoDisabled)
+	if lastCheckOK.Valid {
+		v := intToBool(int(lastCheckOK.Int64))
+		u.LastCheckOK = &v
+	}
+	return u, nil
+}
+
+// upstreamWriteArgs returns the INSERT arg list in upstreamInsertColumns order.
+func upstreamWriteArgs(u *model.Upstream) []any {
+	return []any{u.Name, u.Type, u.Address, u.Username, u.Password, u.URL, u.Weight, u.Iface, boolToInt(u.Enabled)}
+}
+
+// queryUpstreams runs a full-row SELECT and scans every result.
+func (s *UpstreamStore) queryUpstreams(ctx context.Context, query string, args ...any) ([]model.Upstream, error) {
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("list upstreams: %w", err)
+		return nil, fmt.Errorf("query upstreams: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
 	upstreams := make([]model.Upstream, 0)
 	for rows.Next() {
-		var u model.Upstream
-		var enabled int
-		var autoDisabled int
-		var lastCheckOK sql.NullInt64
-		if err := rows.Scan(&u.ID, &u.Name, &u.Type, &u.Address, &u.Username,
-			&u.Password, &u.Weight, &u.Iface, &enabled,
-			&u.LastCheckAt, &lastCheckOK, &u.LatencyMs, &u.LastError, &u.FailCount,
-			&autoDisabled, &u.AutoDisabledAt); err != nil {
+		u, err := scanUpstream(rows)
+		if err != nil {
 			return nil, fmt.Errorf("scan upstream: %w", err)
-		}
-		u.Enabled = intToBool(enabled)
-		u.AutoDisabled = intToBool(autoDisabled)
-		if lastCheckOK.Valid {
-			v := intToBool(int(lastCheckOK.Int64))
-			u.LastCheckOK = &v
 		}
 		upstreams = append(upstreams, u)
 	}
@@ -58,85 +83,34 @@ func (s *UpstreamStore) List(ctx context.Context) ([]model.Upstream, error) {
 	return upstreams, nil
 }
 
+// List returns all upstreams.
+func (s *UpstreamStore) List(ctx context.Context) ([]model.Upstream, error) {
+	return s.queryUpstreams(ctx, "SELECT "+upstreamSelectColumns+" FROM upstreams ORDER BY id")
+}
+
 // GetByName returns a single upstream by name.
 func (s *UpstreamStore) GetByName(ctx context.Context, name string) (*model.Upstream, error) {
-	var u model.Upstream
-	var enabled int
-	var lastCheckOK sql.NullInt64
-	var autoDisabled int
-	err := s.db.QueryRowContext(ctx, `
-		SELECT id, name, type, address, username, password, weight, iface, enabled,
-		       last_check_at, last_check_ok, latency_ms, last_error, fail_count,
-		       auto_disabled, auto_disabled_at
-		FROM upstreams WHERE name = ?
-	`, name).Scan(&u.ID, &u.Name, &u.Type, &u.Address, &u.Username,
-		&u.Password, &u.Weight, &u.Iface, &enabled,
-		&u.LastCheckAt, &lastCheckOK, &u.LatencyMs, &u.LastError, &u.FailCount,
-		&autoDisabled, &u.AutoDisabledAt)
+	row := s.db.QueryRowContext(ctx, "SELECT "+upstreamSelectColumns+" FROM upstreams WHERE name = ?", name)
+	u, err := scanUpstream(row)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("get upstream %s: %w", name, err)
 	}
-	u.Enabled = intToBool(enabled)
-	u.AutoDisabled = intToBool(autoDisabled)
-	if lastCheckOK.Valid {
-		v := intToBool(int(lastCheckOK.Int64))
-		u.LastCheckOK = &v
-	}
 	return &u, nil
 }
 
 // ListEnabled returns only enabled upstreams.
 func (s *UpstreamStore) ListEnabled(ctx context.Context) ([]model.Upstream, error) {
-	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, name, type, address, username, password, weight, iface, enabled,
-		       last_check_at, last_check_ok, latency_ms, last_error, fail_count,
-		       auto_disabled, auto_disabled_at
-		FROM upstreams WHERE enabled = 1 ORDER BY id
-	`)
-	if err != nil {
-		return nil, fmt.Errorf("list enabled upstreams: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-
-	upstreams := make([]model.Upstream, 0)
-	for rows.Next() {
-		var u model.Upstream
-		var enabled int
-		var autoDisabled int
-		var lastCheckOK sql.NullInt64
-		if err := rows.Scan(&u.ID, &u.Name, &u.Type, &u.Address, &u.Username,
-			&u.Password, &u.Weight, &u.Iface, &enabled,
-			&u.LastCheckAt, &lastCheckOK, &u.LatencyMs, &u.LastError, &u.FailCount,
-			&autoDisabled, &u.AutoDisabledAt); err != nil {
-			return nil, fmt.Errorf("scan upstream: %w", err)
-		}
-		u.Enabled = intToBool(enabled)
-		u.AutoDisabled = intToBool(autoDisabled)
-		if lastCheckOK.Valid {
-			v := intToBool(int(lastCheckOK.Int64))
-			u.LastCheckOK = &v
-		}
-		upstreams = append(upstreams, u)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate enabled upstreams: %w", err)
-	}
-	return upstreams, nil
+	return s.queryUpstreams(ctx, "SELECT "+upstreamSelectColumns+" FROM upstreams WHERE enabled = 1 ORDER BY id")
 }
 
 // Create inserts a new upstream.
 func (s *UpstreamStore) Create(ctx context.Context, u *model.Upstream) error {
-	enabled := 0
-	if u.Enabled {
-		enabled = 1
-	}
-	result, err := s.db.ExecContext(ctx, `
-		INSERT INTO upstreams (name, type, address, username, password, weight, iface, enabled)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-	`, u.Name, u.Type, u.Address, u.Username, u.Password, u.Weight, u.Iface, enabled)
+	result, err := s.db.ExecContext(ctx,
+		"INSERT INTO upstreams ("+upstreamInsertColumns+") VALUES ("+upstreamInsertValues+")",
+		upstreamWriteArgs(u)...)
 	if err != nil {
 		return fmt.Errorf("create upstream: %w", err)
 	}
@@ -152,15 +126,11 @@ func (s *UpstreamStore) Delete(ctx context.Context, name string) error {
 
 // Update modifies an existing upstream identified by name.
 func (s *UpstreamStore) Update(ctx context.Context, name string, u *model.Upstream) error {
-	enabled := 0
-	if u.Enabled {
-		enabled = 1
-	}
 	result, err := s.db.ExecContext(ctx, `
-		UPDATE upstreams SET type = ?, address = ?, username = ?, password = ?, weight = ?, iface = ?, enabled = ?,
+		UPDATE upstreams SET type = ?, address = ?, username = ?, password = ?, url = ?, weight = ?, iface = ?, enabled = ?,
 		                     auto_disabled = 0, auto_disabled_at = 0
 		WHERE name = ?
-	`, u.Type, u.Address, u.Username, u.Password, u.Weight, u.Iface, enabled, name)
+	`, u.Type, u.Address, u.Username, u.Password, u.URL, u.Weight, u.Iface, boolToInt(u.Enabled), name)
 	if err != nil {
 		return fmt.Errorf("update upstream %s: %w", name, err)
 	}
@@ -244,10 +214,8 @@ func (s *UpstreamStore) CreateMultiple(ctx context.Context, upstreams []*model.U
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	stmt, err := tx.PrepareContext(ctx, `
-		INSERT OR IGNORE INTO upstreams (name, type, address, username, password, weight, iface, enabled)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-	`)
+	stmt, err := tx.PrepareContext(ctx,
+		"INSERT OR IGNORE INTO upstreams ("+upstreamInsertColumns+") VALUES ("+upstreamInsertValues+")")
 	if err != nil {
 		return nil, fmt.Errorf("prepare stmt: %w", err)
 	}
@@ -258,11 +226,7 @@ func (s *UpstreamStore) CreateMultiple(ctx context.Context, upstreams []*model.U
 		if err := u.Validate(); err != nil {
 			return nil, fmt.Errorf("validate upstream %s: %w", u.Name, err)
 		}
-		enabled := 0
-		if u.Enabled {
-			enabled = 1
-		}
-		res, err := stmt.ExecContext(ctx, u.Name, u.Type, u.Address, u.Username, u.Password, u.Weight, u.Iface, enabled)
+		res, err := stmt.ExecContext(ctx, upstreamWriteArgs(u)...)
 		if err != nil {
 			return nil, fmt.Errorf("exec insert %s: %w", u.Name, err)
 		}

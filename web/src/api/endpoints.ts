@@ -194,8 +194,8 @@ export const upstreamsApi = {
     api.post<UpstreamTestResult>('/upstreams/test', data).then((r) => r.data),
 
   bulkAdd: (data: {
-    upstreams: { type: string; address?: string; username?: string; password?: string; weight?: number; iface?: string }[]
-  }) => api.post<{ ok: boolean; count: number; skipped: number; names?: string[] }>('/upstreams/bulk', data).then((r) => r.data),
+    upstreams: { type: string; address?: string; username?: string; password?: string; url?: string; weight?: number; iface?: string }[]
+  }) => api.post<{ ok: boolean; count: number; skipped: number; skipped_middle_proxy?: string[]; names?: string[] }>('/upstreams/bulk', data).then((r) => r.data),
 }
 
 // ─── Instances ─────────────────────────────────────────────────

@@ -98,6 +98,7 @@ type UpstreamConfig struct {
 	Username  string `toml:"username,omitempty"`
 	Password  string `toml:"password,omitempty"`
 	UserID    string `toml:"user_id,omitempty"`
+	URL       string `toml:"url,omitempty"`
 	Interface string `toml:"interface,omitempty"`
 }
 
@@ -114,6 +115,7 @@ type InstanceConfigParams struct {
 	Instance              *model.Instance
 	DockerImage           string
 	FakeCertLen           int
+	UseMiddleProxy        bool
 	AdTag                 string
 	ProxyProtocol         bool
 	ProxyProtocolCIDRs    []string
@@ -140,6 +142,7 @@ type UpstreamEntry struct {
 	Address  string
 	Username string
 	Password string
+	URL      string // shadowsocks ss:// URL (shadowsocks type only)
 	Weight   int
 	Iface    string
 	Enabled  bool
@@ -184,15 +187,18 @@ func buildUpstreamConfig(up UpstreamEntry) UpstreamConfig {
 		Type:   string(up.Type),
 		Weight: up.Weight,
 	}
-	if up.Type != model.UpstreamDirect {
+	switch up.Type {
+	case model.UpstreamDirect:
+		// no address/credentials
+	case model.UpstreamShadowsocks:
+		uc.URL = up.URL
+	case model.UpstreamSOCKS5:
 		uc.Address = up.Address
-		switch up.Type {
-		case model.UpstreamSOCKS5:
-			uc.Username = up.Username
-			uc.Password = up.Password
-		case model.UpstreamSOCKS4:
-			uc.UserID = up.Username
-		}
+		uc.Username = up.Username
+		uc.Password = up.Password
+	case model.UpstreamSOCKS4:
+		uc.Address = up.Address
+		uc.UserID = up.Username
 	}
 	if up.Iface != "" {
 		uc.Interface = up.Iface
@@ -256,7 +262,7 @@ func BuildConfig(params *ConfigParams) *TelemtConfig {
 		General: GeneralConfig{
 			PreferIPv6:     false,
 			FastMode:       true,
-			UseMiddleProxy: true,
+			UseMiddleProxy: s.UseMiddleProxy,
 			LogLevel:       "normal",
 			AdTag:          s.AdTag,
 			Modes: ModesConfig{
@@ -338,7 +344,7 @@ func BuildInstanceConfig(params *InstanceConfigParams) *TelemtConfig {
 		General: GeneralConfig{
 			PreferIPv6:     false,
 			FastMode:       true,
-			UseMiddleProxy: true,
+			UseMiddleProxy: params.UseMiddleProxy,
 			LogLevel:       "normal",
 			AdTag:          params.AdTag,
 			Modes:          instanceModes(inst.FakeTLS),
@@ -578,6 +584,9 @@ func renderUpstreamsSection(b *strings.Builder, cfg *TelemtConfig) {
 		b.WriteString("[[upstreams]]\n")
 		fmt.Fprintf(b, "type = %q\n", up.Type)
 		fmt.Fprintf(b, "weight = %d\n", up.Weight)
+		if up.URL != "" {
+			fmt.Fprintf(b, "url = %q\n", up.URL)
+		}
 		if up.Address != "" {
 			fmt.Fprintf(b, "address = %q\n", up.Address)
 		}

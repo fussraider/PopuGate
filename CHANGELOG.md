@@ -5,12 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.6.0] - 2026-07-06
 
 ### Added
 - **Shadowsocks Upstreams**: Added `shadowsocks` as a fourth upstream type (alongside `direct`/`socks4`/`socks5`), wired end-to-end — model, store, service, handler, the generated telemt TOML (native `[[upstreams]] type = "shadowsocks"` + `url` key), and the Web UI. Supports single add/edit, bulk import (the wizard now auto-detects `ss://` lines and the parser/placeholder/hints list them), and a TCP-reachability connectivity probe. Migration `017_upstream_shadowsocks` rebuilds the `upstreams` table to relax the `type` CHECK constraint (SQLite cannot `ALTER` a CHECK) and adds a `url` column, preserving all existing rows and health/auto-disable state.
 - **Configurable Middle-Proxy Mode**: `use_middle_proxy` is now a global setting (default `true`, preserving prior behavior and `ad_tag` / promoted-channel support) with a toggle in the Settings view, instead of being hardcoded in the engine config builder. Shadowsocks upstreams require it disabled — telemt rejects Shadowsocks upstreams while Middle-Proxy mode is active, so both the API (service guard on add/update/enable, auto-recovery, and a symmetric guard when enabling the setting) and the Web UI prevent the conflicting combination with a clear, actionable error rather than letting the engine reject the whole config. Bulk import skips `ss://` lines with a warning (instead of rejecting the whole batch) while the mode is on. Migration `018_use_middle_proxy` seeds the default.
 - **Async Engine Updates with Cancel & Build Logs**: `POST /engine/update` now returns immediately and runs the build in the background (bounded by a 35-minute deadline; the proxy restart after a successful build is a point of no return with its own timeout). New endpoints: `POST /engine/update/cancel`, `POST /engine/build/cancel`, and `GET /engine/update/logs`. All engine builds — manual Build/Pull, Force Rebuild, and updates — share one cancellable build slot (concurrent builds get HTTP 409), write a per-run `telemt_build.log` that opens with a trigger header (`=== Manual force rebuild ===`, `=== Engine update to X ===`), and are surfaced in the System view via a collapsible Build Logs spoiler with a live-activity badge, cancel buttons, and a persistent last-update-error banner (`last_error` in the update status).
+
+### Changed
+- **Settings Page Layout**: Reorganized the Settings view from a single-column stack of full-width cards into a responsive multi-column grid (full/half/third-width cards, collapsing to two columns on tablets and one on mobile). The Middle-Proxy toggle and its explanation are now visually grouped and separated from the Ad Tag field (which is disabled while Middle-Proxy mode is off), and the API-docs link moved into the actions bar, removing a near-empty card.
+- **Dependencies**: Upgraded backend modules (`golang.org/x/*`, `modernc.org/sqlite` 1.53) and frontend packages (Vite 8.1, Vue 3.5.39, axios 1.18, vue-i18n 11.4.6, sass, vue-tsc, lucide icons) to their latest versions.
 
 ### Fixed
 - **Shared WebSocket subscriber tracking**: the subscriber counter in `useSharedWebSocket` was exposed through a computed over a plain (non-reactive) variable, so consumers always saw a stale value — the live-traffic and engine-update streams could open duplicate socket connections or fail to reconnect after a cancel. The counter is now a reactive ref.
@@ -387,6 +391,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - SQLite storage with WAL mode
 - JWT authentication
 
+[0.6.0]: https://github.com/fussraider/PopuGate/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/fussraider/PopuGate/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/fussraider/PopuGate/compare/v0.3.2...v0.4.0
 [0.3.2]: https://github.com/fussraider/PopuGate/compare/v0.3.1...v0.3.2

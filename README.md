@@ -192,8 +192,9 @@ Independent proxies with their own port, masking domains, FakeTLS, and access ta
 - **Live Logs**: Real-time per-instance container log streaming via SSE
 
 ### 🔀 Upstreams
-Proxy chains (SOCKS4/SOCKS5) with weight-based balancing, network interface binding, and automatic health-based failover/recovery (auto-disablement).
-- **Bulk Add**: Verify and import multiple proxies concurrently in a multi-step wizard, featuring auto-protocol detection, live exit IP detection, latency threshold filtering, and transactional batch insertion.
+Proxy chains (SOCKS4/SOCKS5/Shadowsocks) with weight-based balancing, network interface binding, and automatic health-based failover/recovery (auto-disablement).
+- **Bulk Add**: Verify and import multiple proxies concurrently in a multi-step wizard, featuring auto-protocol detection (`socks5://`, `socks4://`, `ss://`), live exit IP detection, latency threshold filtering, and transactional batch insertion. While Middle-Proxy mode is enabled, `ss://` lines are skipped with a warning instead of failing the whole batch.
+- **Shadowsocks**: Egress through a Shadowsocks server via its `ss://` URL. Requires **Middle-Proxy mode disabled** in Settings (the engine rejects Shadowsocks upstreams while Middle-Proxy / `ad_tag` is active; the UI and API guard against this combination).
 
 ### 🌍 Geoblock
 Country-based access restrictions (blacklist/whitelist) via `iptables`.
@@ -222,12 +223,12 @@ System action logs with advanced filtering by periods, actions, and usernames.
 ### 🖥️ System
 Consolidated page for system status, resources telemetry, OS info, systemd service management, Docker integration, and update operations:
 - **Systemd Service**: One-click install/remove, restart, and status logs.
-- **Docker Integration**: Docker availability checks, daemon updates, and building/updating the `telemt` proxy engine image.
+- **Docker Integration**: Docker availability checks, daemon updates, and building/updating the `telemt` proxy engine image. Engine updates run asynchronously in the background (with a safety timeout) and — like manual Build/Pull and Force Rebuild — can be cancelled mid-build; a collapsible **Build Logs** panel streams the per-run build log with a live-activity badge, and the last failed update is shown as a persistent error banner.
 - **Updates**: Auto-update scheduler task configurations (with failure Telegram alerts) and manual updates (systemd restart in binary mode, container recreation in Docker mode).
 - **TCP Network Tuning**: One-click enable/disable of TCP BBR congestion control and TCP FastOpen kernel optimizations (sysctl) with automatic backup and rollback to original values.
 
 ### ⚙️ Settings
-Global parameters: Docker CPU/memory limits, custom IP, FakeTLS, PROXY protocol, custom Telegram URLs, Ad Tag, secret auto-rotation, maintenance mode, backup rotation, debug mode.
+Global parameters: Docker CPU/memory limits, custom IP, FakeTLS, PROXY protocol, custom Telegram URLs, Ad Tag, Middle-Proxy mode toggle, secret auto-rotation, maintenance mode, backup rotation, debug mode.
 
 ### 📊 Dashboard Live Telemetry
 The Engine & Health card header shows a pulsing green **Live** badge when the real-time WebSocket status stream is connected, giving instant visual confirmation of live telemetry.

@@ -5,7 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.6.1] - 2026-07-06
+## [Unreleased]
+
+### Changed
+- **Engine upgraded to telemt 3.4.22** (from 3.3.39): bumped the pinned default engine version and commit (`DefaultTelemtVer` → `3.4.22`, `DefaultTelemtRef` → `ef1c06a`, the exact upstream tag commit). New installs and in-app engine updates now target 3.4.22; existing installs upgrade through the normal update flow. The target is pinned exactly to **3.4.22** to skip the known-bad intermediate range 3.4.19–3.4.21 (which corrupts outbound Secure/VersionD framing for `dd` secrets and breaks AD_TAG on multi-homed hosts). The upgrade brings automatic engine-side improvements at no config cost: post-quantum-aware TLS ServerHello fidelity, middle-proxy cancellation/stability hardening, the TimeWindow unique-IP limiter fix, and removal of the `ME_DIAG` diagnostics env that could log key material. No PopuGate-emitted config key or scraped metric name changed between 3.3.39 and 3.4.22, so generated configs and the metrics parser remain compatible (strict-config mode stays off).
+
+### Notes
+- **Quota persistence behavior on the new engine**: since 3.4.11 the engine persists per-user `used_bytes` to a state file. Because PopuGate mounts the engine config read-only and does not mount a writable data volume, that state file lands in the container's ephemeral layer (cleared on container recreate, survives SIGHUP/restart). A manual or monthly quota reset in PopuGate resets its own SQLite ledger but does not immediately clear the engine's enforcement counter until the container is recreated. This is a known, documented consideration; immediate reset propagation (via the engine's reset-quota API) is planned as a separate change.
+
+
 
 ### Fixed
 - **Live ME writer metrics were always zero**: the Prometheus scraper looked for `telemt_me_writers_active` / `telemt_me_writers_warm`, but the telemt engine emits these gauges as `telemt_me_writers_active_current` / `telemt_me_writers_warm_current` (verified against engine tags 3.3.39 and 3.4.22). The "ME Writers Active/Warm" tiles in the Traffic view therefore always showed 0; the parser now uses the correct metric names.

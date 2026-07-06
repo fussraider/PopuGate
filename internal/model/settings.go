@@ -199,8 +199,8 @@ func (s *Settings) Validate() {
 const (
 	ContainerName    = "popugate-telemt"
 	DockerImageBase  = "popugate-telemt"
-	DefaultTelemtVer = "3.3.39"
-	DefaultTelemtRef = "bc69153"
+	DefaultTelemtVer = "3.4.22"
+	DefaultTelemtRef = "ef1c06a"
 	DefaultTelemtURL = "https://github.com/telemt/telemt.git"
 	RegistryImage    = "ghcr.io/fussraider/popugate-telemt"
 	GitHubRepo       = "fussraider/PopuGate"

@@ -275,6 +275,10 @@ var InstallDir = "/opt/popugate"
 // ConfigDir returns the engine config directory.
 func ConfigDir() string { return filepath.Join(InstallDir, "mtproxy") }
 
+// TelemtBuildLogPath returns the engine build log file path (one log per
+// build run, shared by manual builds and engine updates).
+func TelemtBuildLogPath() string { return filepath.Join(InstallDir, "telemt_build.log") }
+
 // ProxyStatus represents the current state of the proxy.
 type ProxyStatus struct {
 	Running       bool             `json:"running"`

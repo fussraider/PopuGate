@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { dockerApi } from '@/api/endpoints'
 import { useSharedWebSocket } from '@/composables/useWebSocket'
+import { getErrorMessage } from '@/utils/error'
 import type { DockerStatus, EngineStatus, TelemtUpdateStatus, TelemtReleaseListItem, DockerUpdateStatus } from '@/types/models'
 
 export const useDockerStore = defineStore('docker', () => {
@@ -11,12 +12,14 @@ export const useDockerStore = defineStore('docker', () => {
   const building = ref(false)
   const buildResult = ref<string>('')
 
-  // telemt engine update state
   const telemtUpdateStatus = ref<TelemtUpdateStatus | null>(null)
   const checkingRemote = ref(false)
   const applyingUpdate = ref(false)
   const releases = ref<TelemtReleaseListItem[]>([])
   const selectedRelease = ref<TelemtReleaseListItem | null>(null)
+  const buildLogs = ref('')
+  const cancellingUpdate = ref(false)
+  const cancellingBuild = ref(false)
 
   // host Docker daemon package update state
   const hostUpdateStatus = ref<DockerUpdateStatus | null>(null)
@@ -53,7 +56,7 @@ export const useDockerStore = defineStore('docker', () => {
       buildResult.value = `[${res.method}] ${res.version}: ${res.message}`
       await loadEngineStatus()
     } catch (e: any) {
-      buildResult.value = `Error: ${e.message}`
+      buildResult.value = `Error: ${getErrorMessage(e)}`
     } finally {
       building.value = false
     }
@@ -93,10 +96,40 @@ export const useDockerStore = defineStore('docker', () => {
     try {
       await dockerApi.engineApplyUpdate(version, commit)
       ws.start()
-    } catch { /* error handled by caller */ }
-    applyingUpdate.value = false
-    await loadEngineStatus()
-    await loadTelemtUpdateStatus()
+    } finally {
+      applyingUpdate.value = false
+      await loadEngineStatus()
+      await loadTelemtUpdateStatus()
+    }
+  }
+
+  async function cancelTelemtUpdate() {
+    cancellingUpdate.value = true
+    try {
+      await dockerApi.engineCancelUpdate()
+    } finally {
+      cancellingUpdate.value = false
+      // Keep the ws stream alive: the background goroutine broadcasts the final
+      // status once the build actually stops, which clears the updating banner.
+      await loadEngineStatus()
+      await loadTelemtUpdateStatus()
+    }
+  }
+
+  async function cancelBuild() {
+    cancellingBuild.value = true
+    try {
+      await dockerApi.engineCancelBuild()
+    } finally {
+      cancellingBuild.value = false
+      await loadEngineStatus()
+    }
+  }
+
+  async function loadBuildLogs() {
+    try {
+      buildLogs.value = await dockerApi.engineBuildLogs()
+    } catch { /* ignore */ }
   }
 
   async function loadHostUpdateStatus() {
@@ -136,10 +169,11 @@ export const useDockerStore = defineStore('docker', () => {
   return {
     dockerStatus, engineStatus, loading, building, buildResult,
     telemtUpdateStatus, checkingRemote, applyingUpdate,
-    releases, selectedRelease,
+    releases, selectedRelease, buildLogs, cancellingUpdate, cancellingBuild,
     hostUpdateStatus, checkingHostRemote, applyingHostUpdate,
     loadDockerStatus, loadEngineStatus, installDocker, buildEngine,
     loadTelemtUpdateStatus, loadReleases, checkRemoteTelemt, applyTelemtUpdate,
+    cancelTelemtUpdate, cancelBuild, loadBuildLogs,
     loadHostUpdateStatus, checkHostRemote, applyHostUpdate,
     stopUpdateStream: ws.stop,
   }

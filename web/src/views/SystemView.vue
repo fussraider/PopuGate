@@ -372,13 +372,18 @@
           </div>
 
           <div class="btn-group-wrap mb-md">
-            <button class="btn btn-primary btn-sm" :disabled="dockerStore.building" @click="dockerStore.buildEngine(false)">
-              <Loader2 v-if="dockerStore.building" :size="16" class="animate-spin" />
-              {{ dockerStore.building ? t('docker.building') : t('docker.build_pull') }}
+            <button class="btn btn-primary btn-sm" :disabled="buildActive" @click="startEngineBuild(false)">
+              <Loader2 v-if="manualBuildActive" :size="16" class="animate-spin" />
+              {{ manualBuildActive ? t('docker.building') : t('docker.build_pull') }}
             </button>
-            <button class="btn btn-warning btn-sm" :disabled="dockerStore.building" @click="dockerStore.buildEngine(true)">
-              <Loader2 v-if="dockerStore.building" :size="16" class="animate-spin" />
+            <button class="btn btn-warning btn-sm" :disabled="buildActive" @click="startEngineBuild(true)">
+              <Loader2 v-if="manualBuildActive" :size="16" class="animate-spin" />
               {{ t('docker.force_rebuild') }}
+            </button>
+            <button v-if="manualBuildActive && !dockerStore.telemtUpdateStatus?.updating" class="btn btn-danger btn-sm" :disabled="dockerStore.cancellingBuild" @click="cancelEngineBuild">
+              <Loader2 v-if="dockerStore.cancellingBuild" :size="14" class="animate-spin inline-icon" />
+              <XCircle v-else :size="14" class="inline-icon" />
+              {{ t('docker.cancel_build') }}
             </button>
           </div>
           <div v-if="dockerStore.buildResult" class="alert alert-info py-sm text-sm mb-md">{{ dockerStore.buildResult }}</div>
@@ -388,9 +393,20 @@
 
             <h4 class="mb-md text-muted uppercase text-xs tracking-wider font-semibold">{{ t('docker.engine_updates') }}</h4>
 
-            <div v-if="dockerStore.telemtUpdateStatus?.updating" class="alert alert-info mb-md">
-              <Loader2 :size="16" class="animate-spin inline-icon" />
-              {{ t('docker.updating_to', { version: dockerStore.telemtUpdateStatus.updating_to }) }}
+            <div v-if="dockerStore.telemtUpdateStatus?.updating" class="alert alert-info mb-md flex-between flex-wrap gap-sm">
+              <div class="flex-center gap-sm">
+                <Loader2 :size="16" class="animate-spin inline-icon" />
+                {{ t('docker.updating_to', { version: dockerStore.telemtUpdateStatus.updating_to }) }}
+              </div>
+              <button class="btn btn-danger btn-xs" :disabled="dockerStore.cancellingUpdate" @click="cancelEngineUpdate">
+                <Loader2 v-if="dockerStore.cancellingUpdate" :size="12" class="animate-spin inline-icon" />
+                <XCircle v-else :size="12" class="inline-icon" />
+                {{ t('docker.cancel_update') }}
+              </button>
+            </div>
+
+            <div v-if="dockerStore.telemtUpdateStatus?.last_error && !dockerStore.telemtUpdateStatus?.updating" class="alert alert-danger py-sm text-sm mb-md">
+              {{ t('docker.last_update_error') }}: {{ dockerStore.telemtUpdateStatus.last_error }}
             </div>
 
             <div v-if="dockerStore.telemtUpdateStatus && !dockerStore.telemtUpdateStatus.updating" class="status-row mb-md">
@@ -422,7 +438,7 @@
                   </option>
                 </select>
                 <button class="btn btn-secondary btn-sm"
-                        :disabled="!dockerStore.selectedRelease || dockerStore.applyingUpdate || dockerStore.telemtUpdateStatus?.updating"
+                        :disabled="!dockerStore.selectedRelease || dockerStore.applyingUpdate || dockerStore.building || dockerStore.telemtUpdateStatus?.updating"
                         @click="handleSelectedRelease">
                   {{ t('docker.build_selected') }}
                 </button>
@@ -439,7 +455,7 @@
             </button>
             <button v-if="dockerStore.telemtUpdateStatus?.update_available && dockerStore.telemtUpdateStatus?.latest && !dockerStore.telemtUpdateStatus?.updating"
                     class="btn btn-warning btn-sm"
-                    :disabled="dockerStore.applyingUpdate"
+                    :disabled="dockerStore.applyingUpdate || dockerStore.building"
                     @click="handleEngineUpdate">
               <Loader2 v-if="dockerStore.applyingUpdate" :size="16" class="animate-spin" />
               {{ dockerStore.applyingUpdate ? t('docker.updating') : t('docker.update_engine') }}
@@ -449,6 +465,19 @@
             {{ t('docker.last_checked') }}: {{ formatDate(dockerStore.telemtUpdateStatus.last_checked) }}
           </div>
         </div>
+
+        <div class="build-logs-spoiler mt-md">
+          <button class="spoiler-toggle" @click="showBuildLogs = !showBuildLogs">
+            <ChevronRight :size="14" class="spoiler-chevron" :class="{ open: showBuildLogs }" />
+            <Terminal :size="14" />
+            {{ t('docker.build_logs') }}
+            <span v-if="buildActive" class="live-badge">
+              <span class="live-dot"></span>
+              <span class="live-label">{{ t('docker.build_in_progress') }}</span>
+            </span>
+          </button>
+          <pre v-if="showBuildLogs" class="build-logs-output" ref="buildLogsRef" v-html="ansiToHtml(dockerStore.buildLogs || t('docker.no_logs'))"></pre>
+        </div>
       </div>
     </div>
 
@@ -457,7 +486,7 @@
 </template>
 
 <script setup lang="ts">
-import {computed, onMounted, onBeforeUnmount} from 'vue'
+import {computed, onMounted, onBeforeUnmount, ref, watch, nextTick} from 'vue'
 import {useI18n} from 'vue-i18n'
 import {useSystemStore} from '@/stores/system'
 import {useDockerStore} from '@/stores/docker'
@@ -465,12 +494,14 @@ import {useUpdateStore} from '@/stores/update'
 import {useSchedulerStore} from '@/stores/scheduler'
 import {useToastStore} from '@/stores/toast'
 import {useConfirmDialog} from '@/composables/useConfirmDialog'
-import {ExternalLink, FileText, Loader2} from '@lucide/vue'
+import {ExternalLink, FileText, Loader2, XCircle, Terminal, ChevronRight} from '@lucide/vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import InfoGrid from '@/components/common/InfoGrid.vue'
 import InfoItem from '@/components/common/InfoItem.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import {formatBytes} from '@/utils/format'
+import {ansiToHtml} from '@/utils/ansi'
+import {getErrorMessage} from '@/utils/error'
 
 const { t } = useI18n()
 const systemStore = useSystemStore()
@@ -582,18 +613,30 @@ async function runAutoUpdateNow() {
 }
 
 // 5. Docker actions
+async function confirmAndApplyEngineUpdate(version: string, commit: string, confirmText: string) {
+  if (!await confirm({
+    title: t('docker.update_engine'),
+    message: t('docker.confirm_engine_update', { version }),
+    confirmText
+  })) return
+  showBuildLogs.value = true
+  try {
+    await dockerStore.applyTelemtUpdate(version, commit)
+  } catch (e) {
+    toast.error(getErrorMessage(e))
+  }
+}
+
 async function handleEngineUpdate() {
   const latest = dockerStore.telemtUpdateStatus?.latest
   if (!latest) return
-  if (!await confirm({ title: t('docker.update_engine'), message: t('docker.confirm_engine_update', { version: latest.version }), confirmText: t('docker.update_engine') })) return
-  await dockerStore.applyTelemtUpdate(latest.version, latest.commit || '')
+  await confirmAndApplyEngineUpdate(latest.version, latest.commit || '', t('docker.update_engine'))
 }
 
 async function handleSelectedRelease() {
   const release = dockerStore.selectedRelease
   if (!release) return
-  if (!await confirm({ title: t('docker.update_engine'), message: t('docker.confirm_engine_update', { version: release.version }), confirmText: t('docker.build_selected') })) return
-  await dockerStore.applyTelemtUpdate(release.version, release.commit || '')
+  await confirmAndApplyEngineUpdate(release.version, release.commit || '', t('docker.build_selected'))
 }
 
 async function handleHostUpdate() {
@@ -603,6 +646,104 @@ async function handleHostUpdate() {
     confirmText: t('docker.update_docker')
   })) return
   await dockerStore.applyHostUpdate()
+}
+
+// Build logs polling and cancel engine update
+// Manual build in progress: session-local request flag OR the server-side
+// registration (survives page reloads and covers other browser tabs).
+const manualBuildActive = computed(() =>
+  dockerStore.building || !!dockerStore.engineStatus?.build_running
+)
+const buildActive = computed(() =>
+  manualBuildActive.value || !!dockerStore.telemtUpdateStatus?.updating
+)
+const showBuildLogs = ref(false)
+const buildLogsRef = ref<HTMLElement | null>(null)
+let logsInterval: ReturnType<typeof setInterval> | null = null
+
+function startLogsPolling() {
+  stopLogsPolling()
+  dockerStore.loadBuildLogs()
+  logsInterval = setInterval(() => {
+    dockerStore.loadBuildLogs()
+    // Fallback for the ws stream: keep the updating banner in sync even if
+    // the final status broadcast is missed (e.g. reconnect race after cancel).
+    if (dockerStore.telemtUpdateStatus?.updating) {
+      dockerStore.loadTelemtUpdateStatus()
+    }
+    // Track server-side manual builds (survives reloads / other tabs).
+    if (dockerStore.engineStatus?.build_running) {
+      dockerStore.loadEngineStatus()
+    }
+  }, 2000)
+}
+
+function stopLogsPolling() {
+  if (logsInterval) {
+    clearInterval(logsInterval)
+    logsInterval = null
+  }
+}
+
+watch(
+  [buildActive, showBuildLogs],
+  ([active, showLogs]) => {
+    if (showLogs || active) {
+      startLogsPolling()
+    } else {
+      stopLogsPolling()
+    }
+  },
+  { immediate: true }
+)
+
+watch(() => dockerStore.buildLogs, () => {
+  if (buildLogsRef.value) {
+    nextTick(() => {
+      buildLogsRef.value!.scrollTop = buildLogsRef.value!.scrollHeight
+    })
+  }
+})
+
+onBeforeUnmount(() => {
+  stopLogsPolling()
+})
+
+async function startEngineBuild(force: boolean) {
+  showBuildLogs.value = true
+  await dockerStore.buildEngine(force)
+}
+
+async function cancelEngineBuild() {
+  if (!await confirm({
+    title: t('docker.cancel_build'),
+    message: t('docker.confirm_cancel_build'),
+    variant: 'danger',
+    confirmText: t('docker.cancel_build')
+  })) return
+
+  try {
+    await dockerStore.cancelBuild()
+    toast.success(t('docker.build_cancelled'))
+  } catch (e) {
+    toast.error(getErrorMessage(e))
+  }
+}
+
+async function cancelEngineUpdate() {
+  if (!await confirm({
+    title: t('docker.cancel_update'),
+    message: t('docker.confirm_cancel_update'),
+    variant: 'danger',
+    confirmText: t('docker.cancel_update')
+  })) return
+
+  try {
+    await dockerStore.cancelTelemtUpdate()
+    toast.success(t('docker.update_cancelled'))
+  } catch (e) {
+    toast.error(getErrorMessage(e))
+  }
 }
 
 function formatDate(unixTimestamp: string): string {
@@ -725,5 +866,47 @@ onBeforeUnmount(() => {
 
 .auto-update-section {
   padding-top: $spacing-xs;
+}
+
+.build-logs-output {
+  background: $color-gray-900;
+  color: $color-gray-100;
+  padding: $spacing-md;
+  border-radius: $border-radius;
+  font-family: $font-mono;
+  font-size: $font-size-sm;
+  max-height: 350px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  scroll-behavior: smooth;
+  margin-top: $spacing-xs;
+}
+
+.spoiler-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: $spacing-xs;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: $text-muted;
+  font-size: $font-size-xs;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+
+  &:hover {
+    color: $text-primary;
+  }
+}
+
+.spoiler-chevron {
+  transition: transform 0.15s ease;
+
+  &.open {
+    transform: rotate(90deg);
+  }
 }
 </style>

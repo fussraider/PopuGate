@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -98,11 +99,17 @@ func (h *DockerHandler) EngineStatus(c *gin.Context) {
 
 	hasImage, version := h.resolveImageVersion(ctx, version)
 
+	buildRunning := false
+	if h.dockerSvc != nil {
+		buildRunning = h.dockerSvc.BuildRunning()
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"installed":    hasImage,
-		"image_exists": hasImage,
-		"version":      version,
-		"up_to_date":   true,
+		"installed":     hasImage,
+		"image_exists":  hasImage,
+		"version":       version,
+		"up_to_date":    true,
+		"build_running": buildRunning,
 	})
 }
 
@@ -179,12 +186,47 @@ func (h *DockerHandler) Build(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 	defer cancel()
 
-	result, err := h.dockerSvc.BuildEngine(ctx, req.Force)
+	trigger := "Manual build/pull"
+	if req.Force {
+		trigger = "Manual force rebuild"
+	}
+	result, err := h.dockerSvc.BuildEngine(ctx, req.Force, trigger)
 	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			c.JSON(http.StatusOK, &service.BuildResult{Method: "cancelled", Message: "build cancelled by user"})
+			return
+		}
+		if errors.Is(err, service.ErrBuildInProgress) {
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to build engine: %v", err)})
 		return
 	}
 	c.JSON(http.StatusOK, result)
+}
+
+// CancelBuild handles POST /api/v1/engine/build/cancel
+// @Summary      Cancel engine build
+// @Description  Cancels the currently running engine image build (manual build or update build)
+// @Tags         engine
+// @Accept       json
+// @Produce      json
+// @Success      200  {object}  map[string]string
+// @Failure      400  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /engine/build/cancel [post]
+func (h *DockerHandler) CancelBuild(c *gin.Context) {
+	if h.dockerSvc == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "docker service not available"})
+		return
+	}
+	if err := h.dockerSvc.CancelBuild(); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	auditLog(c, "engine.build.cancel", "")
+	c.JSON(http.StatusOK, gin.H{"ok": true, "message": "engine build cancelled"})
 }
 
 // CheckUpdate handles GET /api/v1/docker/update/status

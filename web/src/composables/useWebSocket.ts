@@ -88,7 +88,7 @@ export function useWebSocket(options: UseWebSocketOptions) {
 export function useSharedWebSocket(options: UseWebSocketOptions) {
   const status = ref<'connected' | 'connecting' | 'disconnected'>('disconnected')
   const connected = computed(() => status.value === 'connected')
-  let subscribers = 0
+  const subscribers = ref(0)
 
   const ws = useWebSocket({
     url: options.url,
@@ -112,16 +112,16 @@ export function useSharedWebSocket(options: UseWebSocketOptions) {
   })
 
   function start() {
-    subscribers++
-    if (subscribers === 1) {
+    subscribers.value++
+    if (subscribers.value === 1) {
       status.value = 'connecting'
       ws.connect()
     }
   }
 
   function stop() {
-    subscribers = Math.max(0, subscribers - 1)
-    if (subscribers === 0) {
+    subscribers.value = Math.max(0, subscribers.value - 1)
+    if (subscribers.value === 0) {
       status.value = 'disconnected'
       ws.disconnect()
     }
@@ -132,6 +132,6 @@ export function useSharedWebSocket(options: UseWebSocketOptions) {
     connected,
     start,
     stop,
-    subscribers: computed(() => subscribers)
+    subscribers: computed(() => subscribers.value)
   }
 }

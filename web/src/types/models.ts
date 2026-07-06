@@ -230,6 +230,7 @@ export interface DockerStatus {
 export interface EngineStatus {
   version: string
   image_exists: boolean
+  build_running?: boolean
 }
 
 export interface BuildResult {
@@ -285,6 +286,7 @@ export interface TelemtUpdateStatus {
   installed_version?: string
   updating?: boolean
   updating_to?: string
+  last_error?: string
 }
 
 export interface BackupInfo {

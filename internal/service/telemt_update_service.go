@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -16,11 +17,30 @@ import (
 
 const telemtGitHubRepo = "telemt/telemt"
 
+const (
+	// updateTimeout bounds the whole background update (pull/build can stall
+	// on a dead network or hung docker daemon).
+	updateTimeout = 35 * time.Minute
+	// restartTimeout bounds the proxy restart after a successful build.
+	restartTimeout = 10 * time.Minute
+)
+
+// engineBuilder builds the telemt engine image (implemented by DockerService).
+type engineBuilder interface {
+	BuildEngine(ctx context.Context, force bool, trigger string) (*BuildResult, error)
+	BuildRunning() bool
+}
+
+// proxyRestarter restarts the proxy container (implemented by ContainerService).
+type proxyRestarter interface {
+	Restart(ctx context.Context) error
+}
+
 // TelemtUpdateService handles checking and applying telemt engine updates.
 type TelemtUpdateService struct {
 	settings     *store.SettingsStore
-	dockerSvc    *DockerService
-	containerSvc *ContainerService
+	dockerSvc    engineBuilder
+	containerSvc proxyRestarter
 	telemtCfg    *DBTelemtConfig
 	notify       atomic.Value
 
@@ -28,6 +48,7 @@ type TelemtUpdateService struct {
 	subscribers map[chan *TelemtUpdateStatus]struct{}
 
 	applyMu sync.Mutex
+	cancel  context.CancelFunc
 }
 
 // TelemtReleaseInfo holds information about a remote telemt release.
@@ -57,6 +78,7 @@ type TelemtUpdateStatus struct {
 	LastChecked     string             `json:"last_checked,omitempty"`
 	Updating        bool               `json:"updating"`
 	UpdatingTo      string             `json:"updating_to,omitempty"`
+	LastError       string             `json:"last_error,omitempty"`
 }
 
 // NewTelemtUpdateService creates a new TelemtUpdateService.
@@ -66,13 +88,20 @@ func NewTelemtUpdateService(
 	containerSvc *ContainerService,
 	telemtCfg *DBTelemtConfig,
 ) *TelemtUpdateService {
-	return &TelemtUpdateService{
-		settings:     settings,
-		dockerSvc:    dockerSvc,
-		containerSvc: containerSvc,
-		telemtCfg:    telemtCfg,
-		subscribers:  make(map[chan *TelemtUpdateStatus]struct{}),
+	s := &TelemtUpdateService{
+		settings:    settings,
+		telemtCfg:   telemtCfg,
+		subscribers: make(map[chan *TelemtUpdateStatus]struct{}),
 	}
+	// Assign via nil checks so a nil *DockerService/*ContainerService does not
+	// become a non-nil interface wrapping a nil pointer.
+	if dockerSvc != nil {
+		s.dockerSvc = dockerSvc
+	}
+	if containerSvc != nil {
+		s.containerSvc = containerSvc
+	}
+	return s
 }
 
 // Subscribe returns a channel that receives TelemtUpdateStatus updates.
@@ -117,6 +146,9 @@ func (s *TelemtUpdateService) ResetStaleUpdate(ctx context.Context) {
 			"telemt_updating":    "false",
 			"telemt_updating_to": "",
 		})
+		if status, err := s.GetStatus(ctx); err == nil {
+			s.broadcast(status)
+		}
 	}
 }
 
@@ -181,12 +213,14 @@ func (s *TelemtUpdateService) GetStatus(ctx context.Context) (*TelemtUpdateStatu
 
 	updatingFlag, _ := s.settings.Get(ctx, "telemt_updating")
 	updatingTo, _ := s.settings.Get(ctx, "telemt_updating_to")
+	lastError, _ := s.settings.Get(ctx, "telemt_update_error")
 
 	status := &TelemtUpdateStatus{
 		Current:     current,
 		LastChecked: lastChecked,
 		Updating:    updatingFlag == "true",
 		UpdatingTo:  updatingTo,
+		LastError:   lastError,
 	}
 
 	if latestVersion != "" {
@@ -207,12 +241,10 @@ func (s *TelemtUpdateService) GetStatus(ctx context.Context) (*TelemtUpdateStatu
 }
 
 // Apply performs the engine update: save version -> build image -> restart proxy.
-// The proxy is NOT stopped during the build.
+// The proxy is NOT stopped during the build. Runs asynchronously.
 func (s *TelemtUpdateService) Apply(ctx context.Context, version, commit string) error {
 	s.applyMu.Lock()
 	defer s.applyMu.Unlock()
-
-	log := logger.WithScope("telemt-update")
 
 	if !IsSafeGitRef(version) {
 		return fmt.Errorf("invalid version: rejected by safety check")
@@ -220,12 +252,32 @@ func (s *TelemtUpdateService) Apply(ctx context.Context, version, commit string)
 	if commit != "" && !IsSafeGitRef(commit) {
 		return fmt.Errorf("invalid commit: rejected by safety check")
 	}
+	if s.dockerSvc == nil {
+		return fmt.Errorf("docker service is not configured")
+	}
+
+	status, err := s.GetStatus(ctx)
+	if err != nil {
+		return err
+	}
+	if status.Updating {
+		return fmt.Errorf("update already in progress")
+	}
+	if s.dockerSvc.BuildRunning() {
+		return ErrBuildInProgress
+	}
 
 	updatingTo := fmt.Sprintf("%s-%s", version, commit)
-	_ = s.settings.Save(ctx, map[string]string{
-		"telemt_updating":    "true",
-		"telemt_updating_to": updatingTo,
-	})
+	// Persist the guard flag with a background context: the request context may
+	// be cancelled by a client disconnect right after the POST, and a silently
+	// failed save would let a second Apply start a concurrent update.
+	if err := s.settings.Save(context.Background(), map[string]string{
+		"telemt_updating":     "true",
+		"telemt_updating_to":  updatingTo,
+		"telemt_update_error": "",
+	}); err != nil {
+		return fmt.Errorf("save update state: %w", err)
+	}
 
 	if status, err := s.GetStatus(ctx); err == nil {
 		s.broadcast(status)
@@ -233,15 +285,35 @@ func (s *TelemtUpdateService) Apply(ctx context.Context, version, commit string)
 
 	s.notifyUpdate(ctx, "⏳ *%s* Updating telemt engine to %s...", updatingTo)
 
-	prevVersion, _ := s.settings.Get(ctx, "telemt_version")
-	prevCommit, _ := s.settings.Get(ctx, "telemt_commit")
+	s.mu.Lock()
+	// The overall update is bounded (pull/build can stall on a dead network or
+	// hung docker daemon); the deadline restores the old handler's 35m limit.
+	bgCtx, cancel := context.WithTimeout(context.Background(), updateTimeout)
+	s.cancel = cancel
+	s.mu.Unlock()
+
+	go s.runUpdateBackground(bgCtx, version, commit, updatingTo)
+
+	return nil
+}
+
+func (s *TelemtUpdateService) runUpdateBackground(ctx context.Context, version, commit, updatingTo string) {
+	log := logger.WithScope("telemt-update")
+
+	prevVersion, _ := s.settings.Get(context.Background(), "telemt_version")
+	prevCommit, _ := s.settings.Get(context.Background(), "telemt_commit")
 
 	defer func() {
-		_ = s.settings.Save(ctx, map[string]string{
+		s.mu.Lock()
+		s.cancel = nil
+		s.mu.Unlock()
+
+		cleanupCtx := context.Background()
+		_ = s.settings.Save(cleanupCtx, map[string]string{
 			"telemt_updating":    "false",
 			"telemt_updating_to": "",
 		})
-		if status, err := s.GetStatus(ctx); err == nil {
+		if status, err := s.GetStatus(cleanupCtx); err == nil {
 			s.broadcast(status)
 		}
 	}()
@@ -250,37 +322,87 @@ func (s *TelemtUpdateService) Apply(ctx context.Context, version, commit string)
 		"telemt_version": version,
 		"telemt_commit":  commit,
 	}); err != nil {
-		return fmt.Errorf("save telemt version: %w", err)
+		if ctx.Err() == context.Canceled {
+			s.notifyUpdate(context.Background(), "⏹️ *%s* Telemt engine update to %s cancelled by user", updatingTo)
+			return
+		}
+		log.Errorf("save version error: %v", err)
+		s.recordUpdateError(fmt.Sprintf("save error: %v", err))
+		s.notifyUpdate(context.Background(), "❌ *%s* Telemt engine update to %s failed: save error\n%s", updatingTo, err)
+		return
 	}
 
 	s.telemtCfg.InvalidateCache()
 
 	log.Infof("telemt version set to %s, building image...", updatingTo)
 
-	result, err := s.dockerSvc.BuildEngine(ctx, true)
+	result, err := s.dockerSvc.BuildEngine(ctx, true, fmt.Sprintf("Engine update to %s", updatingTo))
 	if err != nil {
 		log.Errorf("build failed, reverting version: %v", err)
-		_ = s.settings.Save(ctx, map[string]string{
+		revertCtx := context.Background()
+		_ = s.settings.Save(revertCtx, map[string]string{
 			"telemt_version": prevVersion,
 			"telemt_commit":  prevCommit,
 		})
 		s.telemtCfg.InvalidateCache()
-		s.notifyUpdate(ctx, "❌ *%s* Telemt engine update failed: build error\n%s", err)
-		return fmt.Errorf("build engine: %w", err)
+
+		switch {
+		case ctx.Err() == context.Canceled || errors.Is(err, context.Canceled):
+			s.notifyUpdate(revertCtx, "⏹️ *%s* Telemt engine update to %s cancelled by user", updatingTo)
+		case ctx.Err() == context.DeadlineExceeded || errors.Is(err, context.DeadlineExceeded):
+			s.recordUpdateError(fmt.Sprintf("update to %s timed out after %s", updatingTo, updateTimeout))
+			s.notifyUpdate(revertCtx, "❌ *%s* Telemt engine update to %s failed: timed out\n%s", updatingTo, err)
+		case errors.Is(err, ErrBuildInProgress):
+			s.recordUpdateError("update aborted: another engine build was in progress")
+			s.notifyUpdate(revertCtx, "⚠️ *%s* Telemt engine update to %s aborted: %s", updatingTo, err)
+		default:
+			s.recordUpdateError(fmt.Sprintf("build error: %v", err))
+			s.notifyUpdate(revertCtx, "❌ *%s* Telemt engine update to %s failed: build error\n%s", updatingTo, err)
+		}
+		return
 	}
 
 	log.Infof("engine image built successfully: [%s] %s", result.Method, result.Version)
 
 	if s.containerSvc != nil {
-		if err := s.containerSvc.Restart(ctx); err != nil {
+		// Point of no return: the new image is built and tagged. Restart runs on
+		// its own bounded context so a user cancel (or the update deadline firing
+		// mid-restart) cannot abort it halfway and leave the container stopped.
+		restartCtx, cancelRestart := context.WithTimeout(context.Background(), restartTimeout)
+		err := s.containerSvc.Restart(restartCtx)
+		cancelRestart()
+		if err != nil {
 			log.Warnf("proxy restart failed (image is ready): %v", err)
-			s.notifyUpdate(ctx, "❌ *%s* Telemt engine update failed: restart error\n%s", err)
-			return fmt.Errorf("build succeeded but restart failed: %w", err)
+			s.recordUpdateError(fmt.Sprintf("build succeeded but proxy restart failed: %v", err))
+			s.notifyUpdate(context.Background(), "❌ *%s* Telemt engine update to %s failed: restart error\n%s", updatingTo, err)
+			return
 		}
 		log.Infof("proxy restarted with new engine")
 	}
 
-	s.notifyUpdate(ctx, "✅ *%s* Telemt engine updated to %s", updatingTo)
+	s.notifyUpdate(context.Background(), "✅ *%s* Telemt engine updated to %s", updatingTo)
+}
+
+// recordUpdateError persists the last update failure so GetStatus can expose
+// it to the UI even after the updating flag clears.
+func (s *TelemtUpdateService) recordUpdateError(msg string) {
+	if err := s.settings.Save(context.Background(), map[string]string{"telemt_update_error": msg}); err != nil {
+		logger.WithScope("telemt-update").Warnf("failed to record update error: %v", err)
+	}
+}
+
+// Cancel cancels the running update process if one is active. The cancel
+// function is kept registered until the background goroutine actually exits,
+// so repeated calls while the update is winding down are idempotent.
+func (s *TelemtUpdateService) Cancel(ctx context.Context) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.cancel == nil {
+		return fmt.Errorf("no update in progress to cancel")
+	}
+
+	s.cancel()
 	return nil
 }
 

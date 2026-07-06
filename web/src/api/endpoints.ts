@@ -277,6 +277,12 @@ export const dockerApi = {
   engineCheckRemote: () => api.post<TelemtUpdateStatus>('/engine/check', {}).then((r) => r.data),
   engineApplyUpdate: (version: string, commit: string) =>
     api.post<{ ok: boolean; message: string; version: string }>('/engine/update', { version, commit }, { timeout: 2100000 }).then((r) => r.data),
+  engineCancelUpdate: () =>
+    api.post<{ ok: boolean; message: string }>('/engine/update/cancel', {}).then((r) => r.data),
+  engineCancelBuild: () =>
+    api.post<{ ok: boolean; message: string }>('/engine/build/cancel', {}).then((r) => r.data),
+  engineBuildLogs: () =>
+    api.get<string>('/engine/update/logs').then((r) => r.data),
 
   // Host Docker daemon update methods
   updateStatus: () => api.get<DockerUpdateStatus>('/docker/update/status').then((r) => r.data),

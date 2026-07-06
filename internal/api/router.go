@@ -222,6 +222,7 @@ func SetupRouter(cfg RouterConfig) *gin.Engine {
 		protected.POST("/docker/update/apply", dockerHandler.ApplyUpdate)
 		protected.GET("/engine/status", dockerHandler.EngineStatus)
 		protected.POST("/engine/build", dockerHandler.Build)
+		protected.POST("/engine/build/cancel", dockerHandler.CancelBuild)
 
 		// telemt engine updates
 		if cfg.TelemtUpdateSvc != nil {
@@ -230,6 +231,8 @@ func SetupRouter(cfg RouterConfig) *gin.Engine {
 			protected.GET("/engine/releases", telemtUpdateHandler.GetReleases)
 			protected.POST("/engine/check", telemtUpdateHandler.CheckRemote)
 			protected.POST("/engine/update", telemtUpdateHandler.Apply)
+			protected.POST("/engine/update/cancel", telemtUpdateHandler.Cancel)
+			protected.GET("/engine/update/logs", telemtUpdateHandler.GetBuildLogs)
 		}
 
 		// Geoblock

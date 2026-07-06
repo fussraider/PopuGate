@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/fussraider/PopuGate/internal/model"
 	"github.com/fussraider/PopuGate/internal/service"
 )
 
@@ -132,19 +134,58 @@ func (h *TelemtUpdateHandler) Apply(c *gin.Context) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 35*time.Minute)
-	defer cancel()
-
-	if err := h.telemtUpdateSvc.Apply(ctx, req.Version, req.Commit); err != nil {
+	if err := h.telemtUpdateSvc.Apply(c.Request.Context(), req.Version, req.Commit); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	auditLog(c, "engine.update", fmt.Sprintf("version=%s", req.Version))
+	auditLog(c, "engine.update.start", fmt.Sprintf("version=%s", req.Version))
 	c.JSON(http.StatusOK, gin.H{
 		"ok":      true,
-		"message": "engine updated successfully",
+		"message": "engine update started",
 		"version": req.Version,
 		"commit":  req.Commit,
 	})
+}
+
+// Cancel handles POST /api/v1/engine/update/cancel
+// @Summary      Cancel engine update
+// @Description  Cancels a running telemt engine update build process
+// @Tags         engine
+// @Accept       json
+// @Produce      json
+// @Success      200  {object}  map[string]string
+// @Failure      400  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /engine/update/cancel [post]
+func (h *TelemtUpdateHandler) Cancel(c *gin.Context) {
+	if err := h.telemtUpdateSvc.Cancel(c.Request.Context()); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	auditLog(c, "engine.update.cancel", "")
+	c.JSON(http.StatusOK, gin.H{
+		"ok":      true,
+		"message": "engine update cancelled",
+	})
+}
+
+// GetBuildLogs handles GET /api/v1/engine/update/logs
+// @Summary      Get engine build logs
+// @Description  Returns the build log contents of the telemt engine build process
+// @Tags         engine
+// @Produce      text/plain
+// @Success      200  {string}  string
+// @Security     BearerAuth
+// @Router       /engine/update/logs [get]
+func (h *TelemtUpdateHandler) GetBuildLogs(c *gin.Context) {
+	logPath := model.TelemtBuildLogPath()
+
+	// Check if file exists
+	if _, err := os.Stat(logPath); os.IsNotExist(err) {
+		c.String(http.StatusOK, "")
+		return
+	}
+
+	c.File(logPath)
 }

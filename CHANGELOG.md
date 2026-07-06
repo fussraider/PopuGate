@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.6.1] - 2026-07-06
 
 ### Fixed
 - **Live ME writer metrics were always zero**: the Prometheus scraper looked for `telemt_me_writers_active` / `telemt_me_writers_warm`, but the telemt engine emits these gauges as `telemt_me_writers_active_current` / `telemt_me_writers_warm_current` (verified against engine tags 3.3.39 and 3.4.22). The "ME Writers Active/Warm" tiles in the Traffic view therefore always showed 0; the parser now uses the correct metric names.
@@ -400,6 +400,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - SQLite storage with WAL mode
 - JWT authentication
 
+[0.6.1]: https://github.com/fussraider/PopuGate/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/fussraider/PopuGate/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/fussraider/PopuGate/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/fussraider/PopuGate/compare/v0.3.2...v0.4.0

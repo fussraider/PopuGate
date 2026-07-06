@@ -180,8 +180,6 @@ func (s *TrafficService) mergeInstanceMetrics(combined, live *model.LiveMetrics)
 	combined.ConnsCurrent += live.ConnsCurrent
 	combined.ConnsTotal += live.ConnsTotal
 	combined.ConnsBadTotal += live.ConnsBadTotal
-	combined.ConnsMECurrent += live.ConnsMECurrent
-	combined.ConnsDirectCurrent += live.ConnsDirectCurrent
 	combined.UpstreamAttemptTotal += live.UpstreamAttemptTotal
 	combined.UpstreamSuccessTotal += live.UpstreamSuccessTotal
 	combined.UpstreamFailTotal += live.UpstreamFailTotal

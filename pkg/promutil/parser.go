@@ -64,13 +64,11 @@ func ExtractTelemtMetrics(metrics []ParsedMetric) *model.LiveMetrics {
 		"telemt_connections_current":            &lm.ConnsCurrent,
 		"telemt_connections_total":              &lm.ConnsTotal,
 		"telemt_connections_bad_total":          &lm.ConnsBadTotal,
-		"telemt_connections_me_current":         &lm.ConnsMECurrent,
-		"telemt_connections_direct_current":     &lm.ConnsDirectCurrent,
 		"telemt_upstream_connect_attempt_total": &lm.UpstreamAttemptTotal,
 		"telemt_upstream_connect_success_total": &lm.UpstreamSuccessTotal,
 		"telemt_upstream_connect_fail_total":    &lm.UpstreamFailTotal,
-		"telemt_me_writers_active":              &lm.MEWritersActive,
-		"telemt_me_writers_warm":                &lm.MEWritersWarm,
+		"telemt_me_writers_active_current":      &lm.MEWritersActive,
+		"telemt_me_writers_warm_current":        &lm.MEWritersWarm,
 	}
 
 	userFields := map[string]func(*model.UserLiveMetrics, float64){

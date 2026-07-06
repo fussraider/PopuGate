@@ -81,24 +81,6 @@
         <div class="traffic-stats mb-lg">
           <div class="traffic-item">
             <div class="traffic-label">
-              {{ t('traffic.me_conns') }}
-              <Tooltip :text="t('traffic.me_conns_tip')">
-                <Info :size="12" class="ml-xs" />
-              </Tooltip>
-            </div>
-            <span class="traffic-value">{{ trafficStore.live.connections_me_current }}</span>
-          </div>
-          <div class="traffic-item">
-            <div class="traffic-label">
-              {{ t('traffic.direct_conns') }}
-              <Tooltip :text="t('traffic.direct_conns_tip')">
-                <Info :size="12" class="ml-xs" />
-              </Tooltip>
-            </div>
-            <span class="traffic-value">{{ trafficStore.live.connections_direct_current }}</span>
-          </div>
-          <div class="traffic-item">
-            <div class="traffic-label">
               {{ t('traffic.me_writers_active') }}
               <Tooltip :text="t('traffic.me_writers_active_tip')">
                 <Info :size="12" class="ml-xs" />

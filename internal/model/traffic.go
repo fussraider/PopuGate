@@ -21,8 +21,6 @@ type LiveMetrics struct {
 	ConnsCurrent         float64                     `json:"conns_current"`
 	ConnsTotal           float64                     `json:"conns_total"`
 	ConnsBadTotal        float64                     `json:"conns_bad_total"`
-	ConnsMECurrent       float64                     `json:"conns_me_current"`
-	ConnsDirectCurrent   float64                     `json:"conns_direct_current"`
 	UpstreamAttemptTotal float64                     `json:"upstream_attempt_total"`
 	UpstreamSuccessTotal float64                     `json:"upstream_success_total"`
 	UpstreamFailTotal    float64                     `json:"upstream_fail_total"`

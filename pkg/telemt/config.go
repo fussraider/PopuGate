@@ -425,7 +425,6 @@ func renderTOML(cfg *TelemtConfig) string {
 	renderCensorshipSection(&b, cfg)
 	renderAccessSection(&b, cfg)
 	renderUpstreamsSection(&b, cfg)
-	renderTelegramSection(&b, cfg)
 
 	return b.String()
 }
@@ -440,6 +439,18 @@ func renderGeneralSection(b *strings.Builder, cfg *TelemtConfig) {
 		fmt.Fprintf(b, "ad_tag = %q\n", cfg.General.AdTag)
 	} else {
 		b.WriteString("# ad_tag = \"\"  # Get from @MTProxyBot\n")
+	}
+	// tg_connect is a [general] key in the telemt engine (not [timeouts]).
+	fmt.Fprintf(b, "tg_connect = %d\n", cfg.Timeouts.TGConnect)
+	// Custom Telegram infrastructure URLs are [general] keys (engine >= 3.4.4).
+	if cfg.Telegram.ProxySecretURL != "" {
+		fmt.Fprintf(b, "proxy_secret_url = %q\n", cfg.Telegram.ProxySecretURL)
+	}
+	if cfg.Telegram.ProxyConfigV4URL != "" {
+		fmt.Fprintf(b, "proxy_config_v4_url = %q\n", cfg.Telegram.ProxyConfigV4URL)
+	}
+	if cfg.Telegram.ProxyConfigV6URL != "" {
+		fmt.Fprintf(b, "proxy_config_v6_url = %q\n", cfg.Telegram.ProxyConfigV6URL)
 	}
 	b.WriteString("\n")
 }
@@ -477,7 +488,6 @@ func renderServerSection(b *strings.Builder, cfg *TelemtConfig) {
 func renderTimeoutsSection(b *strings.Builder, cfg *TelemtConfig) {
 	b.WriteString("[timeouts]\n")
 	fmt.Fprintf(b, "client_handshake = %d\n", cfg.Timeouts.ClientHandshake)
-	fmt.Fprintf(b, "tg_connect = %d\n", cfg.Timeouts.TGConnect)
 	fmt.Fprintf(b, "client_keepalive = %d\n", cfg.Timeouts.ClientKeepalive)
 	fmt.Fprintf(b, "client_ack = %d\n", cfg.Timeouts.ClientAck)
 	b.WriteString("\n")
@@ -604,23 +614,6 @@ func renderUpstreamsSection(b *strings.Builder, cfg *TelemtConfig) {
 		}
 		b.WriteString("\n")
 	}
-}
-
-func renderTelegramSection(b *strings.Builder, cfg *TelemtConfig) {
-	if cfg.Telegram.ProxySecretURL == "" && cfg.Telegram.ProxyConfigV4URL == "" && cfg.Telegram.ProxyConfigV6URL == "" {
-		return
-	}
-	b.WriteString("[telegram]\n")
-	if cfg.Telegram.ProxySecretURL != "" {
-		fmt.Fprintf(b, "proxy_secret_url = %q\n", cfg.Telegram.ProxySecretURL)
-	}
-	if cfg.Telegram.ProxyConfigV4URL != "" {
-		fmt.Fprintf(b, "proxy_config_v4_url = %q\n", cfg.Telegram.ProxyConfigV4URL)
-	}
-	if cfg.Telegram.ProxyConfigV6URL != "" {
-		fmt.Fprintf(b, "proxy_config_v6_url = %q\n", cfg.Telegram.ProxyConfigV6URL)
-	}
-	b.WriteString("\n")
 }
 
 func formatStringArray(arr []string) string {

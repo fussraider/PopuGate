@@ -168,8 +168,6 @@ export interface LiveMetrics {
   connections: number
   connections_total: number
   connections_bad_total: number
-  connections_me_current: number
-  connections_direct_current: number
   upstream_attempt_total: number
   upstream_success_total: number
   upstream_fail_total: number

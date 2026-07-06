@@ -11,13 +11,11 @@ telemt_connections_current 42
 telemt_connections_total 100
 telemt_connections_bad_total 5
 telemt_uptime_seconds 3600.5
-telemt_connections_me_current 10
-telemt_connections_direct_current 32
 telemt_upstream_connect_attempt_total 200
 telemt_upstream_connect_success_total 180
 telemt_upstream_connect_fail_total 20
-telemt_me_writers_active 3
-telemt_me_writers_warm 7
+telemt_me_writers_active_current 3
+telemt_me_writers_warm_current 7
 # HELP telemt_user_octets_from_client Per-user bytes from client
 # TYPE telemt_user_octets_from_client counter
 telemt_user_octets_from_client{user="user1"} 1024
@@ -177,12 +175,6 @@ func TestExtractTelemtMetrics(t *testing.T) {
 	}
 	if lm.UptimeSeconds != 3600.5 {
 		t.Errorf("UptimeSeconds = %f, want 3600.5", lm.UptimeSeconds)
-	}
-	if lm.ConnsMECurrent != 10 {
-		t.Errorf("ConnsMECurrent = %f, want 10", lm.ConnsMECurrent)
-	}
-	if lm.ConnsDirectCurrent != 32 {
-		t.Errorf("ConnsDirectCurrent = %f, want 32", lm.ConnsDirectCurrent)
 	}
 	if lm.UpstreamAttemptTotal != 200 {
 		t.Errorf("UpstreamAttemptTotal = %f, want 200", lm.UpstreamAttemptTotal)

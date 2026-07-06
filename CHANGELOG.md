@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- **Live ME writer metrics were always zero**: the Prometheus scraper looked for `telemt_me_writers_active` / `telemt_me_writers_warm`, but the telemt engine emits these gauges as `telemt_me_writers_active_current` / `telemt_me_writers_warm_current` (verified against engine tags 3.3.39 and 3.4.22). The "ME Writers Active/Warm" tiles in the Traffic view therefore always showed 0; the parser now uses the correct metric names.
+- **Custom Telegram infrastructure URLs were silently ignored**: `proxy_secret_url` / `proxy_config_v4_url` / `proxy_config_v6_url` were rendered into a `[telegram]` config section that the telemt engine does not read — these are `[general]` keys. They are now emitted under `[general]`, so the custom-URL setting actually reaches the engine (effective on engine ≥ 3.4.4; harmlessly ignored on older engines). `tg_connect` was likewise moved from `[timeouts]` to its correct `[general]` position (the value was unchanged, but the misplaced key would break under a future strict-config engine mode).
+
+### Removed
+- **Dead ME/Direct connection metrics**: `connections_me_current` / `connections_direct_current` were dropped from the live-metrics parser, model, `/traffic/live` REST + WebSocket payloads, and the Traffic view (with their i18n strings). The telemt engine stopped emitting `telemt_connections_me_current` / `telemt_connections_direct_current` back in 3.3.29, so these fields were always 0 across the entire supported engine range and could not be recovered by renaming. The "ME Connections" / "Direct Connections" tiles are removed; the "ME Writers Active/Warm" tiles remain (now populated).
+
 ## [0.6.0] - 2026-07-06
 
 ### Added

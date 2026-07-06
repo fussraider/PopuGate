@@ -6,8 +6,32 @@ import (
 	"strings"
 	"testing"
 
+	toml "github.com/pelletier/go-toml/v2"
+
 	"github.com/fussraider/PopuGate/internal/model"
 )
+
+// parseRenderedTOML renders cfg and unmarshals the result, failing the test if
+// the generated config is not valid TOML. It returns the parsed top-level tables.
+func parseRenderedTOML(t *testing.T, cfg *TelemtConfig) map[string]any {
+	t.Helper()
+	rendered := renderTOML(cfg)
+	var parsed map[string]any
+	if err := toml.Unmarshal([]byte(rendered), &parsed); err != nil {
+		t.Fatalf("renderTOML produced invalid TOML: %v\n---\n%s", err, rendered)
+	}
+	return parsed
+}
+
+// tomlTable returns the named sub-table, failing if it is missing or not a table.
+func tomlTable(t *testing.T, parsed map[string]any, name string) map[string]any {
+	t.Helper()
+	tbl, ok := parsed[name].(map[string]any)
+	if !ok {
+		t.Fatalf("expected TOML table [%s], got %T", name, parsed[name])
+	}
+	return tbl
+}
 
 func TestBuildConfig_Basic(t *testing.T) {
 	params := &ConfigParams{
@@ -344,6 +368,66 @@ func TestRenderTOML(t *testing.T) {
 	for _, check := range checks {
 		if !strings.Contains(toml, check) {
 			t.Errorf("renderTOML missing: %q", check)
+		}
+	}
+
+	// Semantic checks: the rendered config must be valid TOML and place
+	// tg_connect in [general] (an engine [general] key), never in [timeouts]
+	// or a non-existent [telegram] table.
+	parsed := parseRenderedTOML(t, cfg)
+	if _, ok := parsed["telegram"]; ok {
+		t.Error("renderTOML must not emit a [telegram] table")
+	}
+	general := tomlTable(t, parsed, "general")
+	if general["tg_connect"] != int64(10) {
+		t.Errorf("general.tg_connect = %v, want 10", general["tg_connect"])
+	}
+	if timeouts := tomlTable(t, parsed, "timeouts"); timeouts["tg_connect"] != nil {
+		t.Errorf("timeouts must not contain tg_connect, got %v", timeouts["tg_connect"])
+	}
+}
+
+func TestRenderTOML_TelegramURLsInGeneral(t *testing.T) {
+	cfg := &TelemtConfig{
+		General:  GeneralConfig{Modes: ModesConfig{}, Links: LinksConfig{}},
+		Server:   ServerConfig{MetricsWhitelist: []string{}},
+		Timeouts: TimeoutsConfig{TGConnect: 10},
+		Telegram: TelegramConfig{
+			ProxySecretURL:   "https://example.com/getProxySecret",
+			ProxyConfigV4URL: "https://example.com/getProxyConfig",
+			ProxyConfigV6URL: "https://example.com/getProxyConfigV6",
+		},
+	}
+
+	parsed := parseRenderedTOML(t, cfg)
+	if _, ok := parsed["telegram"]; ok {
+		t.Error("telegram URLs must not be rendered under a [telegram] table")
+	}
+	general := tomlTable(t, parsed, "general")
+	want := map[string]string{
+		"proxy_secret_url":    "https://example.com/getProxySecret",
+		"proxy_config_v4_url": "https://example.com/getProxyConfig",
+		"proxy_config_v6_url": "https://example.com/getProxyConfigV6",
+	}
+	for key, val := range want {
+		if general[key] != val {
+			t.Errorf("general.%s = %v, want %q", key, general[key], val)
+		}
+	}
+}
+
+func TestRenderTOML_NoTelegramURLsWhenEmpty(t *testing.T) {
+	cfg := &TelemtConfig{
+		General:  GeneralConfig{Modes: ModesConfig{}, Links: LinksConfig{}},
+		Server:   ServerConfig{MetricsWhitelist: []string{}},
+		Timeouts: TimeoutsConfig{TGConnect: 10},
+		// Telegram left as zero value — no custom URLs configured.
+	}
+
+	general := tomlTable(t, parseRenderedTOML(t, cfg), "general")
+	for _, key := range []string{"proxy_secret_url", "proxy_config_v4_url", "proxy_config_v6_url"} {
+		if _, ok := general[key]; ok {
+			t.Errorf("general must not contain %q when no URL is configured", key)
 		}
 	}
 }

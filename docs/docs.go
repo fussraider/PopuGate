@@ -6540,6 +6540,11 @@ const docTemplate = `{
                 "tls_domain"
             ],
             "properties": {
+                "client_mss_bulk": {
+                    "type": "integer",
+                    "maximum": 4096,
+                    "minimum": 88
+                },
                 "fake_tls": {
                     "description": "pointer to distinguish unset from false",
                     "type": "boolean"
@@ -6572,8 +6577,8 @@ const docTemplate = `{
                 },
                 "tcp_mss": {
                     "type": "integer",
-                    "maximum": 1460,
-                    "minimum": 1
+                    "maximum": 4096,
+                    "minimum": 88
                 },
                 "tcp_mss_enabled": {
                     "type": "boolean"
@@ -7092,6 +7097,11 @@ const docTemplate = `{
         "handler.updateInstanceRequest": {
             "type": "object",
             "properties": {
+                "client_mss_bulk": {
+                    "type": "integer",
+                    "maximum": 4096,
+                    "minimum": 88
+                },
                 "enabled": {
                     "type": "boolean"
                 },
@@ -7124,8 +7134,8 @@ const docTemplate = `{
                 },
                 "tcp_mss": {
                     "type": "integer",
-                    "maximum": 1460,
-                    "minimum": 1
+                    "maximum": 4096,
+                    "minimum": 88
                 },
                 "tcp_mss_enabled": {
                     "type": "boolean"

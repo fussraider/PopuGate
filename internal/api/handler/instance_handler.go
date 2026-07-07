@@ -86,7 +86,8 @@ type addInstanceRequest struct {
 	MaskPort      int    `json:"mask_port" binding:"omitempty,min=1,max=65535"`
 	Tags          string `json:"tags"` // JSON array
 	TCPMSSEnabled *bool  `json:"tcp_mss_enabled"`
-	TCPMSS        int    `json:"tcp_mss" binding:"omitempty,min=1,max=1460"`
+	TCPMSS        int    `json:"tcp_mss" binding:"omitempty,min=88,max=4096"`
+	TCPMSSBulk    int    `json:"client_mss_bulk" binding:"omitempty,min=88,max=4096"`
 	TLSFronting   *bool  `json:"tls_fronting"`
 	// drop|mask|accept|reject_handshake (default mask)
 	UnknownSNIAction string `json:"unknown_sni_action" binding:"omitempty,oneof=drop mask accept reject_handshake"`
@@ -184,6 +185,7 @@ func buildInstanceFromRequest(req *addInstanceRequest) *model.Instance {
 		Tags:             req.Tags,
 		TCPMSSEnabled:    tcpMSSEnabled,
 		TCPMSS:           tcpMSS,
+		TCPMSSBulk:       req.TCPMSSBulk,
 		TLSFronting:      tlsFronting,
 		UnknownSNIAction: req.UnknownSNIAction,
 	}
@@ -201,7 +203,8 @@ type updateInstanceRequest struct {
 	MaskPort         *int    `json:"mask_port" binding:"omitempty,min=1,max=65535"`
 	Tags             *string `json:"tags"`
 	TCPMSSEnabled    *bool   `json:"tcp_mss_enabled"`
-	TCPMSS           *int    `json:"tcp_mss" binding:"omitempty,min=1,max=1460"`
+	TCPMSS           *int    `json:"tcp_mss" binding:"omitempty,min=88,max=4096"`
+	TCPMSSBulk       *int    `json:"client_mss_bulk" binding:"omitempty,min=88,max=4096"`
 	TLSFronting      *bool   `json:"tls_fronting"`
 	UnknownSNIAction *string `json:"unknown_sni_action" binding:"omitempty,oneof=drop mask accept reject_handshake"`
 }
@@ -302,6 +305,9 @@ func (h *InstanceHandler) applySimpleFields(c *gin.Context, inst *model.Instance
 	}
 	if req.TCPMSS != nil {
 		inst.TCPMSS = *req.TCPMSS
+	}
+	if req.TCPMSSBulk != nil {
+		inst.TCPMSSBulk = *req.TCPMSSBulk
 	}
 	if req.TLSFronting != nil {
 		inst.TLSFronting = *req.TLSFronting

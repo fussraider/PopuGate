@@ -52,6 +52,8 @@ type ServerConfig struct {
 	ProxyProtocolTrustedCIDRs []string `toml:"proxy_protocol_trusted_cidrs,omitempty"`
 	MetricsListen             string   `toml:"metrics_listen"`
 	MetricsWhitelist          []string `toml:"metrics_whitelist"`
+	ClientMSS                 int      `toml:"client_mss,omitempty"`
+	ClientMSSBulk             int      `toml:"client_mss_bulk,omitempty"`
 }
 
 type TimeoutsConfig struct {
@@ -388,6 +390,11 @@ func BuildInstanceConfig(params *InstanceConfigParams) *TelemtConfig {
 		Access:     newEmptyAccess(),
 	}
 
+	if inst.TCPMSSEnabled && inst.TCPMSS > 0 {
+		cfg.Server.ClientMSS = inst.TCPMSS
+		cfg.Server.ClientMSSBulk = inst.TCPMSSBulk
+	}
+
 	if params.ProxyProtocol && len(params.ProxyProtocolCIDRs) > 0 {
 		cfg.Server.ProxyProtocolTrustedCIDRs = params.ProxyProtocolCIDRs
 	}
@@ -505,6 +512,14 @@ func renderServerSection(b *strings.Builder, cfg *TelemtConfig) {
 	}
 	fmt.Fprintf(b, "metrics_listen = %q\n", cfg.Server.MetricsListen)
 	fmt.Fprintf(b, "metrics_whitelist = %s\n", formatStringArray(cfg.Server.MetricsWhitelist))
+	// Client-facing TCP MSS shaping (anti-DPI). client_mss_bulk raises the MSS
+	// after the handshake to cut pps. Restart-required (listener rebind).
+	if cfg.Server.ClientMSS > 0 {
+		fmt.Fprintf(b, "client_mss = %d\n", cfg.Server.ClientMSS)
+		if cfg.Server.ClientMSSBulk > 0 {
+			fmt.Fprintf(b, "client_mss_bulk = %d\n", cfg.Server.ClientMSSBulk)
+		}
+	}
 	b.WriteString("\n")
 }
 

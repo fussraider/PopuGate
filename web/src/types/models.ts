@@ -122,6 +122,7 @@ export interface Instance {
   tags: string
   tcp_mss_enabled: boolean
   tcp_mss: number
+  client_mss_bulk: number
   tls_fronting: boolean
   unknown_sni_action: string
   active_port?: number

@@ -25,8 +25,9 @@ type Instance struct {
 	// Action for an unknown/mismatched SNI on FakeTLS: drop|mask|accept|reject_handshake (default mask).
 	UnknownSNIAction string `json:"unknown_sni_action" db:"unknown_sni_action"`
 	Tags             string `json:"tags" db:"tags"`                       // Access tags (JSON array)
-	TCPMSSEnabled    bool   `json:"tcp_mss_enabled" db:"tcp_mss_enabled"` // Enable TCPMSS clamping
-	TCPMSS           int    `json:"tcp_mss" db:"tcp_mss"`                 // MSS value (1-1460, default 88)
+	TCPMSSEnabled    bool   `json:"tcp_mss_enabled" db:"tcp_mss_enabled"` // Enable client MSS shaping (engine client_mss)
+	TCPMSS           int    `json:"tcp_mss" db:"tcp_mss"`                 // client_mss value (88-4096, default 88)
+	TCPMSSBulk       int    `json:"client_mss_bulk" db:"client_mss_bulk"` // client_mss_bulk: raise MSS after handshake (0=off)
 	TLSFronting      bool   `json:"tls_fronting" db:"tls_fronting"`       // Enable TLS fronting content serving
 }
 
@@ -51,8 +52,11 @@ func (i *Instance) Validate() error {
 		i.TCPMSS = 88
 	}
 	if i.TCPMSSEnabled {
-		if i.TCPMSS < 1 || i.TCPMSS > 1460 {
-			return fmt.Errorf("tcp_mss must be 1-1460")
+		if i.TCPMSS < 88 || i.TCPMSS > 4096 {
+			return fmt.Errorf("tcp_mss must be 88-4096")
+		}
+		if i.TCPMSSBulk != 0 && (i.TCPMSSBulk < 88 || i.TCPMSSBulk > 4096) {
+			return fmt.Errorf("client_mss_bulk must be 0 or 88-4096")
 		}
 	}
 	if i.TLSFronting && !i.FakeTLS {

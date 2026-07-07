@@ -7,6 +7,10 @@ definitions:
     type: object
   handler.addInstanceRequest:
     properties:
+      client_mss_bulk:
+        maximum: 4096
+        minimum: 88
+        type: integer
       fake_tls:
         description: pointer to distinguish unset from false
         type: boolean
@@ -31,8 +35,8 @@ definitions:
         description: JSON array
         type: string
       tcp_mss:
-        maximum: 1460
-        minimum: 1
+        maximum: 4096
+        minimum: 88
         type: integer
       tcp_mss_enabled:
         type: boolean
@@ -390,6 +394,10 @@ definitions:
     type: object
   handler.updateInstanceRequest:
     properties:
+      client_mss_bulk:
+        maximum: 4096
+        minimum: 88
+        type: integer
       enabled:
         type: boolean
       fake_tls:
@@ -413,8 +421,8 @@ definitions:
       tags:
         type: string
       tcp_mss:
-        maximum: 1460
-        minimum: 1
+        maximum: 4096
+        minimum: 88
         type: integer
       tcp_mss_enabled:
         type: boolean

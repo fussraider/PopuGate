@@ -510,6 +510,35 @@ func TestRenderTOML_UserEnabled(t *testing.T) {
 	}
 }
 
+func TestRenderTOML_ClientMSS(t *testing.T) {
+	cfg := &TelemtConfig{
+		General:  GeneralConfig{Modes: ModesConfig{}, Links: LinksConfig{}},
+		Server:   ServerConfig{Port: 443, MetricsWhitelist: []string{}, ClientMSS: 92, ClientMSSBulk: 1400},
+		Timeouts: TimeoutsConfig{TGConnect: 10},
+	}
+	server := tomlTable(t, parseRenderedTOML(t, cfg), "server")
+	if server["client_mss"] != int64(92) {
+		t.Errorf("server.client_mss = %v, want 92", server["client_mss"])
+	}
+	if server["client_mss_bulk"] != int64(1400) {
+		t.Errorf("server.client_mss_bulk = %v, want 1400", server["client_mss_bulk"])
+	}
+
+	// When disabled (ClientMSS == 0) neither key is emitted.
+	off := &TelemtConfig{
+		General:  GeneralConfig{Modes: ModesConfig{}, Links: LinksConfig{}},
+		Server:   ServerConfig{Port: 443, MetricsWhitelist: []string{}},
+		Timeouts: TimeoutsConfig{TGConnect: 10},
+	}
+	serverOff := tomlTable(t, parseRenderedTOML(t, off), "server")
+	if _, ok := serverOff["client_mss"]; ok {
+		t.Error("client_mss must be omitted when disabled")
+	}
+	if _, ok := serverOff["client_mss_bulk"]; ok {
+		t.Error("client_mss_bulk must be omitted when disabled")
+	}
+}
+
 func TestRenderTOML_WithMaskingHost(t *testing.T) {
 	cfg := &TelemtConfig{
 		General:  GeneralConfig{Modes: ModesConfig{}, Links: LinksConfig{}},

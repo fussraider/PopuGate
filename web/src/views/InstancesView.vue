@@ -282,10 +282,17 @@
             </Tooltip>
           </label>
         </div>
-        <div v-if="form.tcp_mss_enabled" class="form-group mb-md">
-          <label class="form-label">{{ t('instances.tcp_mss') }}</label>
-          <input v-model.number="form.tcp_mss" class="input" type="number" min="1" max="1460" />
-          <small class="text-muted">{{ t('instances.tcp_mss_hint') }}</small>
+        <div v-if="form.tcp_mss_enabled" class="form-row mb-md">
+          <div class="form-group">
+            <label class="form-label">{{ t('instances.tcp_mss') }}</label>
+            <input v-model.number="form.tcp_mss" class="input" type="number" min="88" max="4096" />
+            <small class="text-muted">{{ t('instances.tcp_mss_hint') }}</small>
+          </div>
+          <div class="form-group">
+            <label class="form-label">{{ t('instances.client_mss_bulk') }}</label>
+            <input v-model.number="form.client_mss_bulk" class="input" type="number" min="0" max="4096" placeholder="0" />
+            <small class="text-muted">{{ t('instances.client_mss_bulk_hint') }}</small>
+          </div>
         </div>
         <div class="form-group">
           <label class="checkbox-label">
@@ -571,6 +578,7 @@ const form = reactive({
   enabled: true,
   tcp_mss_enabled: false,
   tcp_mss: 88,
+  client_mss_bulk: 0,
   tls_fronting: false,
   unknown_sni_action: 'mask',
 })
@@ -592,7 +600,7 @@ function openAddModal() {
   editingInstance.value = null
   portChecks.port = null
   portChecks.metrics_port = null
-  Object.assign(form, { port: 443, metrics_port: 0, label: '', tls_domain: '', tls_domains_text: '', fake_tls: true, mask_host: '', mask_port: 443, tags: '[]', enabled: true, tcp_mss_enabled: false, tcp_mss: 88, tls_fronting: false, unknown_sni_action: 'mask' })
+  Object.assign(form, { port: 443, metrics_port: 0, label: '', tls_domain: '', tls_domains_text: '', fake_tls: true, mask_host: '', mask_port: 443, tags: '[]', enabled: true, tcp_mss_enabled: false, tcp_mss: 88, client_mss_bulk: 0, tls_fronting: false, unknown_sni_action: 'mask' })
   modalOpen.value = true
 }
 
@@ -613,6 +621,7 @@ function openEditModal(item: Instance) {
     enabled: item.enabled,
     tcp_mss_enabled: item.tcp_mss_enabled || false,
     tcp_mss: item.tcp_mss || 88,
+    client_mss_bulk: item.client_mss_bulk || 0,
     tls_fronting: item.tls_fronting || false,
     unknown_sni_action: item.unknown_sni_action || 'mask',
   })
@@ -640,6 +649,7 @@ async function handleSubmit() {
       enabled: form.enabled,
       tcp_mss_enabled: form.tcp_mss_enabled,
       tcp_mss: form.tcp_mss_enabled ? form.tcp_mss : undefined,
+      client_mss_bulk: form.tcp_mss_enabled && form.client_mss_bulk > 0 ? form.client_mss_bulk : undefined,
       tls_fronting: form.tls_fronting,
       unknown_sni_action: form.unknown_sni_action,
     }

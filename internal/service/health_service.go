@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -251,9 +252,19 @@ func (h *HealthService) isMetricsResponding(port int) bool {
 		healthLog.Debugf("metrics check %s: %v", url, err)
 		return false
 	}
-	_ = resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != 200 {
 		healthLog.Debugf("metrics check %s: status %d", url, resp.StatusCode)
+		return false
 	}
-	return resp.StatusCode == 200
+	// Confirm the body is actually the telemt engine's Prometheus output, not
+	// just any 200 — catches a process bound to the port that isn't the engine
+	// or hasn't produced metrics yet. (Full /v1/health/ready readiness is
+	// deferred to the HTTP management API task, see dev_docs/011 ADR-001.)
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
+	if !strings.Contains(string(body), "telemt_") {
+		healthLog.Debugf("metrics check %s: 200 but no telemt metrics", url)
+		return false
+	}
+	return true
 }

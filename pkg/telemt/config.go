@@ -90,6 +90,7 @@ type AccessConfig struct {
 	UserDataQuota    map[string]int64     `toml:"user_data_quota,omitempty"`
 	UserExpirations  map[string]string    `toml:"user_expirations,omitempty"`
 	UserRateLimits   map[string]RateLimit `toml:"user_rate_limits,omitempty"`
+	UserEnabled      map[string]bool      `toml:"user_enabled,omitempty"`
 }
 
 // RateLimit holds per-user up/down rate limits in bits per second (0 = unlimited).
@@ -168,15 +169,20 @@ func newEmptyAccess() AccessConfig {
 		UserDataQuota:    make(map[string]int64),
 		UserExpirations:  make(map[string]string),
 		UserRateLimits:   make(map[string]RateLimit),
+		UserEnabled:      make(map[string]bool),
 	}
 }
 
 func applySecretsToAccess(access *AccessConfig, secrets []SecretEntry) {
 	for _, sec := range secrets {
+		access.Users[sec.Label] = sec.SecretKey
 		if !sec.Enabled {
+			// Keep the user in [access.users] but mark it disabled so the engine
+			// cancels active sessions on hot-reload. Skip limits — irrelevant for
+			// a blocked user.
+			access.UserEnabled[sec.Label] = false
 			continue
 		}
-		access.Users[sec.Label] = sec.SecretKey
 		if sec.MaxConns > 0 {
 			access.UserMaxTCPConns[sec.Label] = sec.MaxConns
 		}
@@ -611,6 +617,19 @@ func renderAccessSection(b *strings.Builder, cfg *TelemtConfig) {
 		fmt.Fprintf(b, "[access.user_rate_limits.%s]\n", label)
 		fmt.Fprintf(b, "up_bps = %d\n", rl.UpBps)
 		fmt.Fprintf(b, "down_bps = %d\n", rl.DownBps)
+		b.WriteString("\n")
+	}
+
+	// Disabled secrets stay in [access.users] but are marked disabled here so the
+	// engine cancels their active sessions on hot-reload (missing = enabled).
+	if len(cfg.Access.UserEnabled) > 0 {
+		b.WriteString("[access.user_enabled]\n")
+		for _, label := range sortedKeys(cfg.Access.UserEnabled) {
+			if !tomlKeyRe.MatchString(label) {
+				continue
+			}
+			fmt.Fprintf(b, "%s = %v\n", label, cfg.Access.UserEnabled[label])
+		}
 		b.WriteString("\n")
 	}
 }

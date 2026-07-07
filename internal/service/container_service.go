@@ -1082,17 +1082,17 @@ func (s *ContainerService) generateInstanceConfigWithCached(ctx context.Context,
 	instanceTags := inst.GetTags()
 	var secretEntries []telemt.SecretEntry
 	for _, sec := range dbSecrets {
-		if !sec.Enabled {
-			continue
-		}
 		secretTags := sec.GetTags()
 		if !model.TagsMatch(instanceTags, secretTags) {
 			continue
 		}
+		// Disabled secrets are still emitted (with Enabled=false) so the engine
+		// marks them [access.user_enabled]=false and cancels their active
+		// sessions on hot-reload, rather than silently dropping them from config.
 		secretEntries = append(secretEntries, telemt.SecretEntry{
 			Label:            sec.Label,
 			SecretKey:        sec.SecretKey,
-			Enabled:          true,
+			Enabled:          sec.Enabled,
 			MaxConns:         sec.MaxConns,
 			MaxIPs:           sec.MaxIPs,
 			QuotaBytes:       sec.QuotaBytes,

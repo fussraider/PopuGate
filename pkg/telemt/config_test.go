@@ -63,15 +63,22 @@ func TestBuildConfig_Basic(t *testing.T) {
 		t.Errorf("Server.MetricsListen = %q, want %q", cfg.Server.MetricsListen, "127.0.0.1:9091")
 	}
 
-	// Only enabled secrets should be in Users map
-	if len(cfg.Access.Users) != 1 {
-		t.Fatalf("expected 1 user, got %d", len(cfg.Access.Users))
+	// Disabled secrets stay in Users but are flagged in user_enabled=false so the
+	// engine cancels their active sessions on reload (ADR-001).
+	if len(cfg.Access.Users) != 2 {
+		t.Fatalf("expected 2 users, got %d", len(cfg.Access.Users))
 	}
 	if _, ok := cfg.Access.Users["user1"]; !ok {
 		t.Error("user1 should be in Users")
 	}
-	if _, ok := cfg.Access.Users["user2"]; ok {
-		t.Error("user2 should not be in Users (disabled)")
+	if _, ok := cfg.Access.Users["user2"]; !ok {
+		t.Error("user2 should be in Users (disabled but present)")
+	}
+	if v, ok := cfg.Access.UserEnabled["user2"]; !ok || v {
+		t.Errorf("user2 should be in user_enabled=false, got ok=%v v=%v", ok, v)
+	}
+	if _, ok := cfg.Access.UserEnabled["user1"]; ok {
+		t.Error("user1 (enabled) must not appear in user_enabled (missing = enabled)")
 	}
 
 	// Secure mode should be true when masking is disabled
@@ -464,6 +471,42 @@ func TestRenderTOML_UserRateLimits(t *testing.T) {
 	// bob has no rate limit → must not appear.
 	if _, ok := rl["bob"]; ok {
 		t.Error("user_rate_limits must not contain bob (no limit set)")
+	}
+}
+
+func TestRenderTOML_UserEnabled(t *testing.T) {
+	access := newEmptyAccess()
+	applySecretsToAccess(&access, []SecretEntry{
+		{Label: "alice", SecretKey: "aa11bb22cc33dd44ee55ff6677889900", Enabled: true},
+		{Label: "bob", SecretKey: "bb11bb22cc33dd44ee55ff6677889900", Enabled: false},
+	})
+	cfg := &TelemtConfig{
+		General:  GeneralConfig{Modes: ModesConfig{}, Links: LinksConfig{}},
+		Server:   ServerConfig{MetricsWhitelist: []string{}},
+		Timeouts: TimeoutsConfig{TGConnect: 10},
+		Access:   access,
+	}
+
+	parsed := parseRenderedTOML(t, cfg)
+	accessTbl := tomlTable(t, parsed, "access")
+	// Both secrets present in [access.users].
+	users, _ := accessTbl["users"].(map[string]any)
+	if _, ok := users["alice"]; !ok {
+		t.Error("alice must be in [access.users]")
+	}
+	if _, ok := users["bob"]; !ok {
+		t.Error("bob (disabled) must still be in [access.users]")
+	}
+	// user_enabled marks only the disabled one false.
+	ue, ok := accessTbl["user_enabled"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected [access.user_enabled] table, got %T", accessTbl["user_enabled"])
+	}
+	if ue["bob"] != false {
+		t.Errorf("user_enabled.bob = %v, want false", ue["bob"])
+	}
+	if _, ok := ue["alice"]; ok {
+		t.Error("user_enabled must not contain alice (enabled = omitted)")
 	}
 }
 

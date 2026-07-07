@@ -101,6 +101,13 @@ func (s *SettingsStore) Load(ctx context.Context) (*model.Settings, error) {
 	settings.TelemtCommit = getString(kv, "telemt_commit", "")
 	settings.TelemtRepo = getString(kv, "telemt_repo", "")
 
+	// SYN limiter
+	settings.SynlimitEnabled = getBool(kv, "synlimit_enabled")
+	settings.SynlimitBackend = getString(kv, "synlimit_backend", "nftables")
+	settings.SynlimitSeconds = getInt(kv, "synlimit_seconds", 60)
+	settings.SynlimitHitcount = getInt(kv, "synlimit_hitcount", 48)
+	settings.SynlimitBurst = getInt(kv, "synlimit_burst", 1)
+
 	// Kernel Network Tuning (TCP BBR & FastOpen)
 	settings.SysctlOptimizationsEnabled = getBool(kv, "sysctl_optimizations_enabled")
 	settings.OriginalQdisc = getString(kv, "original_qdisc", "")

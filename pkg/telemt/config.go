@@ -54,6 +54,11 @@ type ServerConfig struct {
 	MetricsWhitelist          []string `toml:"metrics_whitelist"`
 	ClientMSS                 int      `toml:"client_mss,omitempty"`
 	ClientMSSBulk             int      `toml:"client_mss_bulk,omitempty"`
+	// SYN limiter (netfilter). Empty backend = disabled (not rendered).
+	Synlimit         string `toml:"synlimit,omitempty"` // "nftables" | "iptables"
+	SynlimitSeconds  int    `toml:"synlimit_seconds,omitempty"`
+	SynlimitHitcount int    `toml:"synlimit_hitcount,omitempty"`
+	SynlimitBurst    int    `toml:"synlimit_burst,omitempty"`
 }
 
 type TimeoutsConfig struct {
@@ -138,6 +143,11 @@ type InstanceConfigParams struct {
 	Secrets               []SecretEntry
 	Upstreams             []UpstreamEntry
 	ExtraMetricsWhitelist []string
+	// SYN limiter (opt-in). Empty Backend = disabled.
+	SynlimitBackend  string
+	SynlimitSeconds  int
+	SynlimitHitcount int
+	SynlimitBurst    int
 }
 
 // SecretEntry represents a secret for TOML generation.
@@ -411,6 +421,13 @@ func BuildInstanceConfig(params *InstanceConfigParams) *TelemtConfig {
 		cfg.Server.ClientMSSBulk = inst.TCPMSSBulk
 	}
 
+	if params.SynlimitBackend != "" {
+		cfg.Server.Synlimit = params.SynlimitBackend
+		cfg.Server.SynlimitSeconds = params.SynlimitSeconds
+		cfg.Server.SynlimitHitcount = params.SynlimitHitcount
+		cfg.Server.SynlimitBurst = params.SynlimitBurst
+	}
+
 	if params.ProxyProtocol && len(params.ProxyProtocolCIDRs) > 0 {
 		cfg.Server.ProxyProtocolTrustedCIDRs = params.ProxyProtocolCIDRs
 	}
@@ -534,6 +551,20 @@ func renderServerSection(b *strings.Builder, cfg *TelemtConfig) {
 		fmt.Fprintf(b, "client_mss = %d\n", cfg.Server.ClientMSS)
 		if cfg.Server.ClientMSSBulk > 0 {
 			fmt.Fprintf(b, "client_mss_bulk = %d\n", cfg.Server.ClientMSSBulk)
+		}
+	}
+	// Netfilter SYN limiter (opt-in). Requires CAP_NET_ADMIN on the container;
+	// the engine installs/removes the iptables/nftables rules itself.
+	if cfg.Server.Synlimit != "" {
+		fmt.Fprintf(b, "synlimit = %q\n", cfg.Server.Synlimit)
+		if cfg.Server.SynlimitSeconds > 0 {
+			fmt.Fprintf(b, "synlimit_seconds = %d\n", cfg.Server.SynlimitSeconds)
+		}
+		if cfg.Server.SynlimitHitcount > 0 {
+			fmt.Fprintf(b, "synlimit_hitcount = %d\n", cfg.Server.SynlimitHitcount)
+		}
+		if cfg.Server.SynlimitBurst > 0 {
+			fmt.Fprintf(b, "synlimit_burst = %d\n", cfg.Server.SynlimitBurst)
 		}
 	}
 	b.WriteString("\n")

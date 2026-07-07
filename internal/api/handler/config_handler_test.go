@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/fussraider/PopuGate/internal/model"
 	"github.com/fussraider/PopuGate/internal/store"
 	"github.com/fussraider/PopuGate/internal/testutil"
 )
@@ -451,5 +452,46 @@ func TestConfigHandler_GetKey_RejectsPasswordHash(t *testing.T) {
 
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("expected 403 for auth_password_hash, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestSynlimitChanged(t *testing.T) {
+	prev := &model.Settings{
+		SynlimitEnabled:  false,
+		SynlimitBackend:  "nftables",
+		SynlimitSeconds:  60,
+		SynlimitHitcount: 48,
+		SynlimitBurst:    1,
+	}
+	// Full settings PUT with identical synlimit values must NOT trigger recreate.
+	same := map[string]string{
+		"synlimit_enabled":  "false",
+		"synlimit_backend":  "nftables",
+		"synlimit_seconds":  "60",
+		"synlimit_hitcount": "48",
+		"synlimit_burst":    "1",
+		"proxy_port":        "443",
+	}
+	if synlimitChanged(prev, same) {
+		t.Error("unchanged synlimit values must not report a change")
+	}
+	// Enabling it must trigger recreate.
+	if !synlimitChanged(prev, map[string]string{"synlimit_enabled": "true"}) {
+		t.Error("toggling synlimit_enabled must report a change")
+	}
+	// A param change must trigger recreate.
+	if !synlimitChanged(prev, map[string]string{"synlimit_hitcount": "100"}) {
+		t.Error("changing synlimit_hitcount must report a change")
+	}
+	// Non-synlimit update must not trigger recreate.
+	if synlimitChanged(prev, map[string]string{"proxy_port": "8443"}) {
+		t.Error("non-synlimit update must not report a change")
+	}
+	// nil prev falls back to key-presence.
+	if !synlimitChanged(nil, map[string]string{"synlimit_burst": "2"}) {
+		t.Error("nil prev with a synlimit key must report a change")
+	}
+	if synlimitChanged(nil, map[string]string{"proxy_port": "443"}) {
+		t.Error("nil prev without synlimit keys must not report a change")
 	}
 }

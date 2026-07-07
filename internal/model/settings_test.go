@@ -135,6 +135,26 @@ func TestValidate(t *testing.T) {
 			func(s *Settings) { s.BackupRetentionDays = 0 },
 			"BackupRetentionDays", 7,
 		},
+		{
+			"invalid synlimit backend",
+			func(s *Settings) { s.SynlimitBackend = "bogus" },
+			"SynlimitBackend", "nftables",
+		},
+		{
+			"zero synlimit seconds",
+			func(s *Settings) { s.SynlimitSeconds = 0 },
+			"SynlimitSeconds", 60,
+		},
+		{
+			"zero synlimit hitcount",
+			func(s *Settings) { s.SynlimitHitcount = 0 },
+			"SynlimitHitcount", 48,
+		},
+		{
+			"zero synlimit burst",
+			func(s *Settings) { s.SynlimitBurst = 0 },
+			"SynlimitBurst", 1,
+		},
 	}
 
 	for _, tt := range tests {
@@ -169,6 +189,14 @@ func TestValidate(t *testing.T) {
 				got = s.ReplicationSSHPort
 			case "BackupRetentionDays":
 				got = s.BackupRetentionDays
+			case "SynlimitBackend":
+				got = s.SynlimitBackend
+			case "SynlimitSeconds":
+				got = s.SynlimitSeconds
+			case "SynlimitHitcount":
+				got = s.SynlimitHitcount
+			case "SynlimitBurst":
+				got = s.SynlimitBurst
 			}
 
 			if got != tt.expected {

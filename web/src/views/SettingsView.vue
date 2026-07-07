@@ -138,6 +138,41 @@
         </label>
       </div>
 
+      <!-- SYN limiter -->
+      <div class="card span-2">
+        <h3 class="mb-md">{{ t('settings_view.synlimit_title') }}</h3>
+        <p class="text-muted text-sm mb-md">{{ t('settings_view.synlimit_desc') }}</p>
+        <label class="checkbox-label mb-md">
+          <input v-model="form.synlimit_enabled" type="checkbox" />
+          {{ t('settings_view.synlimit_enable') }}
+        </label>
+        <p v-if="form.synlimit_enabled" class="text-warning text-sm mb-md">
+          ⚠️ {{ t('settings_view.synlimit_warning') }}
+        </p>
+        <template v-if="form.synlimit_enabled">
+          <div class="form-group">
+            <label class="form-label">{{ t('settings_view.synlimit_backend') }}</label>
+            <select v-model="form.synlimit_backend" class="input input-narrow">
+              <option value="nftables">nftables</option>
+              <option value="iptables">iptables</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">{{ t('settings_view.synlimit_seconds') }}</label>
+            <input v-model.number="form.synlimit_seconds" class="input input-narrow" type="number" min="1" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">{{ t('settings_view.synlimit_hitcount') }}</label>
+            <input v-model.number="form.synlimit_hitcount" class="input input-narrow" type="number" min="1" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">{{ t('settings_view.synlimit_burst') }}</label>
+            <input v-model.number="form.synlimit_burst" class="input input-narrow" type="number" min="1" />
+            <small class="text-muted">{{ t('settings_view.synlimit_hint') }}</small>
+          </div>
+        </template>
+      </div>
+
       <!-- Backup -->
       <div class="card span-2">
         <h3 class="mb-md">{{ t('settings_view.backup_title') }}</h3>

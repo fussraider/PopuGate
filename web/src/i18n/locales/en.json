@@ -901,7 +901,16 @@
     "web_url_hint": "Public URL of this PopuGate web interface, used for Telegram bot buttons (e.g. https://proxy.example.com:8080)",
     "tcp_optimizations": "TCP BBR & FastOpen Optimizations",
     "tcp_optimizations_desc": "Configure Linux kernel TCP tuning to lower latency and increase throughput under packet loss.",
-    "enable_tcp_optimizations": "Enable TCP BBR & FastOpen Optimizations"
+    "enable_tcp_optimizations": "Enable TCP BBR & FastOpen Optimizations",
+    "synlimit_title": "SYN Flood Limiter",
+    "synlimit_desc": "Engine-managed netfilter rate limit on new TCP connections (SYN packets) per source IP, to blunt SYN-flood attacks. Off by default.",
+    "synlimit_enable": "Enable SYN limiter",
+    "synlimit_warning": "Enabling grants the engine container CAP_NET_ADMIN (it manages host netfilter rules under network=host) and recreates all proxy containers — expect a brief interruption. Disabling recreates them again without the capability.",
+    "synlimit_backend": "Backend",
+    "synlimit_seconds": "Window (seconds)",
+    "synlimit_hitcount": "Max new connections per window",
+    "synlimit_burst": "Burst allowance",
+    "synlimit_hint": "A source IP exceeding hitcount new connections within the window (beyond the burst) has further SYNs dropped. Defaults: 60s / 48 / 1."
   },
   "setup": {
     "welcome": "Welcome to PopuGate",

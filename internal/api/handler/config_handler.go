@@ -3,6 +3,7 @@ package handler
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -58,6 +59,9 @@ var allowedConfigKeys = map[string]bool{
 	"replication_restart_on_change": true, "replication_log": true,
 	// System
 	"debug": true,
+	// SYN limiter
+	"synlimit_enabled": true, "synlimit_backend": true,
+	"synlimit_seconds": true, "synlimit_hitcount": true, "synlimit_burst": true,
 	// Backup
 	"backup_retention_days": true,
 	// telemt engine
@@ -128,6 +132,11 @@ func (h *ConfigHandler) Update(c *gin.Context) {
 		return
 	}
 
+	// Snapshot current settings before the write so we can tell whether the
+	// SYN-limiter config actually changed. The Web UI PUTs the whole settings
+	// object on every save, so key-presence alone is not a reliable signal.
+	prev, _ := h.settings.Load(c.Request.Context())
+
 	if err := h.settings.Save(c.Request.Context(), strUpdates); err != nil {
 		HandleError(c, http.StatusInternalServerError, "failed to save settings", err)
 		return
@@ -142,11 +151,48 @@ func (h *ConfigHandler) Update(c *gin.Context) {
 	configLog.Infof("updating settings: %v", applied)
 	auditLog(c, "settings.update", "updated settings")
 	if h.containerSvc != nil {
-		if err := h.containerSvc.Reload(c.Request.Context(), "settings updated"); err != nil {
+		// SYN-limiter changes toggle a container capability (CAP_NET_ADMIN),
+		// which can only be applied at container create time — a SIGHUP
+		// hot-reload cannot pick it up. Recreate the containers instead.
+		if synlimitChanged(prev, strUpdates) {
+			if err := h.containerSvc.Restart(c.Request.Context()); err != nil {
+				configLog.Warnf("failed to recreate instances after SYN-limiter change: %v", err)
+			}
+		} else if err := h.containerSvc.Reload(c.Request.Context(), "settings updated"); err != nil {
 			configLog.Warnf("failed to hot-reload instances: %v", err)
 		}
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true, "applied": applied, "rejected": rejected})
+}
+
+// synlimitChanged reports whether the update set actually changes any
+// SYN-limiter setting versus the previous state. Such a change requires
+// recreating containers (capability change), not a SIGHUP hot-reload. The Web
+// UI PUTs the full settings object on every save, so we compare values rather
+// than relying on key presence. A nil prev (load failed) is treated as changed
+// so a real toggle is never missed.
+func synlimitChanged(prev *model.Settings, strUpdates map[string]string) bool {
+	if prev == nil {
+		for k := range strUpdates {
+			if strings.HasPrefix(k, "synlimit_") {
+				return true
+			}
+		}
+		return false
+	}
+	cur := map[string]string{
+		"synlimit_enabled":  strconv.FormatBool(prev.SynlimitEnabled),
+		"synlimit_backend":  prev.SynlimitBackend,
+		"synlimit_seconds":  strconv.Itoa(prev.SynlimitSeconds),
+		"synlimit_hitcount": strconv.Itoa(prev.SynlimitHitcount),
+		"synlimit_burst":    strconv.Itoa(prev.SynlimitBurst),
+	}
+	for k, curVal := range cur {
+		if newVal, ok := strUpdates[k]; ok && newVal != curVal {
+			return true
+		}
+	}
+	return false
 }
 
 // filterAllowedConfigUpdates converts the raw JSON map to a string map,

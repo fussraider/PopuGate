@@ -260,8 +260,10 @@ RUN cargo build --release && \
     cp target/release/telemt /telemt
 
 FROM debian:bookworm-slim
+# nftables + iptables ship unconditionally (small footprint) so the opt-in
+# netfilter SYN limiter works when enabled; unused otherwise (no CAP_NET_ADMIN).
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends ca-certificates && \
+    apt-get install -y --no-install-recommends ca-certificates nftables iptables && \
     rm -rf /var/lib/apt/lists/*
 COPY --from=builder /telemt /usr/local/bin/telemt
 RUN chmod +x /usr/local/bin/telemt

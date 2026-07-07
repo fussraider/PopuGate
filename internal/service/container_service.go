@@ -269,6 +269,17 @@ func (s *ContainerService) ReloadInstanceConfig(ctx context.Context, id int64) e
 }
 
 // StartInstance starts a specific instance by ID.
+// synlimitCaps returns the Linux capabilities an instance container needs.
+// The engine's netfilter SYN limiter requires CAP_NET_ADMIN; it is granted
+// only when the operator has opted in (settings.SynlimitEnabled), so the
+// default deployment keeps running without any extra capability.
+func synlimitCaps(settings *model.Settings) []string {
+	if settings != nil && settings.SynlimitEnabled {
+		return []string{"NET_ADMIN"}
+	}
+	return nil
+}
+
 func (s *ContainerService) StartInstance(ctx context.Context, id int64) error {
 	if s.docker == nil {
 		return fmt.Errorf("docker client is not initialized")
@@ -315,6 +326,7 @@ func (s *ContainerService) StartInstance(ctx context.Context, id int64) error {
 		Name:        inst.ContainerName(),
 		Port:        inst.Port,
 		TLSFrontDir: tlsFrontDir,
+		CapAdd:      synlimitCaps(settings),
 	})
 	return err
 }
@@ -613,6 +625,7 @@ func (s *ContainerService) ReloadInstance(ctx context.Context, id int64) error {
 		Name:        state.targetContainerName,
 		Port:        state.targetPort,
 		TLSFrontDir: tlsFrontDir,
+		CapAdd:      synlimitCaps(settings),
 	})
 	if err != nil {
 		return fmt.Errorf("start swing container: %w", err)
@@ -1116,6 +1129,12 @@ func (s *ContainerService) generateInstanceConfigWithCached(ctx context.Context,
 		}
 	}
 
+	// SYN limiter (opt-in): only render the keys when the operator enabled it.
+	var synlimitBackend string
+	if settings.SynlimitEnabled {
+		synlimitBackend = settings.SynlimitBackend
+	}
+
 	// Build per-instance config
 	cfg := telemt.BuildInstanceConfig(&telemt.InstanceConfigParams{
 		Instance:              inst,
@@ -1128,6 +1147,10 @@ func (s *ContainerService) generateInstanceConfigWithCached(ctx context.Context,
 		Secrets:               secretEntries,
 		Upstreams:             upstreamEntries,
 		ExtraMetricsWhitelist: dockerExtraMetricsIPs(),
+		SynlimitBackend:       synlimitBackend,
+		SynlimitSeconds:       settings.SynlimitSeconds,
+		SynlimitHitcount:      settings.SynlimitHitcount,
+		SynlimitBurst:         settings.SynlimitBurst,
 	})
 
 	return telemt.WriteConfigTOML(cfg, inst.ConfigPath())
@@ -1219,6 +1242,7 @@ func (s *ContainerService) startContainersParallel(ctx context.Context, insts []
 				Name:        inst.ContainerName(),
 				Port:        inst.Port,
 				TLSFrontDir: tlsFrontDir,
+				CapAdd:      synlimitCaps(settings),
 			})
 			if err != nil {
 				mu.Lock()

@@ -83,6 +83,15 @@ type Settings struct {
 	TelemtCommit  string `json:"telemt_commit"`
 	TelemtRepo    string `json:"telemt_repo"`
 
+	// SYN limiter (engine netfilter-based SYN flood limiter, opt-in).
+	// When enabled, containers are recreated with CAP_NET_ADMIN and the engine
+	// installs iptables/nftables rules. Off by default (no capability granted).
+	SynlimitEnabled  bool   `json:"synlimit_enabled"`
+	SynlimitBackend  string `json:"synlimit_backend"`  // "nftables" | "iptables"
+	SynlimitSeconds  int    `json:"synlimit_seconds"`  // window, default 60
+	SynlimitHitcount int    `json:"synlimit_hitcount"` // SYNs per window before limiting, default 48
+	SynlimitBurst    int    `json:"synlimit_burst"`    // burst allowance, default 1
+
 	// Kernel Network Tuning (TCP BBR & FastOpen)
 	SysctlOptimizationsEnabled bool   `json:"sysctl_optimizations_enabled"`
 	OriginalQdisc              string `json:"original_qdisc"`
@@ -147,6 +156,11 @@ func DefaultSettings() Settings {
 		SecretAutoRotateDays:       0,
 		MaintenanceMode:            false,
 		SysctlOptimizationsEnabled: false,
+		SynlimitEnabled:            false,
+		SynlimitBackend:            "nftables",
+		SynlimitSeconds:            60,
+		SynlimitHitcount:           48,
+		SynlimitBurst:              1,
 	}
 }
 
@@ -192,6 +206,16 @@ func (s *Settings) Validate() {
 	}
 	if s.SecretAutoRotateDays < 0 {
 		s.SecretAutoRotateDays = 0
+	}
+	s.SynlimitBackend = validEnum(s.SynlimitBackend, []string{"nftables", "iptables"}, "nftables")
+	if s.SynlimitSeconds < 1 {
+		s.SynlimitSeconds = 60
+	}
+	if s.SynlimitHitcount < 1 {
+		s.SynlimitHitcount = 48
+	}
+	if s.SynlimitBurst < 1 {
+		s.SynlimitBurst = 1
 	}
 }
 

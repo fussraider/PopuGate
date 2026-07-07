@@ -539,6 +539,34 @@ func TestRenderTOML_ClientMSS(t *testing.T) {
 	}
 }
 
+func TestRenderTOML_Synlimit(t *testing.T) {
+	on := &TelemtConfig{
+		General:  GeneralConfig{Modes: ModesConfig{}, Links: LinksConfig{}},
+		Timeouts: TimeoutsConfig{TGConnect: 10},
+		Server: ServerConfig{
+			Port: 443, MetricsWhitelist: []string{},
+			Synlimit: "nftables", SynlimitSeconds: 60, SynlimitHitcount: 48, SynlimitBurst: 1,
+		},
+	}
+	srv := tomlTable(t, parseRenderedTOML(t, on), "server")
+	if srv["synlimit"] != "nftables" {
+		t.Errorf("synlimit = %v, want nftables", srv["synlimit"])
+	}
+	if srv["synlimit_seconds"] != int64(60) || srv["synlimit_hitcount"] != int64(48) || srv["synlimit_burst"] != int64(1) {
+		t.Errorf("synlimit params = %v/%v/%v", srv["synlimit_seconds"], srv["synlimit_hitcount"], srv["synlimit_burst"])
+	}
+
+	off := &TelemtConfig{
+		General:  GeneralConfig{Modes: ModesConfig{}, Links: LinksConfig{}},
+		Timeouts: TimeoutsConfig{TGConnect: 10},
+		Server:   ServerConfig{Port: 443, MetricsWhitelist: []string{}},
+	}
+	srvOff := tomlTable(t, parseRenderedTOML(t, off), "server")
+	if _, ok := srvOff["synlimit"]; ok {
+		t.Error("synlimit must be omitted when backend is empty")
+	}
+}
+
 func TestRenderTOML_ExclusiveMask(t *testing.T) {
 	cfg := &TelemtConfig{
 		General:  GeneralConfig{Modes: ModesConfig{}, Links: LinksConfig{}},

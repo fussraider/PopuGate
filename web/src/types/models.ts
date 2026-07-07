@@ -39,6 +39,11 @@ export interface Settings {
   telemt_commit: string
   telemt_repo: string
   sysctl_optimizations_enabled: boolean
+  synlimit_enabled: boolean
+  synlimit_backend: string
+  synlimit_seconds: number
+  synlimit_hitcount: number
+  synlimit_burst: number
 }
 
 export interface Secret {

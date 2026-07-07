@@ -230,7 +230,8 @@ type InstanceRunOptions struct {
 	RunOptions
 	Name        string
 	Port        int
-	TLSFrontDir string // Host-side directory for TLS fronting content (empty = skip mount)
+	TLSFrontDir string   // Host-side directory for TLS fronting content (empty = skip mount)
+	CapAdd      []string // Linux capabilities to grant (e.g. NET_ADMIN for the SYN limiter)
 }
 
 // RunInstance creates and starts an instance container.
@@ -260,7 +261,8 @@ func (d *DockerClient) RunInstance(ctx context.Context, opts InstanceRunOptions)
 				"max-file": "3",
 			},
 		},
-		Binds: binds,
+		Binds:  binds,
+		CapAdd: opts.CapAdd,
 		Resources: container.Resources{
 			Ulimits: []*container.Ulimit{
 				{Name: "nofile", Hard: ulimitHard, Soft: ulimitHard},

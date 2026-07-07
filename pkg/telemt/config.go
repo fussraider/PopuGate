@@ -81,14 +81,21 @@ type TelegramConfig struct {
 }
 
 type AccessConfig struct {
-	ReplayCheckLen   int               `toml:"replay_check_len"`
-	ReplayWindowSecs int               `toml:"replay_window_secs"`
-	IgnoreTimeSkew   bool              `toml:"ignore_time_skew"`
-	Users            map[string]string `toml:"users"`
-	UserMaxTCPConns  map[string]int    `toml:"user_max_tcp_conns,omitempty"`
-	UserMaxUniqueIPs map[string]int    `toml:"user_max_unique_ips,omitempty"`
-	UserDataQuota    map[string]int64  `toml:"user_data_quota,omitempty"`
-	UserExpirations  map[string]string `toml:"user_expirations,omitempty"`
+	ReplayCheckLen   int                  `toml:"replay_check_len"`
+	ReplayWindowSecs int                  `toml:"replay_window_secs"`
+	IgnoreTimeSkew   bool                 `toml:"ignore_time_skew"`
+	Users            map[string]string    `toml:"users"`
+	UserMaxTCPConns  map[string]int       `toml:"user_max_tcp_conns,omitempty"`
+	UserMaxUniqueIPs map[string]int       `toml:"user_max_unique_ips,omitempty"`
+	UserDataQuota    map[string]int64     `toml:"user_data_quota,omitempty"`
+	UserExpirations  map[string]string    `toml:"user_expirations,omitempty"`
+	UserRateLimits   map[string]RateLimit `toml:"user_rate_limits,omitempty"`
+}
+
+// RateLimit holds per-user up/down rate limits in bits per second (0 = unlimited).
+type RateLimit struct {
+	UpBps   int64
+	DownBps int64
 }
 
 type UpstreamConfig struct {
@@ -127,13 +134,15 @@ type InstanceConfigParams struct {
 
 // SecretEntry represents a secret for TOML generation.
 type SecretEntry struct {
-	Label      string
-	SecretKey  string
-	Enabled    bool
-	MaxConns   int
-	MaxIPs     int
-	QuotaBytes int64
-	ExpiresAt  string
+	Label            string
+	SecretKey        string
+	Enabled          bool
+	MaxConns         int
+	MaxIPs           int
+	QuotaBytes       int64
+	RateLimitUpBps   int64
+	RateLimitDownBps int64
+	ExpiresAt        string
 }
 
 // UpstreamEntry represents an upstream for TOML generation.
@@ -158,6 +167,7 @@ func newEmptyAccess() AccessConfig {
 		UserMaxUniqueIPs: make(map[string]int),
 		UserDataQuota:    make(map[string]int64),
 		UserExpirations:  make(map[string]string),
+		UserRateLimits:   make(map[string]RateLimit),
 	}
 }
 
@@ -175,6 +185,9 @@ func applySecretsToAccess(access *AccessConfig, secrets []SecretEntry) {
 		}
 		if sec.QuotaBytes > 0 {
 			access.UserDataQuota[sec.Label] = sec.QuotaBytes
+		}
+		if sec.RateLimitUpBps > 0 || sec.RateLimitDownBps > 0 {
+			access.UserRateLimits[sec.Label] = RateLimit{UpBps: sec.RateLimitUpBps, DownBps: sec.RateLimitDownBps}
 		}
 		if sec.ExpiresAt != "" && sec.ExpiresAt != "0" {
 			access.UserExpirations[sec.Label] = sec.ExpiresAt
@@ -585,6 +598,19 @@ func renderAccessSection(b *strings.Builder, cfg *TelemtConfig) {
 			}
 			fmt.Fprintf(b, "%s = %q\n", label, cfg.Access.UserExpirations[label])
 		}
+		b.WriteString("\n")
+	}
+
+	// Per-user rate limits render as nested tables [access.user_rate_limits.<label>]
+	// with up_bps/down_bps (bits per second); hot-reloadable in the engine.
+	for _, label := range sortedKeys(cfg.Access.UserRateLimits) {
+		if !tomlKeyRe.MatchString(label) {
+			continue
+		}
+		rl := cfg.Access.UserRateLimits[label]
+		fmt.Fprintf(b, "[access.user_rate_limits.%s]\n", label)
+		fmt.Fprintf(b, "up_bps = %d\n", rl.UpBps)
+		fmt.Fprintf(b, "down_bps = %d\n", rl.DownBps)
 		b.WriteString("\n")
 	}
 }

@@ -204,6 +204,9 @@ type setLimitsRequest struct {
 	Quota      string `json:"quota"`                                  // Human-readable: "5G", "500M"
 	QuotaBytes *int64 `json:"quota_bytes" binding:"omitempty,min=-1"` // Or raw bytes
 	ExpiresAt  string `json:"expires_at"`                             // ISO 8601 or "0"
+	// Per-user rate limits in bits per second (0 = unlimited, omitted = unchanged).
+	RateLimitUpBps   *int64 `json:"rate_limit_up_bps" binding:"omitempty,min=-1"`
+	RateLimitDownBps *int64 `json:"rate_limit_down_bps" binding:"omitempty,min=-1"`
 }
 
 // SetLimits handles PUT /api/v1/secrets/:label/limits
@@ -244,7 +247,16 @@ func (h *SecretHandler) SetLimits(c *gin.Context) {
 		}
 	}
 
-	if err := h.secrets.SetLimits(c.Request.Context(), label, maxConns, maxIPs, quotaBytes, req.ExpiresAt); err != nil {
+	var rateUp int64 = -1
+	if req.RateLimitUpBps != nil {
+		rateUp = *req.RateLimitUpBps
+	}
+	var rateDown int64 = -1
+	if req.RateLimitDownBps != nil {
+		rateDown = *req.RateLimitDownBps
+	}
+
+	if err := h.secrets.SetLimits(c.Request.Context(), label, maxConns, maxIPs, quotaBytes, req.ExpiresAt, rateUp, rateDown); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -989,12 +1001,14 @@ func (h *SecretHandler) BulkToggle(c *gin.Context) {
 }
 
 type bulkSetLimitsRequest struct {
-	Labels     []string `json:"labels" binding:"omitempty,min=1"`
-	Tag        string   `json:"tag,omitempty"`
-	MaxConns   *int     `json:"max_conns"`
-	MaxIPs     *int     `json:"max_ips"`
-	QuotaBytes *int64   `json:"quota_bytes"`
-	ExpiresAt  string   `json:"expires_at"`
+	Labels           []string `json:"labels" binding:"omitempty,min=1"`
+	Tag              string   `json:"tag,omitempty"`
+	MaxConns         *int     `json:"max_conns"`
+	MaxIPs           *int     `json:"max_ips"`
+	QuotaBytes       *int64   `json:"quota_bytes"`
+	ExpiresAt        string   `json:"expires_at"`
+	RateLimitUpBps   *int64   `json:"rate_limit_up_bps"`
+	RateLimitDownBps *int64   `json:"rate_limit_down_bps"`
 }
 
 // BulkSetLimits handles POST /api/v1/secrets/bulk-set-limits
@@ -1032,8 +1046,16 @@ func (h *SecretHandler) BulkSetLimits(c *gin.Context) {
 	if req.QuotaBytes != nil {
 		quotaBytes = *req.QuotaBytes
 	}
+	var rateUp int64 = -1
+	if req.RateLimitUpBps != nil {
+		rateUp = *req.RateLimitUpBps
+	}
+	var rateDown int64 = -1
+	if req.RateLimitDownBps != nil {
+		rateDown = *req.RateLimitDownBps
+	}
 
-	updated, err := h.secrets.BulkSetLimits(c.Request.Context(), labels, maxConns, maxIPs, quotaBytes, req.ExpiresAt)
+	updated, err := h.secrets.BulkSetLimits(c.Request.Context(), labels, maxConns, maxIPs, quotaBytes, req.ExpiresAt, rateUp, rateDown)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return

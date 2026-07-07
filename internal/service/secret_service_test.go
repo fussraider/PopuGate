@@ -303,7 +303,7 @@ func TestSecretService_SetLimits(t *testing.T) {
 
 	_, _ = svc.Add(ctx, "user1", "")
 
-	err := svc.SetLimits(ctx, "user1", 10, 5, 1024, "2025-12-31")
+	err := svc.SetLimits(ctx, "user1", 10, 5, 1024, "2025-12-31", -1, -1)
 	if err != nil {
 		t.Fatalf("SetLimits: %v", err)
 	}
@@ -327,7 +327,7 @@ func TestSecretService_SetLimits_NotFound(t *testing.T) {
 	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
-	err := svc.SetLimits(ctx, "nonexistent", 10, 5, 1024, "")
+	err := svc.SetLimits(ctx, "nonexistent", 10, 5, 1024, "", -1, -1)
 	if err == nil {
 		t.Fatal("expected error for nonexistent secret")
 	}
@@ -339,7 +339,7 @@ func TestSecretService_SetLimits_ExceedsMax(t *testing.T) {
 
 	_, _ = svc.Add(ctx, "user1", "")
 
-	err := svc.SetLimits(ctx, "user1", 1_000_001, -1, -1, "")
+	err := svc.SetLimits(ctx, "user1", 1_000_001, -1, -1, "", -1, -1)
 	if err == nil {
 		t.Fatal("expected error for max_conns exceeding limit")
 	}
@@ -347,7 +347,7 @@ func TestSecretService_SetLimits_ExceedsMax(t *testing.T) {
 		t.Errorf("error = %q, want 'cannot exceed'", err.Error())
 	}
 
-	err = svc.SetLimits(ctx, "user1", -1, 1_000_001, -1, "")
+	err = svc.SetLimits(ctx, "user1", -1, 1_000_001, -1, "", -1, -1)
 	if err == nil {
 		t.Fatal("expected error for max_ips exceeding limit")
 	}
@@ -360,10 +360,10 @@ func TestSecretService_SetLimits_NegativePreservesOldValue(t *testing.T) {
 	_, _ = svc.Add(ctx, "user1", "")
 
 	// Set initial limits
-	_ = svc.SetLimits(ctx, "user1", 10, 5, 1024, "")
+	_ = svc.SetLimits(ctx, "user1", 10, 5, 1024, "", -1, -1)
 
 	// Update only quota, keep others by passing -1
-	err := svc.SetLimits(ctx, "user1", -1, -1, 2048, "")
+	err := svc.SetLimits(ctx, "user1", -1, -1, 2048, "", -1, -1)
 	if err != nil {
 		t.Fatalf("SetLimits: %v", err)
 	}

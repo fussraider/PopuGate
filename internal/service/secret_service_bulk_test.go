@@ -83,7 +83,7 @@ func TestSecretService_BulkSetLimits(t *testing.T) {
 	_, _ = svc.Add(ctx, "m1", "")
 	_, _ = svc.Add(ctx, "m2", "")
 
-	n, err := svc.BulkSetLimits(ctx, []string{"m1", "m2"}, 5, 3, 1<<20, "")
+	n, err := svc.BulkSetLimits(ctx, []string{"m1", "m2"}, 5, 3, 1<<20, "", -1, -1)
 	if err != nil {
 		t.Fatalf("BulkSetLimits: %v", err)
 	}
@@ -105,7 +105,7 @@ func TestSecretService_BulkSetLimits_Empty(t *testing.T) {
 	svc, _, _ := newTestSecretService(t)
 	ctx := context.Background()
 
-	n, err := svc.BulkSetLimits(ctx, []string{}, 5, 3, 0, "")
+	n, err := svc.BulkSetLimits(ctx, []string{}, 5, 3, 0, "", -1, -1)
 	if err != nil {
 		t.Fatalf("BulkSetLimits empty: %v", err)
 	}

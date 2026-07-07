@@ -1090,13 +1090,15 @@ func (s *ContainerService) generateInstanceConfigWithCached(ctx context.Context,
 			continue
 		}
 		secretEntries = append(secretEntries, telemt.SecretEntry{
-			Label:      sec.Label,
-			SecretKey:  sec.SecretKey,
-			Enabled:    true,
-			MaxConns:   sec.MaxConns,
-			MaxIPs:     sec.MaxIPs,
-			QuotaBytes: sec.QuotaBytes,
-			ExpiresAt:  sec.ExpiresAt,
+			Label:            sec.Label,
+			SecretKey:        sec.SecretKey,
+			Enabled:          true,
+			MaxConns:         sec.MaxConns,
+			MaxIPs:           sec.MaxIPs,
+			QuotaBytes:       sec.QuotaBytes,
+			RateLimitUpBps:   sec.RateLimitUpBps,
+			RateLimitDownBps: sec.RateLimitDownBps,
+			ExpiresAt:        sec.ExpiresAt,
 		})
 	}
 

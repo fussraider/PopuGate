@@ -156,7 +156,7 @@ func (s *SecretService) Toggle(ctx context.Context, label string, enable bool) e
 }
 
 // SetLimits updates per-user limits for a secret.
-func (s *SecretService) SetLimits(ctx context.Context, label string, maxConns, maxIPs int, quotaBytes int64, expiresAt string) error {
+func (s *SecretService) SetLimits(ctx context.Context, label string, maxConns, maxIPs int, quotaBytes int64, expiresAt string, rateLimitUpBps, rateLimitDownBps int64) error {
 	sec, err := s.secrets.GetByLabel(ctx, label)
 	if err != nil {
 		return err
@@ -181,6 +181,12 @@ func (s *SecretService) SetLimits(ctx context.Context, label string, maxConns, m
 	}
 	if quotaBytes >= 0 {
 		sec.QuotaBytes = quotaBytes
+	}
+	if rateLimitUpBps >= 0 {
+		sec.RateLimitUpBps = rateLimitUpBps
+	}
+	if rateLimitDownBps >= 0 {
+		sec.RateLimitDownBps = rateLimitDownBps
 	}
 	if expiresAt != "" {
 		sec.ExpiresAt = expiresAt
@@ -576,6 +582,6 @@ func (s *SecretService) BulkToggle(ctx context.Context, labels []string, enable 
 }
 
 // BulkSetLimits sets the same limits for multiple secrets.
-func (s *SecretService) BulkSetLimits(ctx context.Context, labels []string, maxConns, maxIPs int, quotaBytes int64, expiresAt string) (int, error) {
-	return s.secrets.BulkSetLimits(ctx, labels, maxConns, maxIPs, quotaBytes, expiresAt)
+func (s *SecretService) BulkSetLimits(ctx context.Context, labels []string, maxConns, maxIPs int, quotaBytes int64, expiresAt string, rateLimitUpBps, rateLimitDownBps int64) (int, error) {
+	return s.secrets.BulkSetLimits(ctx, labels, maxConns, maxIPs, quotaBytes, expiresAt, rateLimitUpBps, rateLimitDownBps)
 }

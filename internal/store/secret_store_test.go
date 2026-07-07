@@ -738,7 +738,7 @@ func TestSecretStore_BulkSetLimits(t *testing.T) {
 	_ = s.Create(ctx, &model.Secret{Label: "a", SecretKey: "aa000000000000000000000000000000", Enabled: true, MaxConns: 5, MaxIPs: 3})
 	_ = s.Create(ctx, &model.Secret{Label: "b", SecretKey: "bb000000000000000000000000000000", Enabled: true, MaxConns: 10})
 
-	updated, err := s.BulkSetLimits(ctx, []string{"a", "b"}, 20, 10, -1, "")
+	updated, err := s.BulkSetLimits(ctx, []string{"a", "b"}, 20, 10, -1, "", -1, -1)
 	if err != nil {
 		t.Fatalf("BulkSetLimits: %v", err)
 	}
@@ -757,7 +757,7 @@ func TestSecretStore_BulkSetLimits(t *testing.T) {
 	}
 
 	// Negative values should not change existing
-	_, err = s.BulkSetLimits(ctx, []string{"a"}, -1, -1, 5000, "2030-01-01T00:00:00Z")
+	_, err = s.BulkSetLimits(ctx, []string{"a"}, -1, -1, 5000, "2030-01-01T00:00:00Z", -1, -1)
 	if err != nil {
 		t.Fatalf("BulkSetLimits partial: %v", err)
 	}
@@ -773,7 +773,7 @@ func TestSecretStore_BulkSetLimits(t *testing.T) {
 	}
 
 	// Nonexistent label is skipped
-	updated, err = s.BulkSetLimits(ctx, []string{"ghost"}, 5, 5, 0, "")
+	updated, err = s.BulkSetLimits(ctx, []string{"ghost"}, 5, 5, 0, "", -1, -1)
 	if err != nil {
 		t.Fatalf("BulkSetLimits nonexistent: %v", err)
 	}

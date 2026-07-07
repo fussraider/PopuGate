@@ -72,14 +72,18 @@ export const useSecretsStore = defineStore('secrets', () => {
     maxIPs: number,
     quotaBytes: number,
     expiresAt: string,
+    rateLimitUpBps?: number,
+    rateLimitDownBps?: number,
   ) {
-    await secretsApi.setLimits(label, maxConns, maxIPs, quotaBytes, expiresAt)
+    await secretsApi.setLimits(label, maxConns, maxIPs, quotaBytes, expiresAt, rateLimitUpBps, rateLimitDownBps)
     const sec = secrets.value.find((s) => s.label === label)
     if (sec) {
       sec.max_conns = maxConns
       sec.max_ips = maxIPs
       sec.quota_bytes = quotaBytes
       sec.expires_at = expiresAt
+      if (rateLimitUpBps !== undefined) sec.rate_limit_up_bps = rateLimitUpBps
+      if (rateLimitDownBps !== undefined) sec.rate_limit_down_bps = rateLimitDownBps
     }
   }
 

@@ -194,6 +194,17 @@
             <input v-model="limitsModal.form.value.expiresAt" class="input" type="date" />
           </div>
         </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">{{ t('secrets.rate_up_mbit') }}</label>
+            <input v-model.number="limitsModal.form.value.rateUpMbit" class="input" type="number" min="0" :placeholder="t('secrets.unlimited_placeholder')" />
+            <small class="text-muted">{{ t('secrets.rate_hint') }}</small>
+          </div>
+          <div class="form-group">
+            <label class="form-label">{{ t('secrets.rate_down_mbit') }}</label>
+            <input v-model.number="limitsModal.form.value.rateDownMbit" class="input" type="number" min="0" :placeholder="t('secrets.unlimited_placeholder')" />
+          </div>
+        </div>
       </div>
     </FormModal>
 
@@ -620,13 +631,15 @@ async function handleDisableExpired() {
 
 // Limits modal
 const limitsTarget = ref('')
-const limitsModal = useFormModal({ maxConns: 0, maxIPs: 0, quotaMB: 0, expiresAt: '' })
+const limitsModal = useFormModal({ maxConns: 0, maxIPs: 0, quotaMB: 0, rateUpMbit: 0, rateDownMbit: 0, expiresAt: '' })
 limitsModal.open = (sec: any) => {
   limitsTarget.value = sec.label
   limitsModal.form.value = {
     maxConns: sec.max_conns,
     maxIPs: sec.max_ips,
     quotaMB: sec.quota_bytes ? Math.round(sec.quota_bytes / (1024 * 1024)) : 0,
+    rateUpMbit: sec.rate_limit_up_bps ? Math.round(sec.rate_limit_up_bps / 1_000_000) : 0,
+    rateDownMbit: sec.rate_limit_down_bps ? Math.round(sec.rate_limit_down_bps / 1_000_000) : 0,
     expiresAt: (sec.expires_at && sec.expires_at !== '0') ? sec.expires_at.split('T')[0] : '',
   }
   limitsModal.isOpen.value = true
@@ -634,7 +647,10 @@ limitsModal.open = (sec: any) => {
 
 async function handleSetLimits() {
   await limitsModal.submit(async (f) => {
-    await secretsStore.setLimits(limitsTarget.value, f.maxConns, f.maxIPs, f.quotaMB * 1024 * 1024, f.expiresAt || '0')
+    await secretsStore.setLimits(
+      limitsTarget.value, f.maxConns, f.maxIPs, f.quotaMB * 1024 * 1024, f.expiresAt || '0',
+      f.rateUpMbit * 1_000_000, f.rateDownMbit * 1_000_000,
+    )
   })
 }
 

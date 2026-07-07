@@ -432,6 +432,41 @@ func TestRenderTOML_NoTelegramURLsWhenEmpty(t *testing.T) {
 	}
 }
 
+func TestRenderTOML_UserRateLimits(t *testing.T) {
+	access := newEmptyAccess()
+	applySecretsToAccess(&access, []SecretEntry{
+		{Label: "alice", SecretKey: "aa11bb22cc33dd44ee55ff6677889900", Enabled: true, RateLimitUpBps: 1_000_000, RateLimitDownBps: 5_000_000},
+		{Label: "bob", SecretKey: "bb11bb22cc33dd44ee55ff6677889900", Enabled: true},
+	})
+	cfg := &TelemtConfig{
+		General:  GeneralConfig{Modes: ModesConfig{}, Links: LinksConfig{}},
+		Server:   ServerConfig{MetricsWhitelist: []string{}},
+		Timeouts: TimeoutsConfig{TGConnect: 10},
+		Access:   access,
+	}
+
+	parsed := parseRenderedTOML(t, cfg)
+	accessTbl := tomlTable(t, parsed, "access")
+	rl, ok := accessTbl["user_rate_limits"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected [access.user_rate_limits] table, got %T", accessTbl["user_rate_limits"])
+	}
+	alice, ok := rl["alice"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected user_rate_limits.alice table, got %T", rl["alice"])
+	}
+	if alice["up_bps"] != int64(1_000_000) {
+		t.Errorf("alice.up_bps = %v, want 1000000", alice["up_bps"])
+	}
+	if alice["down_bps"] != int64(5_000_000) {
+		t.Errorf("alice.down_bps = %v, want 5000000", alice["down_bps"])
+	}
+	// bob has no rate limit → must not appear.
+	if _, ok := rl["bob"]; ok {
+		t.Error("user_rate_limits must not contain bob (no limit set)")
+	}
+}
+
 func TestRenderTOML_WithMaskingHost(t *testing.T) {
 	cfg := &TelemtConfig{
 		General:  GeneralConfig{Modes: ModesConfig{}, Links: LinksConfig{}},

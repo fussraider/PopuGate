@@ -90,12 +90,16 @@ export const secretsApi = {
     maxIPs: number,
     quotaBytes: number,
     expiresAt: string,
+    rateLimitUpBps?: number,
+    rateLimitDownBps?: number,
   ) =>
     api.put(`/secrets/${label}/limits`, {
       max_conns: maxConns,
       max_ips: maxIPs,
       quota_bytes: quotaBytes,
       expires_at: expiresAt,
+      rate_limit_up_bps: rateLimitUpBps,
+      rate_limit_down_bps: rateLimitDownBps,
     }),
 
   getLimits: (label: string) => api.get(`/secrets/${label}/limits`).then((r) => r.data),
@@ -146,7 +150,7 @@ export const secretsApi = {
 
   bulkSetLimits: (
     labels: string[],
-    limits: { max_conns?: number; max_ips?: number; quota_bytes?: number; expires_at?: string },
+    limits: { max_conns?: number; max_ips?: number; quota_bytes?: number; expires_at?: string; rate_limit_up_bps?: number; rate_limit_down_bps?: number },
     tag?: string,
   ) =>
     api.post<{ ok: boolean; updated: number }>('/secrets/bulk-set-limits', { labels: tag ? undefined : labels, tag: tag || undefined, ...limits }).then((r) => r.data),

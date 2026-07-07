@@ -19,10 +19,14 @@ type Secret struct {
 	MaxConns   int    `json:"max_conns" db:"max_conns"`
 	MaxIPs     int    `json:"max_ips" db:"max_ips"`
 	QuotaBytes int64  `json:"quota_bytes" db:"quota_bytes"`
-	ExpiresAt  string `json:"expires_at" db:"expires_at"`
-	Notes      string `json:"notes" db:"notes"`
-	Tags       string `json:"tags" db:"tags"`
-	ArchivedAt int64  `json:"archived_at" db:"archived_at"`
+	// Per-user rate limits in bits per second (0 = unlimited). Rendered as
+	// [access.user_rate_limits.<label>] up_bps/down_bps for the telemt engine.
+	RateLimitUpBps   int64  `json:"rate_limit_up_bps" db:"rate_limit_up_bps"`
+	RateLimitDownBps int64  `json:"rate_limit_down_bps" db:"rate_limit_down_bps"`
+	ExpiresAt        string `json:"expires_at" db:"expires_at"`
+	Notes            string `json:"notes" db:"notes"`
+	Tags             string `json:"tags" db:"tags"`
+	ArchivedAt       int64  `json:"archived_at" db:"archived_at"`
 
 	// Computed fields (not in DB)
 	TrafficIn  int64 `json:"traffic_in,omitempty" db:"-"`

@@ -6786,6 +6786,12 @@ const docTemplate = `{
                 "quota_bytes": {
                     "type": "integer"
                 },
+                "rate_limit_down_bps": {
+                    "type": "integer"
+                },
+                "rate_limit_up_bps": {
+                    "type": "integer"
+                },
                 "tag": {
                     "type": "string"
                 }
@@ -7006,6 +7012,15 @@ const docTemplate = `{
                 },
                 "quota_bytes": {
                     "description": "Or raw bytes",
+                    "type": "integer",
+                    "minimum": -1
+                },
+                "rate_limit_down_bps": {
+                    "type": "integer",
+                    "minimum": -1
+                },
+                "rate_limit_up_bps": {
+                    "description": "Per-user rate limits in bits per second (0 = unlimited, omitted = unchanged).",
                     "type": "integer",
                     "minimum": -1
                 }

@@ -25,7 +25,8 @@ func NewSecretStore(db *sql.DB) *SecretStore {
 func (s *SecretStore) List(ctx context.Context) ([]model.Secret, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT s.id, s.label, s.secret_key, s.created_at, s.enabled,
-		       s.max_conns, s.max_ips, s.quota_bytes, s.expires_at, s.notes,
+		       s.max_conns, s.max_ips, s.quota_bytes,
+		       s.rate_limit_up_bps, s.rate_limit_down_bps, s.expires_at, s.notes,
 		       s.tags, s.archived_at,
 		       COALESCE(t.bytes_in, 0), COALESCE(t.bytes_out, 0)
 		FROM secrets s
@@ -43,6 +44,7 @@ func (s *SecretStore) List(ctx context.Context) ([]model.Secret, error) {
 		var enabled int
 		if err := rows.Scan(&sec.ID, &sec.Label, &sec.SecretKey, &sec.CreatedAt,
 			&enabled, &sec.MaxConns, &sec.MaxIPs, &sec.QuotaBytes,
+			&sec.RateLimitUpBps, &sec.RateLimitDownBps,
 			&sec.ExpiresAt, &sec.Notes, &sec.Tags, &sec.ArchivedAt,
 			&sec.TrafficIn, &sec.TrafficOut); err != nil {
 			return nil, fmt.Errorf("scan secret: %w", err)
@@ -62,7 +64,8 @@ func (s *SecretStore) GetByLabel(ctx context.Context, label string) (*model.Secr
 	var enabled int
 	err := s.db.QueryRowContext(ctx, `
 		SELECT s.id, s.label, s.secret_key, s.created_at, s.enabled,
-		       s.max_conns, s.max_ips, s.quota_bytes, s.expires_at, s.notes,
+		       s.max_conns, s.max_ips, s.quota_bytes,
+		       s.rate_limit_up_bps, s.rate_limit_down_bps, s.expires_at, s.notes,
 		       s.tags, s.archived_at,
 		       COALESCE(t.bytes_in, 0), COALESCE(t.bytes_out, 0)
 		FROM secrets s
@@ -70,6 +73,7 @@ func (s *SecretStore) GetByLabel(ctx context.Context, label string) (*model.Secr
 		WHERE s.label = ?
 	`, label).Scan(&sec.ID, &sec.Label, &sec.SecretKey, &sec.CreatedAt,
 		&enabled, &sec.MaxConns, &sec.MaxIPs, &sec.QuotaBytes,
+		&sec.RateLimitUpBps, &sec.RateLimitDownBps,
 		&sec.ExpiresAt, &sec.Notes, &sec.Tags, &sec.ArchivedAt,
 		&sec.TrafficIn, &sec.TrafficOut)
 	if err == sql.ErrNoRows {
@@ -89,9 +93,9 @@ func (s *SecretStore) Create(ctx context.Context, sec *model.Secret) error {
 		enabled = 1
 	}
 	result, err := s.db.ExecContext(ctx, `
-		INSERT INTO secrets (label, secret_key, enabled, max_conns, max_ips, quota_bytes, expires_at, notes, tags)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, sec.Label, sec.SecretKey, enabled, sec.MaxConns, sec.MaxIPs, sec.QuotaBytes, sec.ExpiresAt, sec.Notes, sec.Tags)
+		INSERT INTO secrets (label, secret_key, enabled, max_conns, max_ips, quota_bytes, rate_limit_up_bps, rate_limit_down_bps, expires_at, notes, tags)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, sec.Label, sec.SecretKey, enabled, sec.MaxConns, sec.MaxIPs, sec.QuotaBytes, sec.RateLimitUpBps, sec.RateLimitDownBps, sec.ExpiresAt, sec.Notes, sec.Tags)
 	if err != nil {
 		return fmt.Errorf("create secret: %w", err)
 	}
@@ -107,9 +111,11 @@ func (s *SecretStore) Update(ctx context.Context, sec *model.Secret) error {
 	}
 	_, err := s.db.ExecContext(ctx, `
 		UPDATE secrets SET secret_key=?, enabled=?, max_conns=?, max_ips=?,
-		                   quota_bytes=?, expires_at=?, notes=?, tags=?
+		                   quota_bytes=?, rate_limit_up_bps=?, rate_limit_down_bps=?,
+		                   expires_at=?, notes=?, tags=?
 		WHERE label = ?
 	`, sec.SecretKey, enabled, sec.MaxConns, sec.MaxIPs, sec.QuotaBytes,
+		sec.RateLimitUpBps, sec.RateLimitDownBps,
 		sec.ExpiresAt, sec.Notes, sec.Tags, sec.Label)
 	return err
 }
@@ -310,7 +316,8 @@ func (s *SecretStore) UpdateTags(ctx context.Context, label, tags string) error 
 func (s *SecretStore) ListByTag(ctx context.Context, tag string) ([]model.Secret, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT s.id, s.label, s.secret_key, s.created_at, s.enabled,
-		       s.max_conns, s.max_ips, s.quota_bytes, s.expires_at, s.notes,
+		       s.max_conns, s.max_ips, s.quota_bytes,
+		       s.rate_limit_up_bps, s.rate_limit_down_bps, s.expires_at, s.notes,
 		       s.tags, s.archived_at,
 		       COALESCE(t.bytes_in, 0), COALESCE(t.bytes_out, 0)
 		FROM secrets s
@@ -359,6 +366,7 @@ func scanSecrets(rows *sql.Rows) ([]model.Secret, error) {
 		var enabled int
 		if err := rows.Scan(&sec.ID, &sec.Label, &sec.SecretKey, &sec.CreatedAt,
 			&enabled, &sec.MaxConns, &sec.MaxIPs, &sec.QuotaBytes,
+			&sec.RateLimitUpBps, &sec.RateLimitDownBps,
 			&sec.ExpiresAt, &sec.Notes, &sec.Tags, &sec.ArchivedAt,
 			&sec.TrafficIn, &sec.TrafficOut); err != nil {
 			return nil, fmt.Errorf("scan secret: %w", err)
@@ -435,7 +443,8 @@ func (s *SecretStore) BulkRotateKeys(ctx context.Context, labels []string, keys 
 func (s *SecretStore) Search(ctx context.Context, query string) ([]model.Secret, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT s.id, s.label, s.secret_key, s.created_at, s.enabled,
-		       s.max_conns, s.max_ips, s.quota_bytes, s.expires_at, s.notes,
+		       s.max_conns, s.max_ips, s.quota_bytes,
+		       s.rate_limit_up_bps, s.rate_limit_down_bps, s.expires_at, s.notes,
 		       s.tags, s.archived_at,
 		       COALESCE(t.bytes_in, 0), COALESCE(t.bytes_out, 0)
 		FROM secrets s
@@ -457,7 +466,8 @@ func (s *SecretStore) Top(ctx context.Context, limit int) ([]model.Secret, error
 	}
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT s.id, s.label, s.secret_key, s.created_at, s.enabled,
-		       s.max_conns, s.max_ips, s.quota_bytes, s.expires_at, s.notes,
+		       s.max_conns, s.max_ips, s.quota_bytes,
+		       s.rate_limit_up_bps, s.rate_limit_down_bps, s.expires_at, s.notes,
 		       s.tags, s.archived_at,
 		       COALESCE(t.bytes_in, 0), COALESCE(t.bytes_out, 0)
 		FROM secrets s
@@ -582,7 +592,7 @@ func (s *SecretStore) BulkToggleEnabled(ctx context.Context, labels []string, en
 }
 
 // BulkSetLimits sets the same limits for multiple secrets by labels.
-func (s *SecretStore) BulkSetLimits(ctx context.Context, labels []string, maxConns, maxIPs int, quotaBytes int64, expiresAt string) (int, error) {
+func (s *SecretStore) BulkSetLimits(ctx context.Context, labels []string, maxConns, maxIPs int, quotaBytes int64, expiresAt string, rateLimitUpBps, rateLimitDownBps int64) (int, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, fmt.Errorf("begin tx: %w", err)
@@ -594,10 +604,11 @@ func (s *SecretStore) BulkSetLimits(ctx context.Context, labels []string, maxCon
 		var sec model.Secret
 		var enabled int
 		if err := tx.QueryRowContext(ctx,
-			"SELECT id, label, secret_key, created_at, enabled, max_conns, max_ips, quota_bytes, expires_at, notes, tags, archived_at FROM secrets WHERE label = ?",
+			"SELECT id, label, secret_key, created_at, enabled, max_conns, max_ips, quota_bytes, rate_limit_up_bps, rate_limit_down_bps, expires_at, notes, tags, archived_at FROM secrets WHERE label = ?",
 			label,
 		).Scan(&sec.ID, &sec.Label, &sec.SecretKey, &sec.CreatedAt, &enabled,
-			&sec.MaxConns, &sec.MaxIPs, &sec.QuotaBytes, &sec.ExpiresAt, &sec.Notes, &sec.Tags, &sec.ArchivedAt); err != nil {
+			&sec.MaxConns, &sec.MaxIPs, &sec.QuotaBytes, &sec.RateLimitUpBps, &sec.RateLimitDownBps,
+			&sec.ExpiresAt, &sec.Notes, &sec.Tags, &sec.ArchivedAt); err != nil {
 			continue
 		}
 		_ = enabled // scanned as int per convention, not used in UPDATE
@@ -610,12 +621,18 @@ func (s *SecretStore) BulkSetLimits(ctx context.Context, labels []string, maxCon
 		if quotaBytes >= 0 {
 			sec.QuotaBytes = quotaBytes
 		}
+		if rateLimitUpBps >= 0 {
+			sec.RateLimitUpBps = rateLimitUpBps
+		}
+		if rateLimitDownBps >= 0 {
+			sec.RateLimitDownBps = rateLimitDownBps
+		}
 		if expiresAt != "" {
 			sec.ExpiresAt = expiresAt
 		}
 		if _, err := tx.ExecContext(ctx,
-			"UPDATE secrets SET max_conns = ?, max_ips = ?, quota_bytes = ?, expires_at = ? WHERE label = ?",
-			sec.MaxConns, sec.MaxIPs, sec.QuotaBytes, sec.ExpiresAt, sec.Label); err == nil {
+			"UPDATE secrets SET max_conns = ?, max_ips = ?, quota_bytes = ?, rate_limit_up_bps = ?, rate_limit_down_bps = ?, expires_at = ? WHERE label = ?",
+			sec.MaxConns, sec.MaxIPs, sec.QuotaBytes, sec.RateLimitUpBps, sec.RateLimitDownBps, sec.ExpiresAt, sec.Label); err == nil {
 			updated++
 		}
 	}

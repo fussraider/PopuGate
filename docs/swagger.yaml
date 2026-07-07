@@ -182,6 +182,10 @@ definitions:
         type: integer
       quota_bytes:
         type: integer
+      rate_limit_down_bps:
+        type: integer
+      rate_limit_up_bps:
+        type: integer
       tag:
         type: string
     type: object
@@ -329,6 +333,14 @@ definitions:
         type: string
       quota_bytes:
         description: Or raw bytes
+        minimum: -1
+        type: integer
+      rate_limit_down_bps:
+        minimum: -1
+        type: integer
+      rate_limit_up_bps:
+        description: Per-user rate limits in bits per second (0 = unlimited, omitted
+          = unchanged).
         minimum: -1
         type: integer
     type: object

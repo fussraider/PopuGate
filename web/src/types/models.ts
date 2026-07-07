@@ -50,6 +50,8 @@ export interface Secret {
   max_conns: number
   max_ips: number
   quota_bytes: number
+  rate_limit_up_bps: number
+  rate_limit_down_bps: number
   expires_at: string
   notes: string
   tags?: string

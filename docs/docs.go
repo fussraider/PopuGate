@@ -6545,6 +6545,10 @@ const docTemplate = `{
                     "maximum": 4096,
                     "minimum": 88
                 },
+                "exclusive_mask": {
+                    "description": "JSON object {\"sni\":\"host:port\"} of per-SNI mask targets",
+                    "type": "string"
+                },
                 "fake_tls": {
                     "description": "pointer to distinguish unset from false",
                     "type": "boolean"
@@ -7155,6 +7159,9 @@ const docTemplate = `{
                 },
                 "enabled": {
                     "type": "boolean"
+                },
+                "exclusive_mask": {
+                    "type": "string"
                 },
                 "fake_tls": {
                     "type": "boolean"

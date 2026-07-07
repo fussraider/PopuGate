@@ -91,6 +91,8 @@ type addInstanceRequest struct {
 	TLSFronting   *bool  `json:"tls_fronting"`
 	// drop|mask|accept|reject_handshake (default mask)
 	UnknownSNIAction string `json:"unknown_sni_action" binding:"omitempty,oneof=drop mask accept reject_handshake"`
+	// JSON object {"sni":"host:port"} of per-SNI mask targets
+	ExclusiveMask string `json:"exclusive_mask"`
 }
 
 // Add handles POST /api/v1/instances
@@ -188,6 +190,7 @@ func buildInstanceFromRequest(req *addInstanceRequest) *model.Instance {
 		TCPMSSBulk:       req.TCPMSSBulk,
 		TLSFronting:      tlsFronting,
 		UnknownSNIAction: req.UnknownSNIAction,
+		ExclusiveMask:    req.ExclusiveMask,
 	}
 }
 
@@ -207,6 +210,7 @@ type updateInstanceRequest struct {
 	TCPMSSBulk       *int    `json:"client_mss_bulk" binding:"omitempty,min=88,max=4096"`
 	TLSFronting      *bool   `json:"tls_fronting"`
 	UnknownSNIAction *string `json:"unknown_sni_action" binding:"omitempty,oneof=drop mask accept reject_handshake"`
+	ExclusiveMask    *string `json:"exclusive_mask"`
 }
 
 func (h *InstanceHandler) getInstanceForUpdate(c *gin.Context) (int64, *model.Instance, bool) {
@@ -314,6 +318,9 @@ func (h *InstanceHandler) applySimpleFields(c *gin.Context, inst *model.Instance
 	}
 	if req.UnknownSNIAction != nil {
 		inst.UnknownSNIAction = *req.UnknownSNIAction
+	}
+	if req.ExclusiveMask != nil {
+		inst.ExclusiveMask = *req.ExclusiveMask
 	}
 	return true
 }

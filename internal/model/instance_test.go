@@ -263,6 +263,43 @@ func TestInstanceValidate_TLSFrontingWithFakeTLS(t *testing.T) {
 	}
 }
 
+func TestInstanceValidate_ExclusiveMask(t *testing.T) {
+	base := func(em string) *Instance {
+		return &Instance{Port: 443, MetricsPort: 9091, TLSDomain: "example.com", ExclusiveMask: em}
+	}
+	valid := []string{"", "{}", `{"a.com":"1.2.3.4:443"}`, `{"a.com":"host:443","b.com":"[::1]:8443"}`}
+	for _, em := range valid {
+		if err := base(em).Validate(); err != nil {
+			t.Errorf("exclusive_mask %q: unexpected error: %v", em, err)
+		}
+	}
+	invalid := []string{
+		`not json`,
+		`{"a.com":"noport"}`,
+		`{"a.com":"host:0"}`,
+		`{"a.com":"host:70000"}`,
+		`{"":"host:443"}`,
+	}
+	for _, em := range invalid {
+		if err := base(em).Validate(); err == nil {
+			t.Errorf("exclusive_mask %q: expected error, got nil", em)
+		}
+	}
+}
+
+func TestGetExclusiveMask(t *testing.T) {
+	if m := (&Instance{ExclusiveMask: ""}).GetExclusiveMask(); m != nil {
+		t.Errorf("empty: expected nil, got %v", m)
+	}
+	if m := (&Instance{ExclusiveMask: "{}"}).GetExclusiveMask(); m != nil {
+		t.Errorf("{}: expected nil, got %v", m)
+	}
+	m := (&Instance{ExclusiveMask: `{"a.com":"1.2.3.4:443"}`}).GetExclusiveMask()
+	if m["a.com"] != "1.2.3.4:443" {
+		t.Errorf("expected mapping, got %v", m)
+	}
+}
+
 func TestGetTags_Empty(t *testing.T) {
 	inst := Instance{Tags: ""}
 	if tags := inst.GetTags(); tags != nil {

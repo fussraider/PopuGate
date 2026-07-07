@@ -64,16 +64,17 @@ type TimeoutsConfig struct {
 }
 
 type CensorshipConfig struct {
-	TLSDomain         string   `toml:"tls_domain"`
-	TLSDomains        []string `toml:"tls_domains,omitempty"`
-	UnknownSNIAction  string   `toml:"unknown_sni_action"`
-	Mask              bool     `toml:"mask"`
-	MaskPort          int      `toml:"mask_port"`
-	MaskHost          string   `toml:"mask_host,omitempty"`
-	MaskRelayMaxBytes int64    `toml:"mask_relay_max_bytes,omitempty"`
-	FakeCertLen       int      `toml:"fake_cert_len"`
-	TLSEmulation      bool     `toml:"tls_emulation"`
-	TLSFrontDir       string   `toml:"tls_front_dir,omitempty"`
+	TLSDomain         string            `toml:"tls_domain"`
+	TLSDomains        []string          `toml:"tls_domains,omitempty"`
+	UnknownSNIAction  string            `toml:"unknown_sni_action"`
+	Mask              bool              `toml:"mask"`
+	MaskPort          int               `toml:"mask_port"`
+	MaskHost          string            `toml:"mask_host,omitempty"`
+	MaskRelayMaxBytes int64             `toml:"mask_relay_max_bytes,omitempty"`
+	FakeCertLen       int               `toml:"fake_cert_len"`
+	TLSEmulation      bool              `toml:"tls_emulation"`
+	TLSFrontDir       string            `toml:"tls_front_dir,omitempty"`
+	ExclusiveMask     map[string]string `toml:"exclusive_mask,omitempty"`
 }
 
 type TelegramConfig struct {
@@ -362,6 +363,7 @@ func instanceCensorship(inst *model.Instance, fakeCertLen int) CensorshipConfig 
 		TLSDomain:        inst.TLSDomain,
 		TLSDomains:       inst.GetTLSDomains(),
 		UnknownSNIAction: sniAction,
+		ExclusiveMask:    inst.GetExclusiveMask(),
 		Mask:             true,
 		MaskHost:         inst.GetMaskHost(),
 		MaskPort:         inst.MaskPort,
@@ -572,6 +574,16 @@ func renderCensorshipSection(b *strings.Builder, cfg *TelemtConfig) {
 	}
 	b.WriteString("# Note: geo-blocking is enforced at the host firewall level (iptables/nftables),\n")
 	b.WriteString("# not via telemt config.\n\n")
+
+	// Per-SNI mask targets for unauthenticated fallback traffic. Must follow all
+	// flat [censorship] keys (TOML sub-table rule).
+	if len(cfg.Censorship.ExclusiveMask) > 0 {
+		b.WriteString("[censorship.exclusive_mask]\n")
+		for _, sni := range sortedKeys(cfg.Censorship.ExclusiveMask) {
+			fmt.Fprintf(b, "%q = %q\n", sni, cfg.Censorship.ExclusiveMask[sni])
+		}
+		b.WriteString("\n")
+	}
 }
 
 // tomlKeyRe validates that a string is safe to use as a bare TOML key.

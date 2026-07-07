@@ -265,6 +265,17 @@
           </select>
           <small class="text-muted">{{ t('instances.unknown_sni_action_hint') }}</small>
         </div>
+        <div class="form-group mb-md">
+          <label class="form-label">{{ t('instances.exclusive_mask') }}</label>
+          <textarea
+            v-model="form.exclusive_mask"
+            class="input"
+            rows="3"
+            spellcheck="false"
+            placeholder='{"example.com": "1.2.3.4:443"}'
+          ></textarea>
+          <small class="text-muted">{{ t('instances.exclusive_mask_hint') }}</small>
+        </div>
       </div>
 
       <!-- Anti-Blocking -->
@@ -581,6 +592,7 @@ const form = reactive({
   client_mss_bulk: 0,
   tls_fronting: false,
   unknown_sni_action: 'mask',
+  exclusive_mask: '',
 })
 
 watch(() => form.fake_tls, (val) => {
@@ -600,7 +612,7 @@ function openAddModal() {
   editingInstance.value = null
   portChecks.port = null
   portChecks.metrics_port = null
-  Object.assign(form, { port: 443, metrics_port: 0, label: '', tls_domain: '', tls_domains_text: '', fake_tls: true, mask_host: '', mask_port: 443, tags: '[]', enabled: true, tcp_mss_enabled: false, tcp_mss: 88, client_mss_bulk: 0, tls_fronting: false, unknown_sni_action: 'mask' })
+  Object.assign(form, { port: 443, metrics_port: 0, label: '', tls_domain: '', tls_domains_text: '', fake_tls: true, mask_host: '', mask_port: 443, tags: '[]', enabled: true, tcp_mss_enabled: false, tcp_mss: 88, client_mss_bulk: 0, tls_fronting: false, unknown_sni_action: 'mask', exclusive_mask: '' })
   modalOpen.value = true
 }
 
@@ -624,6 +636,7 @@ function openEditModal(item: Instance) {
     client_mss_bulk: item.client_mss_bulk || 0,
     tls_fronting: item.tls_fronting || false,
     unknown_sni_action: item.unknown_sni_action || 'mask',
+    exclusive_mask: item.exclusive_mask || '',
   })
   modalOpen.value = true
 }
@@ -652,6 +665,7 @@ async function handleSubmit() {
       client_mss_bulk: form.tcp_mss_enabled && form.client_mss_bulk > 0 ? form.client_mss_bulk : undefined,
       tls_fronting: form.tls_fronting,
       unknown_sni_action: form.unknown_sni_action,
+      exclusive_mask: form.exclusive_mask.trim(),
     }
 
     if (editingInstance.value) {

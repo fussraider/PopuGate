@@ -3,7 +3,9 @@ package model
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"path/filepath"
+	"strconv"
 )
 
 // Instance represents a fully independent proxy instance with its own port, domains, and config.
@@ -24,11 +26,14 @@ type Instance struct {
 	MaskPort   int    `json:"mask_port" db:"mask_port"`     // Port for mask_host
 	// Action for an unknown/mismatched SNI on FakeTLS: drop|mask|accept|reject_handshake (default mask).
 	UnknownSNIAction string `json:"unknown_sni_action" db:"unknown_sni_action"`
-	Tags             string `json:"tags" db:"tags"`                       // Access tags (JSON array)
-	TCPMSSEnabled    bool   `json:"tcp_mss_enabled" db:"tcp_mss_enabled"` // Enable client MSS shaping (engine client_mss)
-	TCPMSS           int    `json:"tcp_mss" db:"tcp_mss"`                 // client_mss value (88-4096, default 88)
-	TCPMSSBulk       int    `json:"client_mss_bulk" db:"client_mss_bulk"` // client_mss_bulk: raise MSS after handshake (0=off)
-	TLSFronting      bool   `json:"tls_fronting" db:"tls_fronting"`       // Enable TLS fronting content serving
+	// Per-SNI mask targets for unauthenticated fallback traffic, JSON object
+	// {"sni": "host:port"} → engine [censorship.exclusive_mask]. Empty = none.
+	ExclusiveMask string `json:"exclusive_mask" db:"exclusive_mask"`
+	Tags          string `json:"tags" db:"tags"`                       // Access tags (JSON array)
+	TCPMSSEnabled bool   `json:"tcp_mss_enabled" db:"tcp_mss_enabled"` // Enable client MSS shaping (engine client_mss)
+	TCPMSS        int    `json:"tcp_mss" db:"tcp_mss"`                 // client_mss value (88-4096, default 88)
+	TCPMSSBulk    int    `json:"client_mss_bulk" db:"client_mss_bulk"` // client_mss_bulk: raise MSS after handshake (0=off)
+	TLSFronting   bool   `json:"tls_fronting" db:"tls_fronting"`       // Enable TLS fronting content serving
 }
 
 // Validate checks instance fields.
@@ -70,6 +75,24 @@ func (i *Instance) Validate() error {
 	default:
 		return fmt.Errorf("unknown_sni_action must be one of drop, mask, accept, reject_handshake")
 	}
+	if i.ExclusiveMask != "" && i.ExclusiveMask != "{}" {
+		var m map[string]string
+		if err := json.Unmarshal([]byte(i.ExclusiveMask), &m); err != nil {
+			return fmt.Errorf("exclusive_mask must be a JSON object of sni -> host:port")
+		}
+		for sni, target := range m {
+			if sni == "" {
+				return fmt.Errorf("exclusive_mask contains an empty SNI key")
+			}
+			_, port, err := net.SplitHostPort(target)
+			if err != nil {
+				return fmt.Errorf("exclusive_mask[%s] must be host:port, got %q", sni, target)
+			}
+			if p, err := strconv.Atoi(port); err != nil || p < 1 || p > 65535 {
+				return fmt.Errorf("exclusive_mask[%s] port must be 1-65535", sni)
+			}
+		}
+	}
 	return nil
 }
 
@@ -81,6 +104,16 @@ func (i *Instance) ContainerName() string {
 // ConfigPath returns the TOML config file path for this instance.
 func (i *Instance) ConfigPath() string {
 	return filepath.Join(InstallDir, fmt.Sprintf("mtproxy/config-%d.toml", i.Port))
+}
+
+// GetExclusiveMask parses the JSON exclusive_mask object (SNI -> host:port).
+func (i *Instance) GetExclusiveMask() map[string]string {
+	if i.ExclusiveMask == "" || i.ExclusiveMask == "{}" {
+		return nil
+	}
+	var m map[string]string
+	_ = json.Unmarshal([]byte(i.ExclusiveMask), &m)
+	return m
 }
 
 // GetTLSDomains parses the JSON tls_domains array.

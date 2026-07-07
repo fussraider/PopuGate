@@ -129,6 +129,7 @@ export interface Instance {
   client_mss_bulk: number
   tls_fronting: boolean
   unknown_sni_action: string
+  exclusive_mask: string
   active_port?: number
   active_metrics_port?: number
 }

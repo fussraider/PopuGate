@@ -18,7 +18,7 @@ func NewInstanceStore(db *sql.DB) *InstanceStore {
 	return &InstanceStore{db: db}
 }
 
-const instanceColumns = `id, port, metrics_port, enabled, label, tls_domain, tls_domains, fake_tls, mask_host, mask_port, tags, tcp_mss_enabled, tcp_mss, tls_fronting, unknown_sni_action, client_mss_bulk`
+const instanceColumns = `id, port, metrics_port, enabled, label, tls_domain, tls_domains, fake_tls, mask_host, mask_port, tags, tcp_mss_enabled, tcp_mss, tls_fronting, unknown_sni_action, client_mss_bulk, exclusive_mask`
 
 type scanner interface {
 	Scan(dest ...interface{}) error
@@ -29,7 +29,7 @@ func scanInstance(row scanner) (*model.Instance, error) {
 	var enabled, fakeTLS, tcpMSSEnabled, tlsFronting int
 	if err := row.Scan(&inst.ID, &inst.Port, &inst.MetricsPort, &enabled, &inst.Label,
 		&inst.TLSDomain, &inst.TLSDomains, &fakeTLS, &inst.MaskHost, &inst.MaskPort, &inst.Tags,
-		&tcpMSSEnabled, &inst.TCPMSS, &tlsFronting, &inst.UnknownSNIAction, &inst.TCPMSSBulk); err != nil {
+		&tcpMSSEnabled, &inst.TCPMSS, &tlsFronting, &inst.UnknownSNIAction, &inst.TCPMSSBulk, &inst.ExclusiveMask); err != nil {
 		return nil, err
 	}
 	inst.Enabled = intToBool(enabled)
@@ -107,11 +107,11 @@ func (s *InstanceStore) Create(ctx context.Context, inst *model.Instance) error 
 	tcpMSSEnabled := boolToInt(inst.TCPMSSEnabled)
 	tlsFronting := boolToInt(inst.TLSFronting)
 	result, err := s.db.ExecContext(ctx, `
-		INSERT INTO instances (port, metrics_port, enabled, label, tls_domain, tls_domains, fake_tls, mask_host, mask_port, tags, tcp_mss_enabled, tcp_mss, tls_fronting, unknown_sni_action, client_mss_bulk)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO instances (port, metrics_port, enabled, label, tls_domain, tls_domains, fake_tls, mask_host, mask_port, tags, tcp_mss_enabled, tcp_mss, tls_fronting, unknown_sni_action, client_mss_bulk, exclusive_mask)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, inst.Port, inst.MetricsPort, enabled, inst.Label,
 		inst.TLSDomain, inst.TLSDomains, fakeTLS, inst.MaskHost, inst.MaskPort, inst.Tags,
-		tcpMSSEnabled, inst.TCPMSS, tlsFronting, inst.UnknownSNIAction, inst.TCPMSSBulk)
+		tcpMSSEnabled, inst.TCPMSS, tlsFronting, inst.UnknownSNIAction, inst.TCPMSSBulk, inst.ExclusiveMask)
 	if err != nil {
 		return fmt.Errorf("create instance: %w", err)
 	}
@@ -128,11 +128,11 @@ func (s *InstanceStore) Update(ctx context.Context, inst *model.Instance) error 
 	_, err := s.db.ExecContext(ctx, `
 		UPDATE instances SET port=?, metrics_port=?, enabled=?, label=?,
 		                     tls_domain=?, tls_domains=?, fake_tls=?, mask_host=?, mask_port=?, tags=?,
-		                     tcp_mss_enabled=?, tcp_mss=?, tls_fronting=?, unknown_sni_action=?, client_mss_bulk=?
+		                     tcp_mss_enabled=?, tcp_mss=?, tls_fronting=?, unknown_sni_action=?, client_mss_bulk=?, exclusive_mask=?
 		WHERE id = ?
 	`, inst.Port, inst.MetricsPort, enabled, inst.Label,
 		inst.TLSDomain, inst.TLSDomains, fakeTLS, inst.MaskHost, inst.MaskPort, inst.Tags,
-		tcpMSSEnabled, inst.TCPMSS, tlsFronting, inst.UnknownSNIAction, inst.TCPMSSBulk,
+		tcpMSSEnabled, inst.TCPMSS, tlsFronting, inst.UnknownSNIAction, inst.TCPMSSBulk, inst.ExclusiveMask,
 		inst.ID)
 	if err != nil {
 		return fmt.Errorf("update instance %d: %w", inst.ID, err)

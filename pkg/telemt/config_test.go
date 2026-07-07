@@ -539,6 +539,40 @@ func TestRenderTOML_ClientMSS(t *testing.T) {
 	}
 }
 
+func TestRenderTOML_ExclusiveMask(t *testing.T) {
+	cfg := &TelemtConfig{
+		General:  GeneralConfig{Modes: ModesConfig{}, Links: LinksConfig{}},
+		Server:   ServerConfig{Port: 443, MetricsWhitelist: []string{}},
+		Timeouts: TimeoutsConfig{TGConnect: 10},
+		Censorship: CensorshipConfig{
+			TLSDomain:     "example.com",
+			MaskPort:      443,
+			ExclusiveMask: map[string]string{"a.com": "1.2.3.4:443"},
+		},
+	}
+	parsed := parseRenderedTOML(t, cfg)
+	cen := tomlTable(t, parsed, "censorship")
+	em, ok := cen["exclusive_mask"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected [censorship.exclusive_mask] table, got %T", cen["exclusive_mask"])
+	}
+	if em["a.com"] != "1.2.3.4:443" {
+		t.Errorf("exclusive_mask[a.com] = %v, want 1.2.3.4:443", em["a.com"])
+	}
+
+	// Empty exclusive_mask → sub-table omitted.
+	off := &TelemtConfig{
+		General:    GeneralConfig{Modes: ModesConfig{}, Links: LinksConfig{}},
+		Server:     ServerConfig{Port: 443, MetricsWhitelist: []string{}},
+		Timeouts:   TimeoutsConfig{TGConnect: 10},
+		Censorship: CensorshipConfig{TLSDomain: "example.com", MaskPort: 443},
+	}
+	cenOff := tomlTable(t, parseRenderedTOML(t, off), "censorship")
+	if _, ok := cenOff["exclusive_mask"]; ok {
+		t.Error("exclusive_mask must be omitted when empty")
+	}
+}
+
 func TestRenderTOML_UpstreamDualStack(t *testing.T) {
 	tru := true
 	cfg := &TelemtConfig{

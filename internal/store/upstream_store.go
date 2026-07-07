@@ -23,13 +23,21 @@ func NewUpstreamStore(db *sql.DB) *UpstreamStore {
 // SELECT; scanUpstream below scans in this exact order.
 const upstreamSelectColumns = `id, name, type, address, username, password, url, weight, iface, enabled,
 	last_check_at, last_check_ok, latency_ms, last_error, fail_count,
-	auto_disabled, auto_disabled_at`
+	auto_disabled, auto_disabled_at, ipv4, ipv6, prefer, bindtodevice`
 
 // Write column set shared by Create and CreateMultiple (and upstreamWriteArgs).
 const (
-	upstreamInsertColumns = "name, type, address, username, password, url, weight, iface, enabled"
-	upstreamInsertValues  = "?, ?, ?, ?, ?, ?, ?, ?, ?"
+	upstreamInsertColumns = "name, type, address, username, password, url, weight, iface, enabled, ipv4, ipv6, prefer, bindtodevice"
+	upstreamInsertValues  = "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?"
 )
+
+// boolPtrArg converts a *bool to a SQLite arg: NULL when nil, else 0/1.
+func boolPtrArg(b *bool) any {
+	if b == nil {
+		return nil
+	}
+	return boolToInt(*b)
+}
 
 // rowScanner is satisfied by both *sql.Row and *sql.Rows.
 type rowScanner interface {
@@ -40,11 +48,11 @@ type rowScanner interface {
 func scanUpstream(sc rowScanner) (model.Upstream, error) {
 	var u model.Upstream
 	var enabled, autoDisabled int
-	var lastCheckOK sql.NullInt64
+	var lastCheckOK, ipv4, ipv6 sql.NullInt64
 	if err := sc.Scan(&u.ID, &u.Name, &u.Type, &u.Address, &u.Username,
 		&u.Password, &u.URL, &u.Weight, &u.Iface, &enabled,
 		&u.LastCheckAt, &lastCheckOK, &u.LatencyMs, &u.LastError, &u.FailCount,
-		&autoDisabled, &u.AutoDisabledAt); err != nil {
+		&autoDisabled, &u.AutoDisabledAt, &ipv4, &ipv6, &u.Prefer, &u.BindToDevice); err != nil {
 		return u, err
 	}
 	u.Enabled = intToBool(enabled)
@@ -53,12 +61,21 @@ func scanUpstream(sc rowScanner) (model.Upstream, error) {
 		v := intToBool(int(lastCheckOK.Int64))
 		u.LastCheckOK = &v
 	}
+	if ipv4.Valid {
+		v := intToBool(int(ipv4.Int64))
+		u.IPv4 = &v
+	}
+	if ipv6.Valid {
+		v := intToBool(int(ipv6.Int64))
+		u.IPv6 = &v
+	}
 	return u, nil
 }
 
 // upstreamWriteArgs returns the INSERT arg list in upstreamInsertColumns order.
 func upstreamWriteArgs(u *model.Upstream) []any {
-	return []any{u.Name, u.Type, u.Address, u.Username, u.Password, u.URL, u.Weight, u.Iface, boolToInt(u.Enabled)}
+	return []any{u.Name, u.Type, u.Address, u.Username, u.Password, u.URL, u.Weight, u.Iface, boolToInt(u.Enabled),
+		boolPtrArg(u.IPv4), boolPtrArg(u.IPv6), u.Prefer, u.BindToDevice}
 }
 
 // queryUpstreams runs a full-row SELECT and scans every result.
@@ -128,9 +145,11 @@ func (s *UpstreamStore) Delete(ctx context.Context, name string) error {
 func (s *UpstreamStore) Update(ctx context.Context, name string, u *model.Upstream) error {
 	result, err := s.db.ExecContext(ctx, `
 		UPDATE upstreams SET type = ?, address = ?, username = ?, password = ?, url = ?, weight = ?, iface = ?, enabled = ?,
+		                     ipv4 = ?, ipv6 = ?, prefer = ?, bindtodevice = ?,
 		                     auto_disabled = 0, auto_disabled_at = 0
 		WHERE name = ?
-	`, u.Type, u.Address, u.Username, u.Password, u.URL, u.Weight, u.Iface, boolToInt(u.Enabled), name)
+	`, u.Type, u.Address, u.Username, u.Password, u.URL, u.Weight, u.Iface, boolToInt(u.Enabled),
+		boolPtrArg(u.IPv4), boolPtrArg(u.IPv6), u.Prefer, u.BindToDevice, name)
 	if err != nil {
 		return fmt.Errorf("update upstream %s: %w", name, err)
 	}

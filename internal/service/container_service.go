@@ -1049,14 +1049,18 @@ func (s *ContainerService) listUpstreamEntries(ctx context.Context) ([]telemt.Up
 	entries := make([]telemt.UpstreamEntry, 0, len(dbUpstreams))
 	for _, u := range dbUpstreams {
 		entries = append(entries, telemt.UpstreamEntry{
-			Type:     model.UpstreamType(u.Type),
-			Address:  u.Address,
-			Username: u.Username,
-			Password: u.Password,
-			URL:      u.URL,
-			Weight:   u.Weight,
-			Iface:    u.Iface,
-			Enabled:  u.Enabled,
+			Type:         model.UpstreamType(u.Type),
+			Address:      u.Address,
+			Username:     u.Username,
+			Password:     u.Password,
+			URL:          u.URL,
+			Weight:       u.Weight,
+			Iface:        u.Iface,
+			Enabled:      u.Enabled,
+			IPv4:         u.IPv4,
+			IPv6:         u.IPv6,
+			Prefer:       u.Prefer,
+			BindToDevice: u.BindToDevice,
 		})
 	}
 	return entries, nil

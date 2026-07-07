@@ -73,13 +73,25 @@ definitions:
     properties:
       address:
         type: string
+      bindtodevice:
+        type: string
       iface:
         type: string
+      ipv4:
+        type: boolean
+      ipv6:
+        type: boolean
       name:
         maxLength: 32
         type: string
       password:
         type: string
+      prefer:
+        enum:
+        - 0
+        - 4
+        - 6
+        type: integer
       type:
         enum:
         - direct
@@ -121,10 +133,22 @@ definitions:
     properties:
       address:
         type: string
+      bindtodevice:
+        type: string
       iface:
         type: string
+      ipv4:
+        type: boolean
+      ipv6:
+        type: boolean
       password:
         type: string
+      prefer:
+        enum:
+        - 0
+        - 4
+        - 6
+        type: integer
       type:
         enum:
         - direct
@@ -374,10 +398,22 @@ definitions:
     properties:
       address:
         type: string
+      bindtodevice:
+        type: string
       iface:
         type: string
+      ipv4:
+        type: boolean
+      ipv6:
+        type: boolean
       password:
         type: string
+      prefer:
+        enum:
+        - 0
+        - 4
+        - 6
+        type: integer
       type:
         enum:
         - direct
@@ -450,10 +486,22 @@ definitions:
     properties:
       address:
         type: string
+      bindtodevice:
+        type: string
       iface:
         type: string
+      ipv4:
+        type: boolean
+      ipv6:
+        type: boolean
       password:
         type: string
+      prefer:
+        enum:
+        - 0
+        - 4
+        - 6
+        type: integer
       type:
         enum:
         - direct

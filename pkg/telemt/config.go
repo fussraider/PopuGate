@@ -102,14 +102,18 @@ type RateLimit struct {
 }
 
 type UpstreamConfig struct {
-	Type      string `toml:"type"`
-	Weight    int    `toml:"weight"`
-	Address   string `toml:"address,omitempty"`
-	Username  string `toml:"username,omitempty"`
-	Password  string `toml:"password,omitempty"`
-	UserID    string `toml:"user_id,omitempty"`
-	URL       string `toml:"url,omitempty"`
-	Interface string `toml:"interface,omitempty"`
+	Type         string `toml:"type"`
+	Weight       int    `toml:"weight"`
+	Address      string `toml:"address,omitempty"`
+	Username     string `toml:"username,omitempty"`
+	Password     string `toml:"password,omitempty"`
+	UserID       string `toml:"user_id,omitempty"`
+	URL          string `toml:"url,omitempty"`
+	Interface    string `toml:"interface,omitempty"`
+	IPv4         *bool  `toml:"ipv4,omitempty"`
+	IPv6         *bool  `toml:"ipv6,omitempty"`
+	Prefer       int    `toml:"prefer,omitempty"`
+	BindToDevice string `toml:"bindtodevice,omitempty"`
 }
 
 // ConfigParams holds the parameters needed to generate a telemt config.
@@ -150,14 +154,18 @@ type SecretEntry struct {
 
 // UpstreamEntry represents an upstream for TOML generation.
 type UpstreamEntry struct {
-	Type     model.UpstreamType
-	Address  string
-	Username string
-	Password string
-	URL      string // shadowsocks ss:// URL (shadowsocks type only)
-	Weight   int
-	Iface    string
-	Enabled  bool
+	Type         model.UpstreamType
+	Address      string
+	Username     string
+	Password     string
+	URL          string // shadowsocks ss:// URL (shadowsocks type only)
+	Weight       int
+	Iface        string
+	Enabled      bool
+	IPv4         *bool
+	IPv6         *bool
+	Prefer       int
+	BindToDevice string
 }
 
 func newEmptyAccess() AccessConfig {
@@ -223,6 +231,12 @@ func buildUpstreamConfig(up UpstreamEntry) UpstreamConfig {
 	}
 	if up.Iface != "" {
 		uc.Interface = up.Iface
+	}
+	uc.IPv4 = up.IPv4
+	uc.IPv6 = up.IPv6
+	uc.Prefer = up.Prefer
+	if up.Type == model.UpstreamDirect {
+		uc.BindToDevice = up.BindToDevice
 	}
 	return uc
 }
@@ -675,6 +689,18 @@ func renderUpstreamsSection(b *strings.Builder, cfg *TelemtConfig) {
 		}
 		if up.Interface != "" {
 			fmt.Fprintf(b, "interface = %q\n", up.Interface)
+		}
+		if up.IPv4 != nil {
+			fmt.Fprintf(b, "ipv4 = %v\n", *up.IPv4)
+		}
+		if up.IPv6 != nil {
+			fmt.Fprintf(b, "ipv6 = %v\n", *up.IPv6)
+		}
+		if up.Prefer == 4 || up.Prefer == 6 {
+			fmt.Fprintf(b, "prefer = %d\n", up.Prefer)
+		}
+		if up.BindToDevice != "" {
+			fmt.Fprintf(b, "bindtodevice = %q\n", up.BindToDevice)
 		}
 		b.WriteString("\n")
 	}

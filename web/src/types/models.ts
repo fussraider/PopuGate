@@ -85,6 +85,10 @@ export interface Upstream {
   weight: number
   iface: string
   enabled: boolean
+  ipv4?: boolean | null
+  ipv6?: boolean | null
+  prefer?: number
+  bindtodevice?: string
 
   // Health fields
   last_check_at?: number

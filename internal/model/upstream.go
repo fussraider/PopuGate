@@ -35,6 +35,13 @@ type Upstream struct {
 	Weight   int          `json:"weight" db:"weight"`
 	Iface    string       `json:"iface" db:"iface"`
 	Enabled  bool         `json:"enabled" db:"enabled"`
+	// Dual-stack DC family policy (nil = auto). Both false is invalid.
+	IPv4 *bool `json:"ipv4" db:"ipv4"`
+	IPv6 *bool `json:"ipv6" db:"ipv6"`
+	// Preferred DC family: 0 = auto (inherit), 4, or 6.
+	Prefer int `json:"prefer" db:"prefer"`
+	// SO_BINDTODEVICE interface pinning (direct upstreams only, Linux).
+	BindToDevice string `json:"bindtodevice" db:"bindtodevice"`
 
 	// Health fields
 	LastCheckAt    int64  `json:"last_check_at" db:"last_check_at"` // unix timestamp
@@ -68,6 +75,15 @@ func (u *Upstream) Validate() error {
 	}
 	if u.Weight < 1 || u.Weight > 100 {
 		return fmt.Errorf("weight must be 1-100")
+	}
+	if u.IPv4 != nil && u.IPv6 != nil && !*u.IPv4 && !*u.IPv6 {
+		return fmt.Errorf("ipv4 and ipv6 cannot both be false")
+	}
+	if u.Prefer != 0 && u.Prefer != 4 && u.Prefer != 6 {
+		return fmt.Errorf("prefer must be 0 (auto), 4, or 6")
+	}
+	if u.BindToDevice != "" && u.Type != UpstreamDirect {
+		return fmt.Errorf("bindtodevice is only supported for direct upstreams")
 	}
 	return nil
 }

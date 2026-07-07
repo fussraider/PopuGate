@@ -189,6 +189,37 @@
             <small class="text-muted">{{ t('upstreams.hint_interface') }}</small>
           </div>
         </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">{{ t('upstreams.ipv4') }}</label>
+            <select v-model="form.ipv4" class="select">
+              <option value="auto">{{ t('upstreams.family_auto') }}</option>
+              <option value="on">{{ t('upstreams.family_on') }}</option>
+              <option value="off">{{ t('upstreams.family_off') }}</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">{{ t('upstreams.ipv6') }}</label>
+            <select v-model="form.ipv6" class="select">
+              <option value="auto">{{ t('upstreams.family_auto') }}</option>
+              <option value="on">{{ t('upstreams.family_on') }}</option>
+              <option value="off">{{ t('upstreams.family_off') }}</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">{{ t('upstreams.prefer') }}</label>
+            <select v-model.number="form.prefer" class="select">
+              <option :value="0">{{ t('upstreams.family_auto') }}</option>
+              <option :value="4">IPv4</option>
+              <option :value="6">IPv6</option>
+            </select>
+          </div>
+        </div>
+        <div v-if="form.type === 'direct'" class="form-group mb-md">
+          <label class="form-label">{{ t('upstreams.bindtodevice') }}</label>
+          <input v-model="form.bindtodevice" class="input" placeholder="eth0" />
+          <small class="text-muted">{{ t('upstreams.hint_bindtodevice') }}</small>
+        </div>
       </div>
       <template #footer>
         <button type="button" class="btn btn-secondary" :disabled="store.testingConfig" @click="handleTestConfig">
@@ -316,13 +347,13 @@ const modalOpen = ref(false)
 const bulkModalOpen = ref(false)
 const isEdit = ref(false)
 const editTarget = ref('')
-const form = ref({ name: '', type: 'direct' as string, address: '', username: '', password: '', url: '', weight: 1, iface: '' })
+const form = ref({ name: '', type: 'direct' as string, address: '', username: '', password: '', url: '', weight: 1, iface: '', ipv4: 'auto', ipv6: 'auto', prefer: 0, bindtodevice: '' })
 
 function openBulkModal() {
   bulkModalOpen.value = true
 }
 
-const defaultForm = { name: '', type: 'direct' as string, address: '', username: '', password: '', url: '', weight: 1, iface: '' }
+const defaultForm = { name: '', type: 'direct' as string, address: '', username: '', password: '', url: '', weight: 1, iface: '', ipv4: 'auto', ipv6: 'auto', prefer: 0, bindtodevice: '' }
 
 // Auto-parse pasted proxy string (host:port:user:pass) into separate fields
 watch(() => form.value.address, (val) => {
@@ -366,7 +397,8 @@ async function openAddModal() {
 async function openEditModal(up: any) {
   isEdit.value = true
   editTarget.value = up.name
-  form.value = { name: up.name, type: up.type, address: up.address ?? '', username: up.username ?? '', password: up.password ?? '', url: up.url ?? '', weight: up.weight || 1, iface: up.iface ?? '' }
+  const triFromBool = (v: boolean | null | undefined) => v === true ? 'on' : v === false ? 'off' : 'auto'
+  form.value = { name: up.name, type: up.type, address: up.address ?? '', username: up.username ?? '', password: up.password ?? '', url: up.url ?? '', weight: up.weight || 1, iface: up.iface ?? '', ipv4: triFromBool(up.ipv4), ipv6: triFromBool(up.ipv6), prefer: up.prefer ?? 0, bindtodevice: up.bindtodevice ?? '' }
   store.testResult = null
   modalOpen.value = true
   try { await store.loadInterfaces() } catch { /* non-critical */ }
@@ -385,11 +417,18 @@ function handleTestConfig() {
 
 async function handleSubmit() {
   try {
+    const triToBool = (v: string) => v === 'on' ? true : v === 'off' ? false : null
+    const payload = {
+      ...form.value,
+      ipv4: triToBool(form.value.ipv4),
+      ipv6: triToBool(form.value.ipv6),
+      bindtodevice: form.value.type === 'direct' ? form.value.bindtodevice : '',
+    }
     if (isEdit.value) {
-      await store.update(editTarget.value, form.value as any)
+      await store.update(editTarget.value, payload as any)
       toast.success(t('upstreams.updated_success', { name: editTarget.value }))
     } else {
-      await store.add(form.value as any)
+      await store.add(payload as any)
       toast.success(t('upstreams.added_success', { name: form.value.name }))
     }
     modalOpen.value = false

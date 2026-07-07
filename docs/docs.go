@@ -6630,8 +6630,17 @@ const docTemplate = `{
                 "address": {
                     "type": "string"
                 },
+                "bindtodevice": {
+                    "type": "string"
+                },
                 "iface": {
                     "type": "string"
+                },
+                "ipv4": {
+                    "type": "boolean"
+                },
+                "ipv6": {
+                    "type": "boolean"
                 },
                 "name": {
                     "type": "string",
@@ -6639,6 +6648,14 @@ const docTemplate = `{
                 },
                 "password": {
                     "type": "string"
+                },
+                "prefer": {
+                    "type": "integer",
+                    "enum": [
+                        0,
+                        4,
+                        6
+                    ]
                 },
                 "type": {
                     "type": "string",
@@ -6698,11 +6715,28 @@ const docTemplate = `{
                 "address": {
                     "type": "string"
                 },
+                "bindtodevice": {
+                    "type": "string"
+                },
                 "iface": {
                     "type": "string"
                 },
+                "ipv4": {
+                    "type": "boolean"
+                },
+                "ipv6": {
+                    "type": "boolean"
+                },
                 "password": {
                     "type": "string"
+                },
+                "prefer": {
+                    "type": "integer",
+                    "enum": [
+                        0,
+                        4,
+                        6
+                    ]
                 },
                 "type": {
                     "type": "string",
@@ -7071,11 +7105,28 @@ const docTemplate = `{
                 "address": {
                     "type": "string"
                 },
+                "bindtodevice": {
+                    "type": "string"
+                },
                 "iface": {
                     "type": "string"
                 },
+                "ipv4": {
+                    "type": "boolean"
+                },
+                "ipv6": {
+                    "type": "boolean"
+                },
                 "password": {
                     "type": "string"
+                },
+                "prefer": {
+                    "type": "integer",
+                    "enum": [
+                        0,
+                        4,
+                        6
+                    ]
                 },
                 "type": {
                     "type": "string",
@@ -7178,11 +7229,28 @@ const docTemplate = `{
                 "address": {
                     "type": "string"
                 },
+                "bindtodevice": {
+                    "type": "string"
+                },
                 "iface": {
                     "type": "string"
                 },
+                "ipv4": {
+                    "type": "boolean"
+                },
+                "ipv6": {
+                    "type": "boolean"
+                },
                 "password": {
                     "type": "string"
+                },
+                "prefer": {
+                    "type": "integer",
+                    "enum": [
+                        0,
+                        4,
+                        6
+                    ]
                 },
                 "type": {
                     "type": "string",

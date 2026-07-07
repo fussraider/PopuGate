@@ -539,6 +539,38 @@ func TestRenderTOML_ClientMSS(t *testing.T) {
 	}
 }
 
+func TestRenderTOML_UpstreamDualStack(t *testing.T) {
+	tru := true
+	cfg := &TelemtConfig{
+		General:  GeneralConfig{Modes: ModesConfig{}, Links: LinksConfig{}},
+		Server:   ServerConfig{Port: 443, MetricsWhitelist: []string{}},
+		Timeouts: TimeoutsConfig{TGConnect: 10},
+		Upstreams: []UpstreamConfig{
+			{Type: "socks5", Weight: 10, Address: "1.2.3.4:1080", IPv6: &tru, Prefer: 6},
+			{Type: "direct", Weight: 13, BindToDevice: "eth0"},
+		},
+	}
+	parsed := parseRenderedTOML(t, cfg)
+	rawUps, ok := parsed["upstreams"].([]any)
+	if !ok || len(rawUps) != 2 {
+		t.Fatalf("expected 2 [[upstreams]], got %T len=%d", parsed["upstreams"], len(rawUps))
+	}
+	socks := rawUps[0].(map[string]any)
+	if socks["ipv6"] != true {
+		t.Errorf("socks5 ipv6 = %v, want true", socks["ipv6"])
+	}
+	if socks["prefer"] != int64(6) {
+		t.Errorf("socks5 prefer = %v, want 6", socks["prefer"])
+	}
+	if _, ok := socks["ipv4"]; ok {
+		t.Error("ipv4 must be omitted when nil")
+	}
+	direct := rawUps[1].(map[string]any)
+	if direct["bindtodevice"] != "eth0" {
+		t.Errorf("direct bindtodevice = %v, want eth0", direct["bindtodevice"])
+	}
+}
+
 func TestRenderTOML_WithMaskingHost(t *testing.T) {
 	cfg := &TelemtConfig{
 		General:  GeneralConfig{Modes: ModesConfig{}, Links: LinksConfig{}},

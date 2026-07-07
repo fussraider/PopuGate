@@ -63,24 +63,32 @@ func (h *UpstreamHandler) List(c *gin.Context) {
 // request. Embedded into the request structs so the type whitelist and the
 // request→model mapping live in exactly one place.
 type upstreamConfigFields struct {
-	Type     string `json:"type" binding:"required,oneof=direct socks5 socks4 shadowsocks"`
-	Address  string `json:"address"`
-	Username string `json:"username"`
-	Password string `json:"password"`
-	URL      string `json:"url"`
-	Iface    string `json:"iface"`
+	Type         string `json:"type" binding:"required,oneof=direct socks5 socks4 shadowsocks"`
+	Address      string `json:"address"`
+	Username     string `json:"username"`
+	Password     string `json:"password"`
+	URL          string `json:"url"`
+	Iface        string `json:"iface"`
+	IPv4         *bool  `json:"ipv4"`
+	IPv6         *bool  `json:"ipv6"`
+	Prefer       int    `json:"prefer" binding:"omitempty,oneof=0 4 6"`
+	BindToDevice string `json:"bindtodevice"`
 }
 
 // toUpstream maps (and trims) the shared fields into a model.Upstream.
 // Caller sets Name/Weight/Enabled as appropriate.
 func (f upstreamConfigFields) toUpstream() *model.Upstream {
 	return &model.Upstream{
-		Type:     model.UpstreamType(strings.TrimSpace(f.Type)),
-		Address:  strings.TrimSpace(f.Address),
-		Username: strings.TrimSpace(f.Username),
-		Password: strings.TrimSpace(f.Password),
-		URL:      strings.TrimSpace(f.URL),
-		Iface:    strings.TrimSpace(f.Iface),
+		Type:         model.UpstreamType(strings.TrimSpace(f.Type)),
+		Address:      strings.TrimSpace(f.Address),
+		Username:     strings.TrimSpace(f.Username),
+		Password:     strings.TrimSpace(f.Password),
+		URL:          strings.TrimSpace(f.URL),
+		Iface:        strings.TrimSpace(f.Iface),
+		IPv4:         f.IPv4,
+		IPv6:         f.IPv6,
+		Prefer:       f.Prefer,
+		BindToDevice: strings.TrimSpace(f.BindToDevice),
 	}
 }
 

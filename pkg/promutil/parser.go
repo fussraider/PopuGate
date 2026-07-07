@@ -56,7 +56,15 @@ func ParseMetrics(text string) ([]ParsedMetric, error) {
 // ExtractTelemtMetrics extracts all relevant telemt metrics from parsed data.
 func ExtractTelemtMetrics(metrics []ParsedMetric) *model.LiveMetrics {
 	lm := &model.LiveMetrics{
-		UserMetrics: make(map[string]*model.UserLiveMetrics),
+		UserMetrics:          make(map[string]*model.UserLiveMetrics),
+		BadByClass:           make(map[string]float64),
+		HandshakeFailByClass: make(map[string]float64),
+	}
+
+	// Class-labeled counters (label "class"); dynamic label set.
+	classFields := map[string]map[string]float64{
+		"telemt_connections_bad_by_class_total":    lm.BadByClass,
+		"telemt_handshake_failures_by_class_total": lm.HandshakeFailByClass,
 	}
 
 	scalarFields := map[string]*float64{
@@ -87,6 +95,12 @@ func ExtractTelemtMetrics(metrics []ParsedMetric) *model.LiveMetrics {
 			if user, ok := m.Labels["user"]; ok {
 				ensureUser(lm, user)
 				fn(lm.UserMetrics[user], m.Value)
+			}
+			continue
+		}
+		if dst, ok := classFields[m.Name]; ok {
+			if cls, ok := m.Labels["class"]; ok {
+				dst[cls] = m.Value
 			}
 		}
 	}

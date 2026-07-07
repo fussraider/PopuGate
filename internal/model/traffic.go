@@ -27,6 +27,10 @@ type LiveMetrics struct {
 	MEWritersActive      float64                     `json:"me_writers_active"`
 	MEWritersWarm        float64                     `json:"me_writers_warm"`
 	UserMetrics          map[string]*UserLiveMetrics `json:"users"`
+	// Class-labeled error counters from the engine (dynamic label set; empty
+	// until the first event of that class). Keyed by the engine's class label.
+	BadByClass           map[string]float64 `json:"bad_by_class"`
+	HandshakeFailByClass map[string]float64 `json:"handshake_fail_by_class"`
 }
 
 // UserLiveMetrics holds per-user live Prometheus metrics.

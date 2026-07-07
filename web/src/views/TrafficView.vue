@@ -139,6 +139,32 @@
           </div>
         </div>
 
+        <!-- Error classes (engine diagnostics) -->
+        <div v-if="hasErrorClasses" class="table-wrapper mb-lg">
+          <h3 class="mb-sm">{{ t('traffic.error_classes') }}</h3>
+          <table class="table">
+            <thead>
+              <tr>
+                <th>{{ t('traffic.error_kind') }}</th>
+                <th>{{ t('traffic.error_class') }}</th>
+                <th>{{ t('traffic.error_count') }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="[cls, n] in Object.entries(trafficStore.live.bad_by_class || {})" :key="'bad-' + cls">
+                <td>{{ t('traffic.bad_connections') }}</td>
+                <td><code>{{ cls }}</code></td>
+                <td>{{ formatInt(n) }}</td>
+              </tr>
+              <tr v-for="[cls, n] in Object.entries(trafficStore.live.handshake_fail_by_class || {})" :key="'hs-' + cls">
+                <td>{{ t('traffic.handshake_failures') }}</td>
+                <td><code>{{ cls }}</code></td>
+                <td>{{ formatInt(n) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
         <!-- Per-User Live Metrics -->
         <div v-if="Object.keys(trafficStore.live.user_metrics || {}).length" class="table-wrapper">
           <table class="table">
@@ -288,6 +314,12 @@ const upstreamSuccessRate = computed(() => {
   const live = trafficStore.live
   if (!live || live.upstream_attempt_total === 0) return '—'
   return ((live.upstream_success_total / live.upstream_attempt_total) * 100).toFixed(1)
+})
+
+const hasErrorClasses = computed(() => {
+  const live = trafficStore.live
+  if (!live) return false
+  return Object.keys(live.bad_by_class || {}).length > 0 || Object.keys(live.handshake_fail_by_class || {}).length > 0
 })
 
 const hoveredUserIdx = ref<number | null>(null)

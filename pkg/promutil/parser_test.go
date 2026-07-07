@@ -24,7 +24,30 @@ telemt_user_connections_current{user="user1"} 5
 telemt_user_unique_ips_current{user="user1"} 3
 telemt_user_octets_from_client{user="user2"} 4096
 telemt_user_octets_to_client{user="user2"} 8192
+telemt_connections_bad_by_class_total{class="unknown_tls_sni"} 12
+telemt_connections_bad_by_class_total{class="timeout"} 3
+telemt_handshake_failures_by_class_total{class="timeout"} 7
 `
+
+func TestExtractTelemtMetrics_ClassLabeled(t *testing.T) {
+	metrics, err := ParseMetrics(samplePromText)
+	if err != nil {
+		t.Fatalf("ParseMetrics() error: %v", err)
+	}
+	lm := ExtractTelemtMetrics(metrics)
+	if lm.BadByClass["unknown_tls_sni"] != 12 {
+		t.Errorf("BadByClass[unknown_tls_sni] = %f, want 12", lm.BadByClass["unknown_tls_sni"])
+	}
+	if lm.BadByClass["timeout"] != 3 {
+		t.Errorf("BadByClass[timeout] = %f, want 3", lm.BadByClass["timeout"])
+	}
+	if lm.HandshakeFailByClass["timeout"] != 7 {
+		t.Errorf("HandshakeFailByClass[timeout] = %f, want 7", lm.HandshakeFailByClass["timeout"])
+	}
+	if len(lm.BadByClass) != 2 {
+		t.Errorf("BadByClass len = %d, want 2", len(lm.BadByClass))
+	}
+}
 
 func TestParseMetrics(t *testing.T) {
 	metrics, err := ParseMetrics(samplePromText)

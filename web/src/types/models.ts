@@ -183,6 +183,8 @@ export interface LiveMetrics {
   me_writers_warm: number
   uptime_seconds: number
   user_metrics: Record<string, UserLiveMetric>
+  bad_by_class?: Record<string, number>
+  handshake_fail_by_class?: Record<string, number>
 }
 
 export interface UserLiveMetric {

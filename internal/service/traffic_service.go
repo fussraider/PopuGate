@@ -105,7 +105,9 @@ func (s *TrafficService) fetchLiveMetrics(ctx context.Context) (*model.LiveMetri
 	}
 
 	combined := &model.LiveMetrics{
-		UserMetrics: make(map[string]*model.UserLiveMetrics),
+		UserMetrics:          make(map[string]*model.UserLiveMetrics),
+		BadByClass:           make(map[string]float64),
+		HandshakeFailByClass: make(map[string]float64),
 	}
 
 	var runningContainers map[string]bool
@@ -193,6 +195,12 @@ func (s *TrafficService) mergeInstanceMetrics(combined, live *model.LiveMetrics)
 		combined.UserMetrics[user].OctetsToClient += metrics.OctetsToClient
 		combined.UserMetrics[user].Connections += metrics.Connections
 		combined.UserMetrics[user].UniqueIPs += metrics.UniqueIPs
+	}
+	for cls, v := range live.BadByClass {
+		combined.BadByClass[cls] += v
+	}
+	for cls, v := range live.HandshakeFailByClass {
+		combined.HandshakeFailByClass[cls] += v
 	}
 }
 

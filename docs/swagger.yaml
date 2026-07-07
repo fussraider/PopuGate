@@ -43,6 +43,14 @@ definitions:
         type: string
       tls_fronting:
         type: boolean
+      unknown_sni_action:
+        description: drop|mask|accept|reject_handshake (default mask)
+        enum:
+        - drop
+        - mask
+        - accept
+        - reject_handshake
+        type: string
     required:
     - port
     - tls_domain
@@ -416,6 +424,13 @@ definitions:
         type: string
       tls_fronting:
         type: boolean
+      unknown_sni_action:
+        enum:
+        - drop
+        - mask
+        - accept
+        - reject_handshake
+        type: string
     type: object
   handler.updateNotesRequest:
     properties:

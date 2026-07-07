@@ -338,10 +338,14 @@ func instanceCensorship(inst *model.Instance, fakeCertLen int) CensorshipConfig 
 	if !inst.FakeTLS {
 		return CensorshipConfig{}
 	}
+	sniAction := inst.UnknownSNIAction
+	if sniAction == "" {
+		sniAction = "mask"
+	}
 	cfg := CensorshipConfig{
 		TLSDomain:        inst.TLSDomain,
 		TLSDomains:       inst.GetTLSDomains(),
-		UnknownSNIAction: "mask",
+		UnknownSNIAction: sniAction,
 		Mask:             true,
 		MaskHost:         inst.GetMaskHost(),
 		MaskPort:         inst.MaskPort,

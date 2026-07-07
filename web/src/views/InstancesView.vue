@@ -255,6 +255,16 @@
             <input v-model.number="form.mask_port" class="input" type="number" min="1" max="65535" />
           </div>
         </div>
+        <div class="form-group mb-md">
+          <label class="form-label">{{ t('instances.unknown_sni_action') }}</label>
+          <select v-model="form.unknown_sni_action" class="input">
+            <option value="mask">{{ t('instances.sni_mask') }}</option>
+            <option value="drop">{{ t('instances.sni_drop') }}</option>
+            <option value="reject_handshake">{{ t('instances.sni_reject') }}</option>
+            <option value="accept">{{ t('instances.sni_accept') }}</option>
+          </select>
+          <small class="text-muted">{{ t('instances.unknown_sni_action_hint') }}</small>
+        </div>
       </div>
 
       <!-- Anti-Blocking -->
@@ -562,6 +572,7 @@ const form = reactive({
   tcp_mss_enabled: false,
   tcp_mss: 88,
   tls_fronting: false,
+  unknown_sni_action: 'mask',
 })
 
 watch(() => form.fake_tls, (val) => {
@@ -581,7 +592,7 @@ function openAddModal() {
   editingInstance.value = null
   portChecks.port = null
   portChecks.metrics_port = null
-  Object.assign(form, { port: 443, metrics_port: 0, label: '', tls_domain: '', tls_domains_text: '', fake_tls: true, mask_host: '', mask_port: 443, tags: '[]', enabled: true, tcp_mss_enabled: false, tcp_mss: 88, tls_fronting: false })
+  Object.assign(form, { port: 443, metrics_port: 0, label: '', tls_domain: '', tls_domains_text: '', fake_tls: true, mask_host: '', mask_port: 443, tags: '[]', enabled: true, tcp_mss_enabled: false, tcp_mss: 88, tls_fronting: false, unknown_sni_action: 'mask' })
   modalOpen.value = true
 }
 
@@ -603,6 +614,7 @@ function openEditModal(item: Instance) {
     tcp_mss_enabled: item.tcp_mss_enabled || false,
     tcp_mss: item.tcp_mss || 88,
     tls_fronting: item.tls_fronting || false,
+    unknown_sni_action: item.unknown_sni_action || 'mask',
   })
   modalOpen.value = true
 }
@@ -629,6 +641,7 @@ async function handleSubmit() {
       tcp_mss_enabled: form.tcp_mss_enabled,
       tcp_mss: form.tcp_mss_enabled ? form.tcp_mss : undefined,
       tls_fronting: form.tls_fronting,
+      unknown_sni_action: form.unknown_sni_action,
     }
 
     if (editingInstance.value) {

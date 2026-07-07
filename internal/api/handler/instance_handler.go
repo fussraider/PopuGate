@@ -88,6 +88,8 @@ type addInstanceRequest struct {
 	TCPMSSEnabled *bool  `json:"tcp_mss_enabled"`
 	TCPMSS        int    `json:"tcp_mss" binding:"omitempty,min=1,max=1460"`
 	TLSFronting   *bool  `json:"tls_fronting"`
+	// drop|mask|accept|reject_handshake (default mask)
+	UnknownSNIAction string `json:"unknown_sni_action" binding:"omitempty,oneof=drop mask accept reject_handshake"`
 }
 
 // Add handles POST /api/v1/instances
@@ -170,36 +172,38 @@ func buildInstanceFromRequest(req *addInstanceRequest) *model.Instance {
 	}
 
 	return &model.Instance{
-		Port:          req.Port,
-		MetricsPort:   req.MetricsPort,
-		Enabled:       true,
-		Label:         req.Label,
-		TLSDomain:     req.TLSDomain,
-		TLSDomains:    req.TLSDomains,
-		FakeTLS:       fakeTLS,
-		MaskHost:      req.MaskHost,
-		MaskPort:      req.MaskPort,
-		Tags:          req.Tags,
-		TCPMSSEnabled: tcpMSSEnabled,
-		TCPMSS:        tcpMSS,
-		TLSFronting:   tlsFronting,
+		Port:             req.Port,
+		MetricsPort:      req.MetricsPort,
+		Enabled:          true,
+		Label:            req.Label,
+		TLSDomain:        req.TLSDomain,
+		TLSDomains:       req.TLSDomains,
+		FakeTLS:          fakeTLS,
+		MaskHost:         req.MaskHost,
+		MaskPort:         req.MaskPort,
+		Tags:             req.Tags,
+		TCPMSSEnabled:    tcpMSSEnabled,
+		TCPMSS:           tcpMSS,
+		TLSFronting:      tlsFronting,
+		UnknownSNIAction: req.UnknownSNIAction,
 	}
 }
 
 type updateInstanceRequest struct {
-	Port          *int    `json:"port" binding:"omitempty,min=1,max=65535"`
-	MetricsPort   *int    `json:"metrics_port" binding:"omitempty,max=65535"`
-	Label         *string `json:"label" binding:"omitempty,alphanumdash,max=32"`
-	Enabled       *bool   `json:"enabled"`
-	TLSDomain     *string `json:"tls_domain"`
-	TLSDomains    *string `json:"tls_domains"`
-	FakeTLS       *bool   `json:"fake_tls"`
-	MaskHost      *string `json:"mask_host"`
-	MaskPort      *int    `json:"mask_port" binding:"omitempty,min=1,max=65535"`
-	Tags          *string `json:"tags"`
-	TCPMSSEnabled *bool   `json:"tcp_mss_enabled"`
-	TCPMSS        *int    `json:"tcp_mss" binding:"omitempty,min=1,max=1460"`
-	TLSFronting   *bool   `json:"tls_fronting"`
+	Port             *int    `json:"port" binding:"omitempty,min=1,max=65535"`
+	MetricsPort      *int    `json:"metrics_port" binding:"omitempty,max=65535"`
+	Label            *string `json:"label" binding:"omitempty,alphanumdash,max=32"`
+	Enabled          *bool   `json:"enabled"`
+	TLSDomain        *string `json:"tls_domain"`
+	TLSDomains       *string `json:"tls_domains"`
+	FakeTLS          *bool   `json:"fake_tls"`
+	MaskHost         *string `json:"mask_host"`
+	MaskPort         *int    `json:"mask_port" binding:"omitempty,min=1,max=65535"`
+	Tags             *string `json:"tags"`
+	TCPMSSEnabled    *bool   `json:"tcp_mss_enabled"`
+	TCPMSS           *int    `json:"tcp_mss" binding:"omitempty,min=1,max=1460"`
+	TLSFronting      *bool   `json:"tls_fronting"`
+	UnknownSNIAction *string `json:"unknown_sni_action" binding:"omitempty,oneof=drop mask accept reject_handshake"`
 }
 
 func (h *InstanceHandler) getInstanceForUpdate(c *gin.Context) (int64, *model.Instance, bool) {
@@ -301,6 +305,9 @@ func (h *InstanceHandler) applySimpleFields(c *gin.Context, inst *model.Instance
 	}
 	if req.TLSFronting != nil {
 		inst.TLSFronting = *req.TLSFronting
+	}
+	if req.UnknownSNIAction != nil {
+		inst.UnknownSNIAction = *req.UnknownSNIAction
 	}
 	return true
 }

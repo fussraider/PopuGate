@@ -17,15 +17,17 @@ type Instance struct {
 	ActivePort        int `json:"active_port,omitempty" db:"-"`
 	ActiveMetricsPort int `json:"active_metrics_port,omitempty" db:"-"`
 	// Per-instance proxy configuration
-	TLSDomain     string `json:"tls_domain" db:"tls_domain"`           // Primary masking domain (required)
-	TLSDomains    string `json:"tls_domains" db:"tls_domains"`         // Additional domains (JSON array)
-	FakeTLS       bool   `json:"fake_tls" db:"fake_tls"`               // Enable FakeTLS masking
-	MaskHost      string `json:"mask_host" db:"mask_host"`             // Where to proxy non-MTProto traffic
-	MaskPort      int    `json:"mask_port" db:"mask_port"`             // Port for mask_host
-	Tags          string `json:"tags" db:"tags"`                       // Access tags (JSON array)
-	TCPMSSEnabled bool   `json:"tcp_mss_enabled" db:"tcp_mss_enabled"` // Enable TCPMSS clamping
-	TCPMSS        int    `json:"tcp_mss" db:"tcp_mss"`                 // MSS value (1-1460, default 88)
-	TLSFronting   bool   `json:"tls_fronting" db:"tls_fronting"`       // Enable TLS fronting content serving
+	TLSDomain  string `json:"tls_domain" db:"tls_domain"`   // Primary masking domain (required)
+	TLSDomains string `json:"tls_domains" db:"tls_domains"` // Additional domains (JSON array)
+	FakeTLS    bool   `json:"fake_tls" db:"fake_tls"`       // Enable FakeTLS masking
+	MaskHost   string `json:"mask_host" db:"mask_host"`     // Where to proxy non-MTProto traffic
+	MaskPort   int    `json:"mask_port" db:"mask_port"`     // Port for mask_host
+	// Action for an unknown/mismatched SNI on FakeTLS: drop|mask|accept|reject_handshake (default mask).
+	UnknownSNIAction string `json:"unknown_sni_action" db:"unknown_sni_action"`
+	Tags             string `json:"tags" db:"tags"`                       // Access tags (JSON array)
+	TCPMSSEnabled    bool   `json:"tcp_mss_enabled" db:"tcp_mss_enabled"` // Enable TCPMSS clamping
+	TCPMSS           int    `json:"tcp_mss" db:"tcp_mss"`                 // MSS value (1-1460, default 88)
+	TLSFronting      bool   `json:"tls_fronting" db:"tls_fronting"`       // Enable TLS fronting content serving
 }
 
 // Validate checks instance fields.
@@ -55,6 +57,14 @@ func (i *Instance) Validate() error {
 	}
 	if i.TLSFronting && !i.FakeTLS {
 		return fmt.Errorf("tls_fronting requires fake_tls to be enabled")
+	}
+	if i.UnknownSNIAction == "" {
+		i.UnknownSNIAction = "mask"
+	}
+	switch i.UnknownSNIAction {
+	case "drop", "mask", "accept", "reject_handshake":
+	default:
+		return fmt.Errorf("unknown_sni_action must be one of drop, mask, accept, reject_handshake")
 	}
 	return nil
 }

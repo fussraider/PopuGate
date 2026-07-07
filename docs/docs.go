@@ -6587,6 +6587,16 @@ const docTemplate = `{
                 },
                 "tls_fronting": {
                     "type": "boolean"
+                },
+                "unknown_sni_action": {
+                    "description": "drop|mask|accept|reject_handshake (default mask)",
+                    "type": "string",
+                    "enum": [
+                        "drop",
+                        "mask",
+                        "accept",
+                        "reject_handshake"
+                    ]
                 }
             }
         },
@@ -7128,6 +7138,15 @@ const docTemplate = `{
                 },
                 "tls_fronting": {
                     "type": "boolean"
+                },
+                "unknown_sni_action": {
+                    "type": "string",
+                    "enum": [
+                        "drop",
+                        "mask",
+                        "accept",
+                        "reject_handshake"
+                    ]
                 }
             }
         },

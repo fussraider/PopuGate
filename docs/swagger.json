@@ -6581,6 +6581,16 @@
                 },
                 "tls_fronting": {
                     "type": "boolean"
+                },
+                "unknown_sni_action": {
+                    "description": "drop|mask|accept|reject_handshake (default mask)",
+                    "type": "string",
+                    "enum": [
+                        "drop",
+                        "mask",
+                        "accept",
+                        "reject_handshake"
+                    ]
                 }
             }
         },
@@ -7122,6 +7132,15 @@
                 },
                 "tls_fronting": {
                     "type": "boolean"
+                },
+                "unknown_sni_action": {
+                    "type": "string",
+                    "enum": [
+                        "drop",
+                        "mask",
+                        "accept",
+                        "reject_handshake"
+                    ]
                 }
             }
         },

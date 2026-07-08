@@ -6540,6 +6540,12 @@ const docTemplate = `{
                 "tls_domain"
             ],
             "properties": {
+                "api_port": {
+                    "description": "Loopback control-plane API port (0 = auto-assign, engine [server.api])",
+                    "type": "integer",
+                    "maximum": 65535,
+                    "minimum": 1
+                },
                 "client_mss_bulk": {
                     "type": "integer",
                     "maximum": 4096,
@@ -7152,6 +7158,11 @@ const docTemplate = `{
         "handler.updateInstanceRequest": {
             "type": "object",
             "properties": {
+                "api_port": {
+                    "type": "integer",
+                    "maximum": 65535,
+                    "minimum": 1
+                },
                 "client_mss_bulk": {
                     "type": "integer",
                     "maximum": 4096,

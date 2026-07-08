@@ -34,6 +34,9 @@ type Instance struct {
 	TCPMSS        int    `json:"tcp_mss" db:"tcp_mss"`                 // client_mss value (88-4096, default 88)
 	TCPMSSBulk    int    `json:"client_mss_bulk" db:"client_mss_bulk"` // client_mss_bulk: raise MSS after handshake (0=off)
 	TLSFronting   bool   `json:"tls_fronting" db:"tls_fronting"`       // Enable TLS fronting content serving
+	// Loopback port for the engine's control-plane API ([server.api]). 0 = disabled
+	// (engine's [server.api].enabled rendered false). Used for hot per-user quota reset.
+	APIPort int `json:"api_port" db:"api_port"`
 }
 
 // Validate checks instance fields.
@@ -43,6 +46,12 @@ func (i *Instance) Validate() error {
 	}
 	if i.MetricsPort < 1 || i.MetricsPort > 65535 {
 		return fmt.Errorf("metrics_port must be 1-65535")
+	}
+	if i.APIPort != 0 && (i.APIPort < 1 || i.APIPort > 65535) {
+		return fmt.Errorf("api_port must be 0 (disabled) or 1-65535")
+	}
+	if i.APIPort != 0 && (i.APIPort == i.Port || i.APIPort == i.MetricsPort) {
+		return fmt.Errorf("api_port must differ from port and metrics_port")
 	}
 	if i.TLSDomain == "" {
 		return fmt.Errorf("tls_domain is required")

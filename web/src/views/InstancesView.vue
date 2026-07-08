@@ -211,6 +211,11 @@
             </div>
           </div>
         </div>
+        <div v-if="editingInstance && editingInstance.api_port" class="form-group">
+          <label class="form-label">{{ t('instances.api_port') }}</label>
+          <input :value="`127.0.0.1:${editingInstance.api_port}`" class="input" disabled />
+          <small class="text-muted">{{ t('instances.api_port_hint') }}</small>
+        </div>
         <div class="form-group mb-md">
           <label class="form-label">{{ t('instances.tags') }}</label>
           <TagInput v-model="form.tags" :available-tags="allInstanceTags" :placeholder="t('instances.tags_hint')" />

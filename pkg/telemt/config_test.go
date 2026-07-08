@@ -539,6 +539,36 @@ func TestRenderTOML_ClientMSS(t *testing.T) {
 	}
 }
 
+func TestRenderTOML_ServerAPI(t *testing.T) {
+	base := func(apiPort int) *TelemtConfig {
+		return &TelemtConfig{
+			General:  GeneralConfig{Modes: ModesConfig{}, Links: LinksConfig{}},
+			Timeouts: TimeoutsConfig{TGConnect: 10},
+			Server:   ServerConfig{Port: 443, MetricsWhitelist: []string{}, APIPort: apiPort},
+		}
+	}
+	// Enabled → loopback listen.
+	srv := tomlTable(t, parseRenderedTOML(t, base(19091)), "server")
+	api, ok := srv["api"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected [server.api] table, got %T", srv["api"])
+	}
+	if api["enabled"] != true {
+		t.Errorf("api.enabled = %v, want true", api["enabled"])
+	}
+	if api["listen"] != "127.0.0.1:19091" {
+		t.Errorf("api.listen = %v, want 127.0.0.1:19091", api["listen"])
+	}
+	// Disabled (port 0) → enabled=false, no listen (overrides engine default 0.0.0.0:9091).
+	apiOff := tomlTable(t, parseRenderedTOML(t, base(0)), "server")["api"].(map[string]any)
+	if apiOff["enabled"] != false {
+		t.Errorf("api.enabled = %v, want false", apiOff["enabled"])
+	}
+	if _, ok := apiOff["listen"]; ok {
+		t.Error("api.listen must be omitted when disabled")
+	}
+}
+
 func TestRenderTOML_Synlimit(t *testing.T) {
 	on := &TelemtConfig{
 		General:  GeneralConfig{Modes: ModesConfig{}, Links: LinksConfig{}},

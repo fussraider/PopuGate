@@ -536,6 +536,8 @@
     "unknown_sni_action_hint": "What to do with a TLS ClientHello whose SNI is not one of the configured domains. reject_handshake mimics nginx ssl_reject_handshake. Changing this restarts the instance.",
     "exclusive_mask": "Per-SNI mask targets",
     "exclusive_mask_hint": "Optional JSON map of SNI to host:port. Fallback (non-MTProto) traffic for a matching SNI is proxied to that target instead of the default mask host. Leave empty to disable. Changing this restarts the instance.",
+    "api_port": "Control-plane API (loopback)",
+    "api_port_hint": "Auto-assigned loopback port for the engine's control-plane API, used to reset per-user quota without restarting the container. Takes effect after the next container recreate.",
     "sni_mask": "Mask (proxy to mask host)",
     "sni_drop": "Drop connection",
     "sni_reject": "Reject handshake (fatal TLS alert)",

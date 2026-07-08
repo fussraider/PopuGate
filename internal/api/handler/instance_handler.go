@@ -93,6 +93,8 @@ type addInstanceRequest struct {
 	UnknownSNIAction string `json:"unknown_sni_action" binding:"omitempty,oneof=drop mask accept reject_handshake"`
 	// JSON object {"sni":"host:port"} of per-SNI mask targets
 	ExclusiveMask string `json:"exclusive_mask"`
+	// Loopback control-plane API port (0 = auto-assign, engine [server.api])
+	APIPort int `json:"api_port" binding:"omitempty,min=1,max=65535"`
 }
 
 // Add handles POST /api/v1/instances
@@ -127,6 +129,10 @@ func (h *InstanceHandler) Add(c *gin.Context) {
 	if inst.MetricsPort == inst.Port {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "metrics_port must differ from port"})
 		return
+	}
+
+	if inst.APIPort == 0 {
+		inst.APIPort = h.nextAPIPort(c)
 	}
 
 	if err := inst.Validate(); err != nil {
@@ -191,6 +197,7 @@ func buildInstanceFromRequest(req *addInstanceRequest) *model.Instance {
 		TLSFronting:      tlsFronting,
 		UnknownSNIAction: req.UnknownSNIAction,
 		ExclusiveMask:    req.ExclusiveMask,
+		APIPort:          req.APIPort,
 	}
 }
 
@@ -211,6 +218,7 @@ type updateInstanceRequest struct {
 	TLSFronting      *bool   `json:"tls_fronting"`
 	UnknownSNIAction *string `json:"unknown_sni_action" binding:"omitempty,oneof=drop mask accept reject_handshake"`
 	ExclusiveMask    *string `json:"exclusive_mask"`
+	APIPort          *int    `json:"api_port" binding:"omitempty,min=1,max=65535"`
 }
 
 func (h *InstanceHandler) getInstanceForUpdate(c *gin.Context) (int64, *model.Instance, bool) {
@@ -322,12 +330,18 @@ func (h *InstanceHandler) applySimpleFields(c *gin.Context, inst *model.Instance
 	if req.ExclusiveMask != nil {
 		inst.ExclusiveMask = *req.ExclusiveMask
 	}
+	if req.APIPort != nil {
+		inst.APIPort = *req.APIPort
+	}
 	return true
 }
 
 func (h *InstanceHandler) validateAndSaveInstance(c *gin.Context, id int64, inst *model.Instance) bool {
 	if inst.MetricsPort == 0 {
 		inst.MetricsPort = h.nextMetricsPort(c)
+	}
+	if inst.APIPort == 0 {
+		inst.APIPort = h.nextAPIPort(c)
 	}
 	if inst.MetricsPort == inst.Port {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "metrics_port must differ from port"})
@@ -732,6 +746,36 @@ func (h *InstanceHandler) nextMetricsPort(c *gin.Context) int {
 		taken := false
 		for _, inst := range instances {
 			if inst.MetricsPort == next || inst.Port == next {
+				taken = true
+				break
+			}
+		}
+		if !taken && isPortFree(next) {
+			return next
+		}
+		next++
+	}
+}
+
+// nextAPIPort returns the next available loopback port for the engine control-plane
+// API ([server.api]), from a high base to avoid the proxy/metrics ranges, checking
+// against every instance's port/metrics_port/api_port and host availability.
+func (h *InstanceHandler) nextAPIPort(c *gin.Context) int {
+	const apiPortBase = 19091
+	instances, err := h.instances.List(c.Request.Context())
+	if err != nil {
+		return apiPortBase
+	}
+	next := apiPortBase
+	for _, inst := range instances {
+		if inst.APIPort >= next {
+			next = inst.APIPort + 1
+		}
+	}
+	for {
+		taken := false
+		for _, inst := range instances {
+			if inst.APIPort == next || inst.MetricsPort == next || inst.Port == next {
 				taken = true
 				break
 			}

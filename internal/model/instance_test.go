@@ -287,6 +287,27 @@ func TestInstanceValidate_ExclusiveMask(t *testing.T) {
 	}
 }
 
+func TestInstanceValidate_APIPort(t *testing.T) {
+	base := func(api int) *Instance {
+		return &Instance{Port: 443, MetricsPort: 9091, TLSDomain: "example.com", APIPort: api}
+	}
+	for _, ok := range []int{0, 1, 19091, 65535} {
+		if err := base(ok).Validate(); err != nil {
+			t.Errorf("api_port %d: unexpected error: %v", ok, err)
+		}
+	}
+	if err := base(70000).Validate(); err == nil {
+		t.Error("api_port 70000: expected error")
+	}
+	// Must differ from port / metrics_port.
+	if err := (&Instance{Port: 443, MetricsPort: 9091, TLSDomain: "e.com", APIPort: 443}).Validate(); err == nil {
+		t.Error("api_port == port: expected error")
+	}
+	if err := (&Instance{Port: 443, MetricsPort: 9091, TLSDomain: "e.com", APIPort: 9091}).Validate(); err == nil {
+		t.Error("api_port == metrics_port: expected error")
+	}
+}
+
 func TestGetExclusiveMask(t *testing.T) {
 	if m := (&Instance{ExclusiveMask: ""}).GetExclusiveMask(); m != nil {
 		t.Errorf("empty: expected nil, got %v", m)

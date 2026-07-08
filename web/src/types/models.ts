@@ -135,6 +135,7 @@ export interface Instance {
   tls_fronting: boolean
   unknown_sni_action: string
   exclusive_mask: string
+  api_port: number
   active_port?: number
   active_metrics_port?: number
 }

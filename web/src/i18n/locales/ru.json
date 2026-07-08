@@ -536,6 +536,8 @@
     "unknown_sni_action_hint": "Что делать с TLS ClientHello, чей SNI не из настроенных доменов. reject_handshake имитирует nginx ssl_reject_handshake. Смена перезапускает инстанс.",
     "exclusive_mask": "Цели маскировки по SNI",
     "exclusive_mask_hint": "Необязательная JSON-карта SNI → host:port. Фолбэк-трафик (не MTProto) для совпавшего SNI проксируется на указанную цель вместо стандартного mask-хоста. Оставьте пустым, чтобы отключить. Смена перезапускает инстанс.",
+    "api_port": "Control-plane API (loopback)",
+    "api_port_hint": "Автоматически назначенный loopback-порт control-plane API движка — используется для сброса квоты пользователя без перезапуска контейнера. Вступает в силу после следующего пересоздания контейнера.",
     "sni_mask": "Маскировать (проксировать на mask host)",
     "sni_drop": "Разорвать соединение",
     "sni_reject": "Отклонить handshake (fatal TLS alert)",

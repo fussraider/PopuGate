@@ -7,6 +7,11 @@ definitions:
     type: object
   handler.addInstanceRequest:
     properties:
+      api_port:
+        description: Loopback control-plane API port (0 = auto-assign, engine [server.api])
+        maximum: 65535
+        minimum: 1
+        type: integer
       client_mss_bulk:
         maximum: 4096
         minimum: 88
@@ -433,6 +438,10 @@ definitions:
     type: object
   handler.updateInstanceRequest:
     properties:
+      api_port:
+        maximum: 65535
+        minimum: 1
+        type: integer
       client_mss_bulk:
         maximum: 4096
         minimum: 88

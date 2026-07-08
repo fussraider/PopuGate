@@ -18,7 +18,7 @@ func NewInstanceStore(db *sql.DB) *InstanceStore {
 	return &InstanceStore{db: db}
 }
 
-const instanceColumns = `id, port, metrics_port, enabled, label, tls_domain, tls_domains, fake_tls, mask_host, mask_port, tags, tcp_mss_enabled, tcp_mss, tls_fronting, unknown_sni_action, client_mss_bulk, exclusive_mask`
+const instanceColumns = `id, port, metrics_port, enabled, label, tls_domain, tls_domains, fake_tls, mask_host, mask_port, tags, tcp_mss_enabled, tcp_mss, tls_fronting, unknown_sni_action, client_mss_bulk, exclusive_mask, api_port`
 
 type scanner interface {
 	Scan(dest ...interface{}) error
@@ -29,7 +29,7 @@ func scanInstance(row scanner) (*model.Instance, error) {
 	var enabled, fakeTLS, tcpMSSEnabled, tlsFronting int
 	if err := row.Scan(&inst.ID, &inst.Port, &inst.MetricsPort, &enabled, &inst.Label,
 		&inst.TLSDomain, &inst.TLSDomains, &fakeTLS, &inst.MaskHost, &inst.MaskPort, &inst.Tags,
-		&tcpMSSEnabled, &inst.TCPMSS, &tlsFronting, &inst.UnknownSNIAction, &inst.TCPMSSBulk, &inst.ExclusiveMask); err != nil {
+		&tcpMSSEnabled, &inst.TCPMSS, &tlsFronting, &inst.UnknownSNIAction, &inst.TCPMSSBulk, &inst.ExclusiveMask, &inst.APIPort); err != nil {
 		return nil, err
 	}
 	inst.Enabled = intToBool(enabled)
@@ -107,11 +107,11 @@ func (s *InstanceStore) Create(ctx context.Context, inst *model.Instance) error 
 	tcpMSSEnabled := boolToInt(inst.TCPMSSEnabled)
 	tlsFronting := boolToInt(inst.TLSFronting)
 	result, err := s.db.ExecContext(ctx, `
-		INSERT INTO instances (port, metrics_port, enabled, label, tls_domain, tls_domains, fake_tls, mask_host, mask_port, tags, tcp_mss_enabled, tcp_mss, tls_fronting, unknown_sni_action, client_mss_bulk, exclusive_mask)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO instances (port, metrics_port, enabled, label, tls_domain, tls_domains, fake_tls, mask_host, mask_port, tags, tcp_mss_enabled, tcp_mss, tls_fronting, unknown_sni_action, client_mss_bulk, exclusive_mask, api_port)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, inst.Port, inst.MetricsPort, enabled, inst.Label,
 		inst.TLSDomain, inst.TLSDomains, fakeTLS, inst.MaskHost, inst.MaskPort, inst.Tags,
-		tcpMSSEnabled, inst.TCPMSS, tlsFronting, inst.UnknownSNIAction, inst.TCPMSSBulk, inst.ExclusiveMask)
+		tcpMSSEnabled, inst.TCPMSS, tlsFronting, inst.UnknownSNIAction, inst.TCPMSSBulk, inst.ExclusiveMask, inst.APIPort)
 	if err != nil {
 		return fmt.Errorf("create instance: %w", err)
 	}
@@ -128,16 +128,58 @@ func (s *InstanceStore) Update(ctx context.Context, inst *model.Instance) error 
 	_, err := s.db.ExecContext(ctx, `
 		UPDATE instances SET port=?, metrics_port=?, enabled=?, label=?,
 		                     tls_domain=?, tls_domains=?, fake_tls=?, mask_host=?, mask_port=?, tags=?,
-		                     tcp_mss_enabled=?, tcp_mss=?, tls_fronting=?, unknown_sni_action=?, client_mss_bulk=?, exclusive_mask=?
+		                     tcp_mss_enabled=?, tcp_mss=?, tls_fronting=?, unknown_sni_action=?, client_mss_bulk=?, exclusive_mask=?, api_port=?
 		WHERE id = ?
 	`, inst.Port, inst.MetricsPort, enabled, inst.Label,
 		inst.TLSDomain, inst.TLSDomains, fakeTLS, inst.MaskHost, inst.MaskPort, inst.Tags,
-		tcpMSSEnabled, inst.TCPMSS, tlsFronting, inst.UnknownSNIAction, inst.TCPMSSBulk, inst.ExclusiveMask,
+		tcpMSSEnabled, inst.TCPMSS, tlsFronting, inst.UnknownSNIAction, inst.TCPMSSBulk, inst.ExclusiveMask, inst.APIPort,
 		inst.ID)
 	if err != nil {
 		return fmt.Errorf("update instance %d: %w", inst.ID, err)
 	}
 	return nil
+}
+
+// BackfillAPIPorts assigns a loopback control-plane API port to any instance that
+// has none (api_port = 0), so pre-existing instances gain a hot quota-reset API on
+// their next container recreate. Ports are unique across all instances' port/
+// metrics_port/api_port and allocated from a high base to avoid the proxy/metrics
+// ranges. Idempotent: instances that already have a port are left untouched.
+func (s *InstanceStore) BackfillAPIPorts(ctx context.Context) (int, error) {
+	const apiPortBase = 19091
+	instances, err := s.List(ctx)
+	if err != nil {
+		return 0, err
+	}
+	used := make(map[int]bool)
+	next := apiPortBase
+	for _, inst := range instances {
+		used[inst.Port] = true
+		used[inst.MetricsPort] = true
+		if inst.APIPort != 0 {
+			used[inst.APIPort] = true
+			if inst.APIPort >= next {
+				next = inst.APIPort + 1
+			}
+		}
+	}
+	assigned := 0
+	for i := range instances {
+		if instances[i].APIPort != 0 {
+			continue
+		}
+		for used[next] {
+			next++
+		}
+		used[next] = true
+		instances[i].APIPort = next
+		if err := s.Update(ctx, &instances[i]); err != nil {
+			return assigned, fmt.Errorf("assign api_port to instance %d: %w", instances[i].ID, err)
+		}
+		assigned++
+		next++
+	}
+	return assigned, nil
 }
 
 // Delete removes an instance by port.

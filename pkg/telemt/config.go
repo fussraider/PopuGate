@@ -59,6 +59,9 @@ type ServerConfig struct {
 	SynlimitSeconds  int    `toml:"synlimit_seconds,omitempty"`
 	SynlimitHitcount int    `toml:"synlimit_hitcount,omitempty"`
 	SynlimitBurst    int    `toml:"synlimit_burst,omitempty"`
+	// Control-plane API ([server.api]). APIPort 0 = disabled (rendered enabled=false
+	// to override the engine's on-by-default 0.0.0.0:9091 listener). Bound to loopback.
+	APIPort int `toml:"-"`
 }
 
 type TimeoutsConfig struct {
@@ -428,6 +431,8 @@ func BuildInstanceConfig(params *InstanceConfigParams) *TelemtConfig {
 		cfg.Server.SynlimitBurst = params.SynlimitBurst
 	}
 
+	cfg.Server.APIPort = inst.APIPort
+
 	if params.ProxyProtocol && len(params.ProxyProtocolCIDRs) > 0 {
 		cfg.Server.ProxyProtocolTrustedCIDRs = params.ProxyProtocolCIDRs
 	}
@@ -566,6 +571,18 @@ func renderServerSection(b *strings.Builder, cfg *TelemtConfig) {
 		if cfg.Server.SynlimitBurst > 0 {
 			fmt.Fprintf(b, "synlimit_burst = %d\n", cfg.Server.SynlimitBurst)
 		}
+	}
+	b.WriteString("\n")
+
+	// Control-plane API: bind to loopback for hot per-user quota reset. When no
+	// port is assigned, explicitly disable it (the engine enables it by default
+	// on 0.0.0.0:9091, which we do not want exposed).
+	b.WriteString("[server.api]\n")
+	if cfg.Server.APIPort > 0 {
+		b.WriteString("enabled = true\n")
+		fmt.Fprintf(b, "listen = %q\n", fmt.Sprintf("127.0.0.1:%d", cfg.Server.APIPort))
+	} else {
+		b.WriteString("enabled = false\n")
 	}
 	b.WriteString("\n")
 }

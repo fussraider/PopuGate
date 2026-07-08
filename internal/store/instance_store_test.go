@@ -277,3 +277,53 @@ func TestInstanceStore_DefaultAntiBlock(t *testing.T) {
 		t.Error("expected tls_fronting=false by default")
 	}
 }
+
+func TestInstanceStore_BackfillAPIPorts(t *testing.T) {
+	db := testutil.OpenTestDB(t)
+	s := NewInstanceStore(db)
+	ctx := context.Background()
+
+	// Two instances without api_port, one that already has one.
+	a := &model.Instance{Port: 443, MetricsPort: 9091, Enabled: true, Label: "a", TLSDomain: "a.com"}
+	b := &model.Instance{Port: 8443, MetricsPort: 9092, Enabled: true, Label: "b", TLSDomain: "b.com"}
+	c := &model.Instance{Port: 9443, MetricsPort: 9093, Enabled: true, Label: "c", TLSDomain: "c.com", APIPort: 19091}
+	for _, inst := range []*model.Instance{a, b, c} {
+		if err := s.Create(ctx, inst); err != nil {
+			t.Fatalf("Create %s: %v", inst.Label, err)
+		}
+	}
+
+	n, err := s.BackfillAPIPorts(ctx)
+	if err != nil {
+		t.Fatalf("BackfillAPIPorts: %v", err)
+	}
+	if n != 2 {
+		t.Fatalf("assigned = %d, want 2", n)
+	}
+
+	all, err := s.List(ctx)
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	seen := map[int]bool{}
+	for _, inst := range all {
+		if inst.APIPort == 0 {
+			t.Errorf("instance %s still has api_port 0", inst.Label)
+		}
+		if seen[inst.APIPort] {
+			t.Errorf("duplicate api_port %d", inst.APIPort)
+		}
+		seen[inst.APIPort] = true
+		if inst.APIPort == inst.Port || inst.APIPort == inst.MetricsPort {
+			t.Errorf("api_port collides with port/metrics for %s", inst.Label)
+		}
+	}
+	if !seen[19091] {
+		t.Error("pre-existing api_port 19091 must be preserved")
+	}
+
+	// Idempotent: second run assigns nothing.
+	if n2, err := s.BackfillAPIPorts(ctx); err != nil || n2 != 0 {
+		t.Fatalf("second backfill: n=%d err=%v, want 0/nil", n2, err)
+	}
+}

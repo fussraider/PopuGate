@@ -91,6 +91,11 @@ func runServer(cmd *cobra.Command, args []string) {
 	defer func() { _ = database.Close() }()
 
 	stores := initStores(db, dataDir)
+	if n, err := stores.instance.BackfillAPIPorts(context.Background()); err != nil {
+		srvLog.Warnf("backfill instance api_port: %v", err)
+	} else if n > 0 {
+		srvLog.Infof("assigned control-plane api_port to %d existing instance(s)", n)
+	}
 	svcs := initServices(stores, dataDir)
 
 	botCtx, botCancel := context.WithCancel(context.Background())

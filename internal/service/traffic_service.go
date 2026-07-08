@@ -28,6 +28,7 @@ type TrafficService struct {
 	docker    *dockerutil.DockerClient
 	secrets   *store.SecretStore
 	quota     *store.QuotaAlertStore
+	engineAPI *EngineAPIClient
 
 	mu         sync.Mutex
 	lastLive   *model.LiveMetrics
@@ -48,6 +49,10 @@ func NewTrafficService(traffic *store.TrafficStore, settings *store.SettingsStor
 		dockerAddr: dockerutil.DockerHostAddr(),
 	}
 }
+
+// SetEngineAPI wires the engine control-plane API client used to propagate quota
+// resets to running engines without a container restart.
+func (s *TrafficService) SetEngineAPI(c *EngineAPIClient) { s.engineAPI = c }
 
 // SetSecretStore sets the secret store for quota enforcement.
 func (s *TrafficService) SetSecretStore(secrets *store.SecretStore, quota *store.QuotaAlertStore) {
@@ -468,5 +473,17 @@ func (s *TrafficService) ResetAllQuotas(ctx context.Context) {
 	}
 	if err := s.traffic.ResetAllTraffic(ctx); err != nil {
 		quotaLog.Warnf("failed to reset all quotas: %v", err)
+		return
+	}
+	// Propagate to the running engines so enforcement counters drop immediately,
+	// without recreating containers. Best-effort.
+	if s.engineAPI != nil && s.instances != nil && s.secrets != nil {
+		insts, ierr := s.instances.List(ctx)
+		secs, serr := s.secrets.List(ctx)
+		if ierr != nil || serr != nil {
+			quotaLog.Warnf("engine quota reset: load state: instances=%v secrets=%v", ierr, serr)
+		} else {
+			s.engineAPI.ResetAll(ctx, insts, secs)
+		}
 	}
 }

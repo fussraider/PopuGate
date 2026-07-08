@@ -282,6 +282,12 @@ func initServices(s appStores, dataDir string) appServices {
 	}
 	svcs.traffic.SetSecretStore(s.secret, s.quota)
 
+	// Engine control-plane API client: propagate quota resets to running engines
+	// (loopback [server.api]) without recreating containers.
+	engineAPI := service.NewEngineAPIClient()
+	svcs.secret.SetEngineAPI(engineAPI)
+	svcs.traffic.SetEngineAPI(engineAPI)
+
 	if dockerClient != nil {
 		svcs.docker = service.NewDockerService(dockerClient, svcs.telemtCfg)
 		svcs.container = service.NewContainerService(
@@ -345,7 +351,7 @@ func buildBotDeps(s appStores, svcs appServices) *bot.Dependencies {
 		return s.backup.Create(ctx)
 	}
 	deps.ResetTraffic = func(ctx context.Context, label string) error {
-		return s.traffic.ResetTraffic(ctx, label)
+		return svcs.secret.ResetTraffic(ctx, label)
 	}
 	return deps
 }

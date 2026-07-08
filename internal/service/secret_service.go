@@ -17,12 +17,17 @@ type SecretService struct {
 	instances *store.InstanceStore
 	settings  *store.SettingsStore
 	traffic   *store.TrafficStore
+	engineAPI *EngineAPIClient
 }
 
 // NewSecretService creates a new SecretService.
 func NewSecretService(secrets *store.SecretStore, instances *store.InstanceStore, settings *store.SettingsStore, traffic *store.TrafficStore) *SecretService {
 	return &SecretService{secrets: secrets, instances: instances, settings: settings, traffic: traffic}
 }
+
+// SetEngineAPI wires the engine control-plane API client used to propagate quota
+// resets to running engines without a container restart.
+func (s *SecretService) SetEngineAPI(c *EngineAPIClient) { s.engineAPI = c }
 
 // List returns all secrets with traffic data.
 func (s *SecretService) List(ctx context.Context) ([]model.Secret, error) {
@@ -267,12 +272,36 @@ func (s *SecretService) GetLink(ctx context.Context, label, serverIP string, por
 
 // ResetTraffic resets traffic for a specific user.
 func (s *SecretService) ResetTraffic(ctx context.Context, label string) error {
-	return s.traffic.ResetTraffic(ctx, label)
+	if err := s.traffic.ResetTraffic(ctx, label); err != nil {
+		return err
+	}
+	// Propagate to the running engines so the enforcement counter drops
+	// immediately, no container restart. Best-effort.
+	if s.engineAPI != nil {
+		if insts, err := s.instances.List(ctx); err != nil {
+			engineLog.Warnf("engine quota reset: list instances: %v", err)
+		} else {
+			s.engineAPI.ResetLabel(ctx, insts, label)
+		}
+	}
+	return nil
 }
 
 // ResetAllTraffic resets traffic for all users.
 func (s *SecretService) ResetAllTraffic(ctx context.Context) error {
-	return s.traffic.ResetAllTraffic(ctx)
+	if err := s.traffic.ResetAllTraffic(ctx); err != nil {
+		return err
+	}
+	if s.engineAPI != nil {
+		insts, ierr := s.instances.List(ctx)
+		secs, serr := s.secrets.List(ctx)
+		if ierr != nil || serr != nil {
+			engineLog.Warnf("engine quota reset: load state: instances=%v secrets=%v", ierr, serr)
+		} else {
+			s.engineAPI.ResetAll(ctx, insts, secs)
+		}
+	}
+	return nil
 }
 
 // UpdateNotes updates the notes/description for a secret.

@@ -123,9 +123,9 @@ func (s *UpstreamService) handleFailover(ctx context.Context, name string, errMs
 			}
 		}
 		if s.notifyWithBtns != nil && btn.URL != "" {
-			s.notifyWithBtns(ctx, "🚫 *%s* Upstream auto-disabled after 3 failures: %s", []KeyboardButton{btn}, name, errMsg)
+			s.notifyWithBtns(ctx, "🚫 *%s* Upstream *%s* auto-disabled after 3 failures: %s", []KeyboardButton{btn}, name, errMsg)
 		} else if s.notify != nil {
-			s.notify(ctx, "🚫 *%s* Upstream auto-disabled after 3 failures: %s", name, errMsg)
+			s.notify(ctx, "🚫 *%s* Upstream *%s* auto-disabled after 3 failures: %s", name, errMsg)
 		}
 	}
 }
@@ -153,9 +153,9 @@ func (s *UpstreamService) handleAutoRecovery(ctx context.Context, u *model.Upstr
 			}
 		}
 		if s.notifyWithBtns != nil && btn.URL != "" {
-			s.notifyWithBtns(ctx, "✅ *%s* Upstream auto-recovered and re-enabled (latency: %dms)", []KeyboardButton{btn}, name, latency)
+			s.notifyWithBtns(ctx, "✅ *%s* Upstream *%s* auto-recovered and re-enabled (latency: %dms)", []KeyboardButton{btn}, name, latency)
 		} else if s.notify != nil {
-			s.notify(ctx, "✅ *%s* Upstream auto-recovered and re-enabled (latency: %dms)", name, latency)
+			s.notify(ctx, "✅ *%s* Upstream *%s* auto-recovered and re-enabled (latency: %dms)", name, latency)
 		}
 	} else {
 		log.Errorf("failed to auto-enable upstream %s: %v", name, err)

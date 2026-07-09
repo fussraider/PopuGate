@@ -29,8 +29,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **Instance health check hardened**: the per-instance health probe now verifies the `/metrics` response actually contains telemt Prometheus output, not just an HTTP 200 — catches a process bound to the port that isn't the engine. (Full engine `/v1/health/ready` readiness is deferred to a future HTTP-management-API change; engine log rotation continues to be handled by the Docker json-file log driver.)
-
-### Changed
 - **Engine upgraded to telemt 3.4.22** (from 3.3.39): bumped the pinned default engine version and commit (`DefaultTelemtVer` → `3.4.22`, `DefaultTelemtRef` → `ef1c06a`, the exact upstream tag commit). New installs and in-app engine updates now target 3.4.22; existing installs upgrade through the normal update flow. The target is pinned exactly to **3.4.22** to skip the known-bad intermediate range 3.4.19–3.4.21 (which corrupts outbound Secure/VersionD framing for `dd` secrets and breaks AD_TAG on multi-homed hosts). The upgrade brings automatic engine-side improvements at no config cost: post-quantum-aware TLS ServerHello fidelity, middle-proxy cancellation/stability hardening, the TimeWindow unique-IP limiter fix, and removal of the `ME_DIAG` diagnostics env that could log key material. No PopuGate-emitted config key or scraped metric name changed between 3.3.39 and 3.4.22, so generated configs and the metrics parser remain compatible (strict-config mode stays off).
 
 ### Notes
@@ -432,6 +430,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - SQLite storage with WAL mode
 - JWT authentication
 
+[Unreleased]: https://github.com/fussraider/PopuGate/compare/v0.6.1...HEAD
 [0.6.1]: https://github.com/fussraider/PopuGate/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/fussraider/PopuGate/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/fussraider/PopuGate/compare/v0.4.0...v0.5.0

@@ -517,11 +517,13 @@ func TestRenderTOML_ClientMSS(t *testing.T) {
 		Timeouts: TimeoutsConfig{TGConnect: 10},
 	}
 	server := tomlTable(t, parseRenderedTOML(t, cfg), "server")
-	if server["client_mss"] != int64(92) {
-		t.Errorf("server.client_mss = %v, want 92", server["client_mss"])
+	// The engine types client_mss / client_mss_bulk as strings (Option<String>),
+	// so they must render quoted — a bare integer is rejected by the engine.
+	if server["client_mss"] != "92" {
+		t.Errorf("server.client_mss = %#v, want string \"92\"", server["client_mss"])
 	}
-	if server["client_mss_bulk"] != int64(1400) {
-		t.Errorf("server.client_mss_bulk = %v, want 1400", server["client_mss_bulk"])
+	if server["client_mss_bulk"] != "1400" {
+		t.Errorf("server.client_mss_bulk = %#v, want string \"1400\"", server["client_mss_bulk"])
 	}
 
 	// When disabled (ClientMSS == 0) neither key is emitted.

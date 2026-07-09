@@ -552,10 +552,12 @@ func renderServerSection(b *strings.Builder, cfg *TelemtConfig) {
 	fmt.Fprintf(b, "metrics_whitelist = %s\n", formatStringArray(cfg.Server.MetricsWhitelist))
 	// Client-facing TCP MSS shaping (anti-DPI). client_mss_bulk raises the MSS
 	// after the handshake to cut pps. Restart-required (listener rebind).
+	// The engine types these as strings (Option<String>, preset-or-int grammar),
+	// so they MUST be quoted — a bare integer is rejected as a config type error.
 	if cfg.Server.ClientMSS > 0 {
-		fmt.Fprintf(b, "client_mss = %d\n", cfg.Server.ClientMSS)
+		fmt.Fprintf(b, "client_mss = \"%d\"\n", cfg.Server.ClientMSS)
 		if cfg.Server.ClientMSSBulk > 0 {
-			fmt.Fprintf(b, "client_mss_bulk = %d\n", cfg.Server.ClientMSSBulk)
+			fmt.Fprintf(b, "client_mss_bulk = \"%d\"\n", cfg.Server.ClientMSSBulk)
 		}
 	}
 	// Netfilter SYN limiter (opt-in). Requires CAP_NET_ADMIN on the container;

@@ -572,30 +572,62 @@ func TestRenderTOML_ServerAPI(t *testing.T) {
 }
 
 func TestRenderTOML_Synlimit(t *testing.T) {
+	// synlimit is a PER-LISTENER setting: it must render under [[server.listeners]]
+	// (one per bind address), NOT on [server] where the engine silently ignores it.
 	on := &TelemtConfig{
 		General:  GeneralConfig{Modes: ModesConfig{}, Links: LinksConfig{}},
 		Timeouts: TimeoutsConfig{TGConnect: 10},
 		Server: ServerConfig{
-			Port: 443, MetricsWhitelist: []string{},
+			Port: 443, ListenAddrIPv4: "0.0.0.0", ListenAddrIPv6: "::", MetricsWhitelist: []string{},
 			Synlimit: "nftables", SynlimitSeconds: 60, SynlimitHitcount: 48, SynlimitBurst: 1,
 		},
 	}
-	srv := tomlTable(t, parseRenderedTOML(t, on), "server")
-	if srv["synlimit"] != "nftables" {
-		t.Errorf("synlimit = %v, want nftables", srv["synlimit"])
+	parsed := parseRenderedTOML(t, on)
+	srv := tomlTable(t, parsed, "server")
+	if _, ok := srv["synlimit"]; ok {
+		t.Error("synlimit must NOT be on [server] (engine ignores it there)")
 	}
-	if srv["synlimit_seconds"] != int64(60) || srv["synlimit_hitcount"] != int64(48) || srv["synlimit_burst"] != int64(1) {
-		t.Errorf("synlimit params = %v/%v/%v", srv["synlimit_seconds"], srv["synlimit_hitcount"], srv["synlimit_burst"])
+	listeners, ok := srv["listeners"].([]map[string]any)
+	if !ok {
+		// go-toml decodes an array of tables as []map[string]any
+		if raw, ok2 := srv["listeners"].([]any); ok2 {
+			listeners = make([]map[string]any, len(raw))
+			for i, r := range raw {
+				listeners[i] = r.(map[string]any)
+			}
+		} else {
+			t.Fatalf("expected [[server.listeners]] array, got %T", srv["listeners"])
+		}
+	}
+	if len(listeners) != 2 {
+		t.Fatalf("expected 2 listeners (ipv4+ipv6), got %d", len(listeners))
+	}
+	ips := map[string]bool{}
+	for _, l := range listeners {
+		ips[l["ip"].(string)] = true
+		if l["synlimit"] != "nftables" {
+			t.Errorf("listener synlimit = %v, want nftables", l["synlimit"])
+		}
+		if l["port"] != int64(443) {
+			t.Errorf("listener port = %v, want 443", l["port"])
+		}
+		if l["synlimit_seconds"] != int64(60) || l["synlimit_hitcount"] != int64(48) || l["synlimit_burst"] != int64(1) {
+			t.Errorf("listener synlimit params = %v/%v/%v", l["synlimit_seconds"], l["synlimit_hitcount"], l["synlimit_burst"])
+		}
+	}
+	if !ips["0.0.0.0"] || !ips["::"] {
+		t.Errorf("listeners must cover 0.0.0.0 and ::, got %v", ips)
 	}
 
+	// Disabled → no listeners block at all (engine auto-migrates legacy [server]).
 	off := &TelemtConfig{
 		General:  GeneralConfig{Modes: ModesConfig{}, Links: LinksConfig{}},
 		Timeouts: TimeoutsConfig{TGConnect: 10},
-		Server:   ServerConfig{Port: 443, MetricsWhitelist: []string{}},
+		Server:   ServerConfig{Port: 443, ListenAddrIPv4: "0.0.0.0", ListenAddrIPv6: "::", MetricsWhitelist: []string{}},
 	}
 	srvOff := tomlTable(t, parseRenderedTOML(t, off), "server")
-	if _, ok := srvOff["synlimit"]; ok {
-		t.Error("synlimit must be omitted when backend is empty")
+	if _, ok := srvOff["listeners"]; ok {
+		t.Error("no [[server.listeners]] should be emitted when synlimit is off")
 	}
 }
 

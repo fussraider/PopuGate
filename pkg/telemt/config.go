@@ -560,20 +560,6 @@ func renderServerSection(b *strings.Builder, cfg *TelemtConfig) {
 			fmt.Fprintf(b, "client_mss_bulk = \"%d\"\n", cfg.Server.ClientMSSBulk)
 		}
 	}
-	// Netfilter SYN limiter (opt-in). Requires CAP_NET_ADMIN on the container;
-	// the engine installs/removes the iptables/nftables rules itself.
-	if cfg.Server.Synlimit != "" {
-		fmt.Fprintf(b, "synlimit = %q\n", cfg.Server.Synlimit)
-		if cfg.Server.SynlimitSeconds > 0 {
-			fmt.Fprintf(b, "synlimit_seconds = %d\n", cfg.Server.SynlimitSeconds)
-		}
-		if cfg.Server.SynlimitHitcount > 0 {
-			fmt.Fprintf(b, "synlimit_hitcount = %d\n", cfg.Server.SynlimitHitcount)
-		}
-		if cfg.Server.SynlimitBurst > 0 {
-			fmt.Fprintf(b, "synlimit_burst = %d\n", cfg.Server.SynlimitBurst)
-		}
-	}
 	b.WriteString("\n")
 
 	// Control-plane API: bind to loopback for hot per-user quota reset. When no
@@ -587,6 +573,44 @@ func renderServerSection(b *strings.Builder, cfg *TelemtConfig) {
 		b.WriteString("enabled = false\n")
 	}
 	b.WriteString("\n")
+
+	renderServerListeners(b, cfg)
+}
+
+// renderServerListeners emits explicit [[server.listeners]] entries. The engine's
+// netfilter SYN limiter is a PER-LISTENER setting (ListenerConfig), not a [server]
+// key — placed on [server] it is silently ignored. So we only emit listeners when
+// the limiter is enabled, and then we must fully replicate the engine's own
+// legacy-to-listener migration (one listener per configured bind address on the
+// primary port), because providing any explicit listener disables that migration.
+// client_mss stays on [server]; a listener with client_mss unset inherits it.
+func renderServerListeners(b *strings.Builder, cfg *TelemtConfig) {
+	if cfg.Server.Synlimit == "" {
+		return
+	}
+	addrs := make([]string, 0, 2)
+	if cfg.Server.ListenAddrIPv4 != "" {
+		addrs = append(addrs, cfg.Server.ListenAddrIPv4)
+	}
+	if cfg.Server.ListenAddrIPv6 != "" {
+		addrs = append(addrs, cfg.Server.ListenAddrIPv6)
+	}
+	for _, ip := range addrs {
+		b.WriteString("[[server.listeners]]\n")
+		fmt.Fprintf(b, "ip = %q\n", ip)
+		fmt.Fprintf(b, "port = %d\n", cfg.Server.Port)
+		fmt.Fprintf(b, "synlimit = %q\n", cfg.Server.Synlimit)
+		if cfg.Server.SynlimitSeconds > 0 {
+			fmt.Fprintf(b, "synlimit_seconds = %d\n", cfg.Server.SynlimitSeconds)
+		}
+		if cfg.Server.SynlimitHitcount > 0 {
+			fmt.Fprintf(b, "synlimit_hitcount = %d\n", cfg.Server.SynlimitHitcount)
+		}
+		if cfg.Server.SynlimitBurst > 0 {
+			fmt.Fprintf(b, "synlimit_burst = %d\n", cfg.Server.SynlimitBurst)
+		}
+		b.WriteString("\n")
+	}
 }
 
 func renderTimeoutsSection(b *strings.Builder, cfg *TelemtConfig) {

@@ -39,6 +39,15 @@ export const useUpdateStore = defineStore('update', () => {
   }
 
   function pollForRestart() {
+    // In Docker mode apply() returns before the sidecar has swapped the
+    // containers, so the first successful health check may still be answered
+    // by the OLD backend — reloading on it re-serves the stale bundle and the
+    // UI keeps showing the previous version. Poll until /health reports the
+    // new version, then wait one extra tick so the web container (recreated
+    // by the sidecar after the backend) is swapped too.
+    const previousVersion = status.value?.current ?? ''
+    const targetVersion = result.value?.new_version ?? ''
+    let newBackendSeen = false
     let attempts = 0
     const maxAttempts = 60
     const interval = setInterval(async () => {
@@ -49,7 +58,18 @@ export const useUpdateStore = defineStore('update', () => {
         return
       }
       try {
-        await healthApi.check()
+        const health = await healthApi.check()
+        const version = health.version ?? ''
+        const isNewBackend = targetVersion
+          ? version === targetVersion
+          : previousVersion
+            ? version !== previousVersion
+            : true
+        if (!isNewBackend) return
+        if (!newBackendSeen) {
+          newBackendSeen = true
+          return
+        }
         clearInterval(interval)
         restarting.value = false
         // Bust browser cache by navigating with timestamp param

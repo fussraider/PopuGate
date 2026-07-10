@@ -231,6 +231,10 @@ export interface InstanceStatus {
 }
 
 export interface HealthStatus {
+  status?: string
+  version?: string
+  commit?: string
+  version_url?: string
   docker: string
   container: string
   port: string

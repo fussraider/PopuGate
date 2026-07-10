@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-07-10
+
 ### Security
 - **CI vulnerability scanning (govulncheck + osv-scanner)**: the Build workflow gained two blocking security-scan jobs that run on every push/PR. `govulncheck` does a reachability-aware scan of the Go code (fails only when a vulnerable symbol is actually reached); `osv-scanner` does a version-based scan across all manifests including the frontend (`web/pnpm-lock.yaml`). Both honor `osv-scanner.toml`, and govulncheck's allowlist is parsed from that same file so the documented docker/docker suppressions live in one place. Any reachable/known vulnerability outside the allowlist now fails CI before merge. The govulncheck job runs `scripts/vulncheck.sh` (which distinguishes findings from tool failures by exit code, so a scanner crash cannot pass silently), mirrored locally by `make vulncheck`; osv-scanner is version-pinned since its CLI has broken compatibility before (vulnerability data is still fetched live). On green runs the script prints only the matched allowlist IDs and keeps the full govulncheck report out of the log — its `file:line` call traces would otherwise be turned into bogus error annotations by setup-go's Go problem matcher; the full report is printed only when the scan actually fails.
 - **Archive extraction confined to target dir (zip-slip hardening)**: the web-dist updater (`extractWebDist`) now extracts through an `os.Root` handle (Go 1.24+), so every write is confined to the destination directory and any entry that would escape via path traversal (`..`) or a symlink — even under a concurrent symlink swap — is refused; non-local entry names are also rejected up front with `filepath.IsLocal`. The backup-restore extractor got the same `filepath.IsLocal` pre-check alongside its existing prefix guard. Resolves the CodeQL `go/zipslip` finding; covered by regression tests (traversal, absolute-path, and no-write-outside assertions).
@@ -36,13 +38,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Instance health check hardened**: the per-instance health probe now verifies the `/metrics` response actually contains telemt Prometheus output, not just an HTTP 200 — catches a process bound to the port that isn't the engine. (Full engine `/v1/health/ready` readiness is deferred to a future HTTP-management-API change; engine log rotation continues to be handled by the Docker json-file log driver.)
 - **Engine upgraded to telemt 3.4.22** (from 3.3.39): bumped the pinned default engine version and commit (`DefaultTelemtVer` → `3.4.22`, `DefaultTelemtRef` → `ef1c06a`, the exact upstream tag commit). New installs and in-app engine updates now target 3.4.22; existing installs upgrade through the normal update flow. The target is pinned exactly to **3.4.22** to skip the known-bad intermediate range 3.4.19–3.4.21 (which corrupts outbound Secure/VersionD framing for `dd` secrets and breaks AD_TAG on multi-homed hosts). The upgrade brings automatic engine-side improvements at no config cost: post-quantum-aware TLS ServerHello fidelity, middle-proxy cancellation/stability hardening, the TimeWindow unique-IP limiter fix, and removal of the `ME_DIAG` diagnostics env that could log key material. No PopuGate-emitted config key or scraped metric name changed between 3.3.39 and 3.4.22, so generated configs and the metrics parser remain compatible (strict-config mode stays off).
 
+### Fixed
+- **Stale version shown after self-update**: after a web-UI self-update (Docker mode) the page reloaded as soon as `/health` answered — but the update sidecar swaps the containers asynchronously, so that first answer could still come from the *old* backend and the reloaded page briefly showed the previous version. The restart poller now waits until `/health` reports the new version (falling back to "version changed" when the target is unknown) plus one extra poll tick so the web container — recreated after the backend — is swapped too, and only then reloads.
+- **Garbled upstream health notifications**: the upstream auto-disable and auto-recovery Telegram messages rendered Go format-error markers (e.g. `proxy6uae%!(EXTRA string=...)` and `latency: %!d(string=proxy6uae)ms)%!(EXTRA int64=407)`) because their format strings lacked a slot for the upstream name — the notifier auto-prepends the server label as the first `%s`, so every remaining argument landed one position short. Both formats (plain and inline-keyboard variants) now include a dedicated name slot. Present since 0.6.1; covered by regression tests.
+
 ### Notes
 - **Quota persistence behavior on the new engine**: since 3.4.11 the engine persists per-user `used_bytes` to a state file. Because PopuGate mounts the engine config read-only and does not mount a writable data volume, that state file lands in the container's ephemeral layer (cleared on container recreate, survives SIGHUP/restart). A manual or monthly quota reset in PopuGate resets its own SQLite ledger and now **also** clears the engine's enforcement counter immediately via the control-plane `reset-quota` API (see "Immediate quota reset" above), so no container recreate is needed for a reset to take effect.
 
-
+## [0.6.1] - 2026-07-06
 
 ### Fixed
-- **Garbled upstream health notifications**: the upstream auto-disable and auto-recovery Telegram messages rendered Go format-error markers (e.g. `proxy6uae%!(EXTRA string=...)` and `latency: %!d(string=proxy6uae)ms)%!(EXTRA int64=407)`) because their format strings lacked a slot for the upstream name — the notifier auto-prepends the server label as the first `%s`, so every remaining argument landed one position short. Both formats (plain and inline-keyboard variants) now include a dedicated name slot. Present since 0.6.1; covered by regression tests. 
 - **Live ME writer metrics were always zero**: the Prometheus scraper looked for `telemt_me_writers_active` / `telemt_me_writers_warm`, but the telemt engine emits these gauges as `telemt_me_writers_active_current` / `telemt_me_writers_warm_current` (verified against engine tags 3.3.39 and 3.4.22). The "ME Writers Active/Warm" tiles in the Traffic view therefore always showed 0; the parser now uses the correct metric names.
 - **Custom Telegram infrastructure URLs were silently ignored**: `proxy_secret_url` / `proxy_config_v4_url` / `proxy_config_v6_url` were rendered into a `[telegram]` config section that the telemt engine does not read — these are `[general]` keys. They are now emitted under `[general]`, so the custom-URL setting actually reaches the engine (effective on engine ≥ 3.4.4; harmlessly ignored on older engines). `tg_connect` was likewise moved from `[timeouts]` to its correct `[general]` position (the value was unchanged, but the misplaced key would break under a future strict-config engine mode).
 
@@ -435,7 +440,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - SQLite storage with WAL mode
 - JWT authentication
 
-[Unreleased]: https://github.com/fussraider/PopuGate/compare/v0.6.1...HEAD
+[Unreleased]: https://github.com/fussraider/PopuGate/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/fussraider/PopuGate/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/fussraider/PopuGate/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/fussraider/PopuGate/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/fussraider/PopuGate/compare/v0.4.0...v0.5.0

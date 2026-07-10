@@ -22,13 +22,19 @@ if [ -z "$GOVULNCHECK" ]; then
 	GOVULNCHECK="$(go env GOPATH)/bin/govulncheck"
 fi
 
-"$GOVULNCHECK" ./... | tee "$tmpdir/report"
-status=${PIPESTATUS[0]}
+# Capture the report instead of streaming it: on a green run the call traces
+# of allowlisted findings (file:line:col lines) would otherwise be picked up
+# by setup-go's Go problem matcher in CI and rendered as bogus error
+# annotations. The full report is printed only when the scan fails, where
+# those annotations point at the offending call sites and are useful.
+"$GOVULNCHECK" ./... >"$tmpdir/report" 2>&1
+status=$?
 
 # govulncheck exit codes: 0 = clean, 3 = vulnerabilities found. Anything else
 # means the tool itself failed (network, module load, ...): fail loudly instead
 # of passing on an empty report.
 if [ "$status" -ne 0 ] && [ "$status" -ne 3 ]; then
+	cat "$tmpdir/report" >&2
 	echo "error: govulncheck failed to run (exit $status)" >&2
 	exit 1
 fi
@@ -38,6 +44,7 @@ grep -oE 'GO-[0-9]{4}-[0-9]+' "$tmpdir/report" | sort -u >"$tmpdir/found"
 
 unexpected="$(comm -23 "$tmpdir/found" "$tmpdir/allow")"
 if [ -n "$unexpected" ]; then
+	cat "$tmpdir/report"
 	echo "" >&2
 	echo "error: reachable vulnerabilities not in the allowlist:" >&2
 	echo "$unexpected" >&2
@@ -45,4 +52,6 @@ if [ -n "$unexpected" ]; then
 	exit 1
 fi
 
-echo "OK: no reachable vulnerabilities outside the documented allowlist ($(tr '\n' ' ' <"$tmpdir/allow"))."
+allowed_hits="$(tr '\n' ' ' <"$tmpdir/found")"
+echo "OK: no reachable vulnerabilities outside the documented allowlist."
+echo "Allowlisted findings in this run: ${allowed_hits:-none} (see osv-scanner.toml for rationale; run 'govulncheck ./...' for full traces)."

@@ -296,12 +296,22 @@ Built files are served via Nginx (see Docker Compose) or another web server that
 ### Testing and Linting
 
 ```bash
-make test   # All tests (in-memory SQLite, no Docker required)
-make lint   # golangci-lint
-make fmt    # gofmt + goimports
+make test       # All tests (in-memory SQLite, no Docker required)
+make lint       # golangci-lint
+make fmt        # gofmt + goimports
+make vulncheck  # govulncheck (reachability-aware CVE scan)
 ```
 
 Tests are isolated and do not require Docker or a network environment.
 
 Code quality is enforced with `gocyclo` — all functions maintain a cyclomatic complexity of ≤ 15.
+
+### Security Scanning
+
+CI runs two blocking vulnerability scans on every push/PR:
+
+- **govulncheck** — reachability-aware scan of the Go code (flags an advisory only if the vulnerable symbol is actually reached). Mirrored locally by `make vulncheck`.
+- **osv-scanner** — version-based scan across all manifests, including the frontend (`web/pnpm-lock.yaml`).
+
+Both share [`osv-scanner.toml`](osv-scanner.toml) as the single source of truth for suppressions: every ignored advisory is listed there with the reason it is not exploitable in PopuGate. To suppress a new finding, add its ID with a rationale; anything not listed fails CI.
 

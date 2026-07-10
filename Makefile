@@ -1,4 +1,4 @@
-.PHONY: build test lint clean swag tidy fmt build-test-version docker-build-test
+.PHONY: build test lint vulncheck clean swag tidy fmt build-test-version docker-build-test
 
 BINARY=popugate
 VERSION?=$(shell git describe --tags --exact-match 2>/dev/null || git rev-parse --short HEAD 2>/dev/null || echo dev)
@@ -13,6 +13,11 @@ test:
 
 lint:
 	golangci-lint run ./...
+
+# Reachability-aware CVE scan (govulncheck); allowlist lives in osv-scanner.toml.
+# Same script CI runs, so a green `make vulncheck` means a green CI scan.
+vulncheck:
+	./scripts/vulncheck.sh
 
 clean:
 	rm -rf bin/

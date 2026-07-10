@@ -756,6 +756,16 @@ func extractWebDist(archivePath, targetDir string) error {
 		return fmt.Errorf("create web dir: %w", err)
 	}
 
+	// Confine all extraction to targetDir via os.Root (Go 1.24+): every write
+	// goes through the root handle, which refuses any entry that would escape
+	// the directory by path traversal ("zip slip") or by following a symlink
+	// out of it — even under a concurrent symlink swap.
+	root, err := os.OpenRoot(targetDir)
+	if err != nil {
+		return fmt.Errorf("open target root: %w", err)
+	}
+	defer func() { _ = root.Close() }()
+
 	f, err := os.Open(archivePath)
 	if err != nil {
 		return fmt.Errorf("open archive: %w", err)
@@ -777,29 +787,33 @@ func extractWebDist(archivePath, targetDir string) error {
 		if err != nil {
 			return fmt.Errorf("tar read: %w", err)
 		}
-		target := filepath.Join(targetDir, hdr.Name)
-		cleanTarget := filepath.Clean(target)
-		cleanDir := filepath.Clean(targetDir)
-		if cleanTarget != cleanDir && !strings.HasPrefix(cleanTarget, cleanDir+string(os.PathSeparator)) {
-			return fmt.Errorf("refusing to extract path outside target dir: %s", hdr.Name)
+
+		// Reject non-local entry names (absolute paths, or any containing "..")
+		// before touching the filesystem. os.Root enforces this too, but the
+		// explicit lexical check makes the intent obvious and is a recognized
+		// barrier for static analysis (CodeQL go/zipslip).
+		if !filepath.IsLocal(hdr.Name) {
+			return fmt.Errorf("refusing to extract non-local path: %s", hdr.Name)
 		}
 
 		switch hdr.Typeflag {
 		case tar.TypeDir:
-			if err := os.MkdirAll(target, os.FileMode(hdr.Mode)); err != nil {
-				return fmt.Errorf("mkdir %s: %w", target, err)
+			if err := root.MkdirAll(hdr.Name, os.FileMode(hdr.Mode)); err != nil {
+				return fmt.Errorf("mkdir %s: %w", hdr.Name, err)
 			}
 		case tar.TypeReg:
-			if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
-				return fmt.Errorf("mkdir %s: %w", filepath.Dir(target), err)
+			if dir := filepath.Dir(hdr.Name); dir != "." {
+				if err := root.MkdirAll(dir, 0755); err != nil {
+					return fmt.Errorf("mkdir %s: %w", dir, err)
+				}
 			}
-			out, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(hdr.Mode))
+			out, err := root.OpenFile(hdr.Name, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(hdr.Mode))
 			if err != nil {
-				return fmt.Errorf("create %s: %w", target, err)
+				return fmt.Errorf("create %s: %w", hdr.Name, err)
 			}
 			if _, err := io.Copy(out, tr); err != nil {
 				_ = out.Close()
-				return fmt.Errorf("write %s: %w", target, err)
+				return fmt.Errorf("write %s: %w", hdr.Name, err)
 			}
 			_ = out.Close()
 		}

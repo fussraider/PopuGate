@@ -604,6 +604,12 @@ func (s *BackupStore) openArchive(path string) (*os.File, func(), error) {
 }
 
 func (s *BackupStore) extractEntry(tr *tar.Reader, header *tar.Header) error {
+	// Reject non-local entry names (absolute, or containing "..") up front, then
+	// re-check the joined path stays under baseDir. Defends against archive path
+	// traversal ("zip slip") on restore.
+	if !filepath.IsLocal(header.Name) {
+		return fmt.Errorf("refusing to extract non-local path: %s", header.Name)
+	}
 	target := filepath.Join(s.baseDir, header.Name)
 	if !strings.HasPrefix(filepath.Clean(target), filepath.Clean(s.baseDir)+string(os.PathSeparator)) {
 		return fmt.Errorf("refusing to extract path outside base dir: %s", header.Name)

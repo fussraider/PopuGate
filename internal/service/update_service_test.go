@@ -606,6 +606,64 @@ func TestExtractWebDist_DirDotSlash(t *testing.T) {
 	}
 }
 
+func TestExtractWebDist_RejectsAbsolutePath(t *testing.T) {
+	tmpDir := t.TempDir()
+	archivePath := filepath.Join(tmpDir, "abs.tar.gz")
+	targetDir := filepath.Join(tmpDir, "dist")
+
+	f, err := os.Create(archivePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gw := gzip.NewWriter(f)
+	tw := tar.NewWriter(gw)
+
+	// An absolute entry name must be refused (filepath.IsLocal == false).
+	hdr := &tar.Header{Name: "/etc/evil.txt", Mode: 0644, Size: int64(len("pwned"))}
+	if err := tw.WriteHeader(hdr); err != nil {
+		t.Fatal(err)
+	}
+	_, _ = tw.Write([]byte("pwned"))
+	_ = tw.Close()
+	_ = gw.Close()
+	_ = f.Close()
+
+	if err := extractWebDist(archivePath, targetDir); err == nil {
+		t.Fatal("expected error for absolute entry path")
+	}
+}
+
+func TestExtractWebDist_TraversalWritesNothingOutside(t *testing.T) {
+	tmpDir := t.TempDir()
+	archivePath := filepath.Join(tmpDir, "evil.tar.gz")
+	targetDir := filepath.Join(tmpDir, "dist")
+	// A sibling of targetDir the traversal entry would land in if unguarded.
+	escapePath := filepath.Join(tmpDir, "escape.txt")
+
+	f, err := os.Create(archivePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gw := gzip.NewWriter(f)
+	tw := tar.NewWriter(gw)
+
+	hdr := &tar.Header{Name: "../escape.txt", Mode: 0644, Size: int64(len("pwned"))}
+	if err := tw.WriteHeader(hdr); err != nil {
+		t.Fatal(err)
+	}
+	_, _ = tw.Write([]byte("pwned"))
+	_ = tw.Close()
+	_ = gw.Close()
+	_ = f.Close()
+
+	if err := extractWebDist(archivePath, targetDir); err == nil {
+		t.Fatal("expected error for path traversal attempt")
+	}
+	if _, err := os.Stat(escapePath); !os.IsNotExist(err) {
+		t.Fatalf("traversal entry escaped the target dir: %s exists", escapePath)
+	}
+}
+
 func TestNewUpdateService(t *testing.T) {
 	svc := NewUpdateService(nil)
 	if svc == nil {

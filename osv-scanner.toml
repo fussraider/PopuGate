@@ -1,0 +1,39 @@
+# osv-scanner suppression config for PopuGate.
+#
+# Rationale for each ignored advisory below. All entries are github.com/docker/docker
+# (moby) advisories flagged against the pinned client SDK (v28.5.2+incompatible).
+# PopuGate imports docker/docker ONLY as a client SDK (pkg/dockerutil) to drive a
+# trusted, self-built engine image; it does not run a Docker daemon, does not use
+# AuthZ plugins, does not install Docker plugins, and never calls the container
+# archive/copy endpoints. Reachability was verified with `govulncheck ./...`:
+# every trace below terminates at package `init` (import side effect), not at a
+# call to the vulnerable function. No fix is published under the docker/docker
+# module path for any of these (Fixed in: N/A / patched: None).
+#
+# Re-verify whenever github.com/docker/docker is bumped:
+#   govulncheck ./...
+#   grep -rnE "CopyToContainer|CopyFromContainer|/containers/.*/archive|Plugin(Install|Enable)" .
+
+[[IgnoredVulns]]
+id = "GO-2026-5746"
+reason = "Docker PUT /containers/{id}/archive executes container binary on host. Requires CopyToContainer with a compressed archive into an untrusted image; PopuGate never calls CopyToContainer and runs only its own trusted engine image. Init-level reach only."
+
+[[IgnoredVulns]]
+id = "GO-2026-5668"
+reason = "Docker cp mountpoint-creation race (empty files at arbitrary host paths). Requires docker cp / PUT|HEAD /containers/{id}/archive into a volume-mounted untrusted container; PopuGate never calls the archive/copy API. Init-level reach only."
+
+[[IgnoredVulns]]
+id = "GO-2026-5617"
+reason = "Docker cp mount-syscall race (bind-mount redirection to host path). Same archive/copy API precondition as GO-2026-5668; PopuGate never calls it. Init-level reach only."
+
+[[IgnoredVulns]]
+id = "GO-2026-4887"
+reason = "Moby AuthZ plugin bypass via oversized request bodies (incomplete fix for CVE-2024-41110). Daemon-side; affects only setups running AuthZ plugins. PopuGate is a client and uses no AuthZ plugins."
+
+[[IgnoredVulns]]
+id = "GO-2026-4883"
+reason = "Moby off-by-one in plugin privilege validation during `docker plugin install`. Daemon-side; no impact when plugins are not installed. PopuGate installs no Docker plugins."
+
+# CVE-2024-41110 / GHSA-v23v-6jw2-98fq (AuthZ bypass) is NOT listed here: its
+# highest patched version is 27.1.1 and the pinned SDK (28.5.2) is already past it,
+# so no scanner flags it. Documented for completeness only.

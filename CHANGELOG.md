@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- **Go toolchain bumped to 1.26.5**: the `go` directive in `go.mod` moved from `1.26.1` to `1.26.5`, pulling in stdlib security fixes for reachable code paths — `crypto/tls`, `crypto/x509`, `html/template`, `net/http`, `net`, `net/mail`, `net/textproto`, and `archive/tar` (GO-2026-4977/4980/4982/4986/5037/5039/5856 and related). CI already tracks the floating `1.26` line, so only the module directive changed. Assessed the Dockerbot/dependabot advisories for `github.com/docker/docker` (CVE-2024-41110 / GHSA-v23v-6jw2-98fq, plus GO-2026-5746/5668/5617/4887/4883): **not applicable** — v28.5.2 is already past every CVE-2024-41110 patched version, and the remaining Docker advisories require calling `CopyToContainer`/`PUT /containers/{id}/archive` (which PopuGate never does) or running daemon AuthZ plugins (which it does not). No exploitable path exists and no fix is published under the `docker/docker` module path.
+
 ### Added
 - **Per-user rate limits**: secrets gain optional upload/download speed limits (bits/sec, entered as Mbit/s in the UI), rendered as `[access.user_rate_limits.<label>]` for the engine (hot-reloadable, engine ≥ 3.4.1). 0 = unlimited. Available in the single and bulk "Set Limits" flows.
 - **Session-cancelling disable (`user_enabled`)**: disabling a secret now keeps it in the config marked `[access.user_enabled]=false` instead of dropping it, so the engine (≥ 3.4.14) cancels the user's active sessions on hot-reload rather than leaving established connections up. Share links still exclude disabled secrets.

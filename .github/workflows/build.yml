@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [master]
 
+# Least-privilege default for all jobs (only checkout/read is needed here).
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest

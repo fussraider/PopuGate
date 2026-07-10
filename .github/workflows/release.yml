@@ -5,6 +5,11 @@ on:
     tags:
       - 'v*'
 
+# Least-privilege default. Jobs that need more (docker/docker-web push to GHCR,
+# release to create a GitHub Release) declare their own permissions block below.
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest

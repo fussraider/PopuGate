@@ -3,6 +3,11 @@
 # Template for Nginx with SSL support on port 8443 and HTTP on port 80
 # Use variables: $DOMAIN_NAME, $BACKEND_URL
 
+export DOMAIN_NAME="${DOMAIN_NAME:-localhost}"
+export BACKEND_URL="${BACKEND_URL:-http://host.docker.internal:8090/api/}"
+
+generate_config() {
+
 cat <<EOF > /etc/nginx/conf.d/default.conf
 server {
     listen 80;
@@ -76,14 +81,10 @@ EOF
 
 # Use envsubst to replace variables in the generated config
 temp_conf=$(mktemp)
-# Export variables so envsubst can see them
-export DOMAIN_NAME="${DOMAIN_NAME:-localhost}"
-export BACKEND_URL="${BACKEND_URL:-http://host.docker.internal:8090/api/}"
 envsubst '${DOMAIN_NAME} ${BACKEND_URL}' < /etc/nginx/conf.d/default.conf > "$temp_conf"
 mv "$temp_conf" /etc/nginx/conf.d/default.conf
 
 # Check if certificates exist
-# Use the exported DOMAIN_NAME or the original one
 if [ "$DOMAIN_NAME" = "localhost" ] || [ ! -f "/etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem" ]; then
     echo "SSL certificates not found or DOMAIN_NAME not set. Disabling SSL block and redirect to prevent startup failure."
     # Remove the SSL server block (lines from '# SSL server block' to end)
@@ -121,6 +122,38 @@ if [ "$DOMAIN_NAME" != "localhost" ]; then
     } > "$temp_phishing"
     mv "$temp_phishing" /etc/nginx/conf.d/default.conf
     echo "Anti-phishing protection enabled: unknown hosts will be rejected."
+fi
+
+}
+
+generate_config
+
+cert_fingerprint() {
+    if [ -f "/etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem" ]; then
+        md5sum "/etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem" | cut -d' ' -f1
+    else
+        echo "absent"
+    fi
+}
+
+# Certbot runs in a separate container, so nginx never learns about issued or
+# renewed certificates on its own. Watch the certificate fingerprint and, when
+# it changes, regenerate the config (the SSL block may have been disabled at
+# startup) and hot-reload nginx — no container restart needed.
+if [ "$DOMAIN_NAME" != "localhost" ]; then
+    (
+        last_fp=$(cert_fingerprint)
+        while :; do
+            sleep "${CERT_WATCH_INTERVAL:-60}"
+            fp=$(cert_fingerprint)
+            if [ "$fp" != "$last_fp" ]; then
+                echo "Certificate change detected for $DOMAIN_NAME (was: $last_fp, now: $fp). Regenerating config and reloading nginx."
+                last_fp=$fp
+                generate_config
+                nginx -s reload
+            fi
+        done
+    ) &
 fi
 
 exec nginx -g "daemon off;"

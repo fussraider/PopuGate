@@ -8,16 +8,15 @@ server {
     listen 80;
     server_name ${DOMAIN_NAME:-localhost};
 
-    # Certbot challenge location
+    # Certbot challenge location. Must stay redirect-free: a server-level
+    # "return" would run before location matching and break cert renewal,
+    # so the HTTPS redirect placeholders live inside the other locations.
     location /.well-known/acme-challenge/ {
         root /var/www/certbot;
     }
 
-    # Redirect all HTTP to HTTPS if DOMAIN_NAME is set
-    # and certificates exist. We replace this placeholder later.
-    # HTTP_REDIRECT_PLACEHOLDER
-
     location / {
+        # HTTP_REDIRECT_PLACEHOLDER
         root   /usr/share/nginx/html;
         index  index.html index.htm;
         try_files \$uri \$uri/ /index.html;
@@ -25,6 +24,7 @@ server {
 
     # Proxy API requests to the backend service
     location /api/ {
+        # HTTP_REDIRECT_PLACEHOLDER
         proxy_pass ${BACKEND_URL:-http://host.docker.internal:8090/api/};
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
